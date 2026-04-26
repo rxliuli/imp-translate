@@ -1,0 +1,62 @@
+env:
+  DIRECTORY: .
+  PROJECT_NAME: browser-extension-template
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Check version change
+        id: version
+        uses: rxliuli/version-check@v1
+        with:
+          file: ${{ env.DIRECTORY }}/package.json
+
+  release:
+    permissions:
+      contents: write
+    needs: version
+    if: needs.version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 'latest'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+      - name: Zip extensions
+        run: |
+          cd ${{ env.DIRECTORY }}
+          pnpm zip
+          pnpm zip:firefox
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: 'v${{ needs.version.outputs.version }}'
+          name: 'v${{ needs.version.outputs.version }}'
+          draft: false
+          prerelease: false
+          files: |
+            ${{ env.DIRECTORY }}/.output/${{ env.PROJECT_NAME }}-${{ needs.version.outputs.version }}-chrome.zip
+            ${{ env.DIRECTORY }}/.output/${{ env.PROJECT_NAME }}-${{ needs.version.outputs.version }}-firefox.zip
+            ${{ env.DIRECTORY }}/.output/${{ env.PROJECT_NAME }}-${{ needs.version.outputs.version }}-sources.zip
