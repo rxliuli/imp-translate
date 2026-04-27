@@ -27,6 +27,7 @@ const CONTAINER_TAGS = new Set([
 const SKIP_CONTAINERS = new Set(['nav', 'footer'])
 
 const EDITOR_SELECTOR = [
+  '.RichEditor-root',
   '.DraftEditor-root',
   '[data-lexical-editor]',
   '.ProseMirror',
@@ -59,7 +60,8 @@ function shouldSkip(el: Element): boolean {
 }
 
 function isHidden(el: HTMLElement): boolean {
-  return el.offsetWidth <= 1 || el.offsetHeight <= 1
+  if (el.offsetWidth <= 1 || el.offsetHeight <= 1) return true
+  return getComputedStyle(el).visibility === 'hidden'
 }
 
 function getVisibleText(el: Element): string {
@@ -158,7 +160,7 @@ export function getVisibleBlocks(blocks: TranslatableBlock[]): TranslatableBlock
   const viewportHeight = window.innerHeight
   return blocks.filter((block) => {
     const rect = block.element.getBoundingClientRect()
-    return rect.bottom > 0 && rect.top < viewportHeight
+    return rect.bottom > 0 && rect.top < viewportHeight * 2
   })
 }
 
@@ -171,7 +173,10 @@ export function clearTranslations(root: Element = document.body) {
   root.querySelectorAll('.imp-translate-br').forEach((el) => el.remove())
   root.querySelectorAll(`[${PROCESSED_ATTR}]`).forEach((el) => {
     el.removeAttribute(PROCESSED_ATTR)
+    el.removeAttribute('data-imp-text')
   })
+  root.removeAttribute(PROCESSED_ATTR)
+  root.removeAttribute('data-imp-text')
 }
 
-export { RESULT_CLASS, PROCESSED_ATTR }
+export { RESULT_CLASS, PROCESSED_ATTR, getVisibleText }

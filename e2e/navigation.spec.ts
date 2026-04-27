@@ -39,7 +39,7 @@ test('page reload clears translation', async ({ context, baseURL }) => {
   await expect(page.locator('.imp-translate-result')).toHaveCount(0)
 })
 
-test('typed URL clears translation', async ({ context, baseURL }) => {
+test('typed URL preserves translation', async ({ context, baseURL }) => {
   const page = await context.newPage()
   await page.goto(baseURL)
   await page.waitForLoadState('domcontentloaded')
@@ -50,12 +50,12 @@ test('typed URL clears translation', async ({ context, baseURL }) => {
     timeout: 15000,
   })
 
-  // page.goto simulates typed navigation
   await page.goto(`${baseURL}/page3`)
   await page.waitForLoadState('domcontentloaded')
 
-  await page.waitForTimeout(3000)
-  await expect(page.locator('.imp-translate-result')).toHaveCount(0)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
 })
 
 test('back/forward preserves translation', async ({ context, baseURL }) => {

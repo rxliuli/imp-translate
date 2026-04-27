@@ -29,6 +29,38 @@ const pages: Record<string, string> = {
   <p>Yet another page to verify navigation behavior.</p>
 </body>
 </html>`,
+  '/dynamic-text': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Dynamic Text</title></head>
+<body>
+  <div id="tweet">
+    <span id="tweet-text">This is a truncated message</span>
+  </div>
+  <button id="show-more">Show more</button>
+  <script>
+    document.getElementById('show-more').addEventListener('click', function() {
+      var span = document.getElementById('tweet-text');
+      var textNode = span.firstChild;
+      if (textNode && textNode.nodeType === 3) {
+        textNode.textContent = textNode.textContent + ' that continues with much more content after expanding';
+      }
+    });
+  </script>
+</body>
+</html>`,
+  '/inner-scroll': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Inner Scroll</title></head>
+<body style="margin:0;overflow:hidden">
+  <div id="scroll-container" style="height:200px;overflow-y:auto">
+    <p>Visible message one</p>
+    <p>Visible message two</p>
+    <p>Visible message three</p>
+    <div style="height:3000px"></div>
+    <p id="bottom-msg">Hidden message at bottom</p>
+  </div>
+</body>
+</html>`,
 }
 
 const app = new Hono()

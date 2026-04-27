@@ -2,6 +2,7 @@ import { messager, sendToTab } from '@/lib/message'
 import { getSettings } from '@/lib/storage'
 import { translate } from '@/lib/translator'
 import { getCached, setCached, evictOldEntries } from '@/lib/cache'
+import { PublicPath } from 'wxt/browser'
 
 async function injectContentScript(tabId: number) {
   await browser.scripting.executeScript({
@@ -25,10 +26,31 @@ async function setTabTranslatingLang(tabId: number, lang: string | null) {
   }
 }
 
-async function startTranslationForTab(tabId: number, targetLang: string) {
+const defaultIcon: Record<number, PublicPath> = {
+  16: '/icon/16.png',
+  32: '/icon/32.png',
+  48: '/icon/48.png',
+  96: '/icon/96.png',
+  128: '/icon/128.png',
+}
+
+const activeIcon: Record<number, PublicPath> = {
+  16: '/icon/active/16-active.png',
+  32: '/icon/active/32-active.png',
+  48: '/icon/active/48-active.png',
+  96: '/icon/active/96-active.png',
+  128: '/icon/active/128-active.png',
+}
+
+async function startTranslationForTab(
+  tabId: number,
+  targetLang: string,
+  showToast = false,
+) {
   await setTabTranslatingLang(tabId, targetLang)
+  await browser.action.setIcon({ tabId, path: activeIcon })
   await injectContentScript(tabId)
-  await sendToTab(tabId, { action: 'startTranslation', targetLang })
+  await sendToTab(tabId, { action: 'startTranslation', targetLang, showToast })
 }
 
 async function stopTranslationForTab(tabId: number) {
@@ -37,6 +59,7 @@ async function stopTranslationForTab(tabId: number) {
   } catch {
     // Content script may not be loaded
   }
+  await browser.action.setIcon({ tabId, path: defaultIcon })
   await setTabTranslatingLang(tabId, null)
 }
 
@@ -48,7 +71,7 @@ async function toggleTranslationForActiveTab() {
     await stopTranslationForTab(tab.id)
   } else {
     const settings = await getSettings()
-    await startTranslationForTab(tab.id, settings.targetLang)
+    await startTranslationForTab(tab.id, settings.targetLang, true)
   }
 }
 
@@ -109,7 +132,7 @@ export default defineBackground(() => {
   })
 
   messager.onMessage('startTab', async ({ data }) => {
-    await startTranslationForTab(data.tabId, data.targetLang)
+    await startTranslationForTab(data.tabId, data.targetLang, true)
   })
 
   messager.onMessage('stopTab', async ({ data }) => {
@@ -130,6 +153,7 @@ export default defineBackground(() => {
     const tabId = sender.tab?.id
     if (!tabId) return
     await setTabTranslatingLang(tabId, null)
+    await browser.action.setIcon({ tabId, path: defaultIcon })
   })
 
   messager.onMessage('isMobile', async () => {
@@ -140,34 +164,32 @@ export default defineBackground(() => {
     await browser.runtime.openOptionsPage()
   })
 
-  // Track tabs where translation should not resume (reload/typed navigation)
-  const skipResumeTabs = new Set<number>()
-
-  browser.webNavigation.onCommitted.addListener((details) => {
+  browser.webNavigation.onDOMContentLoaded.addListener(async (details) => {
     if (details.frameId !== 0) return
-    const isForwardBack = (details as any).transitionQualifiers?.includes(
-      'forward_back',
-    )
-    if (
-      !isForwardBack &&
-      (details.transitionType === 'reload' ||
-        details.transitionType === 'typed')
-    ) {
-      skipResumeTabs.add(details.tabId)
-      setTabTranslatingLang(details.tabId, null)
-    }
-  })
-
-  browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-    if (changeInfo.status !== 'complete') return
-    if (skipResumeTabs.has(tabId)) {
-      skipResumeTabs.delete(tabId)
-      return
-    }
-    const lang = await getTabTranslatingLang(tabId)
+    const lang = await getTabTranslatingLang(details.tabId)
     if (!lang) return
-    await injectContentScript(tabId)
-    await sendToTab(tabId, { action: 'startTranslation', targetLang: lang })
+
+    try {
+      const [result] = await browser.scripting.executeScript({
+        target: { tabId: details.tabId },
+        func: () =>
+          (performance.getEntriesByType('navigation') as PerformanceNavigationTiming[])[0]
+            ?.type,
+      })
+      if (result?.result === 'reload') {
+        await setTabTranslatingLang(details.tabId, null)
+        await browser.action.setIcon({ tabId: details.tabId, path: defaultIcon })
+        return
+      }
+    } catch {
+      // scripting may fail on restricted pages; skip reload check
+    }
+
+    await injectContentScript(details.tabId)
+    await sendToTab(details.tabId, {
+      action: 'startTranslation',
+      targetLang: lang,
+    })
   })
 
   browser.tabs.onRemoved.addListener(async (tabId) => {

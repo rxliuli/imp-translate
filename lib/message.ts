@@ -22,7 +22,7 @@ export const messager = defineExtensionMessaging<{
 
 // Background/Popup → Content (via browser.tabs.sendMessage)
 export type ContentAction =
-  | { action: 'startTranslation'; targetLang: string }
+  | { action: 'startTranslation'; targetLang: string; showToast?: boolean }
   | { action: 'stopTranslation' }
   | { action: 'getState' }
 

@@ -7,6 +7,8 @@ import {
   markTranslated,
   type TranslatableBlock,
   PROCESSED_ATTR,
+  RESULT_CLASS,
+  getVisibleText,
 } from '@/lib/dom'
 import {
   injectLoading,
@@ -57,6 +59,7 @@ export default defineUnlistedScript(() => {
 
     for (const block of blocks) {
       markTranslated(block.element)
+      block.element.setAttribute('data-imp-text', block.text)
     }
 
     blocks = await filterByLanguage(blocks)
@@ -88,25 +91,61 @@ export default defineUnlistedScript(() => {
     }, 300)
   }
 
+  let recheckTimer: ReturnType<typeof setTimeout> | null = null
+  const pendingRecheck = new Set<Element>()
+
+  function flushRecheck() {
+    recheckTimer = null
+    if (!isTranslating) return
+    let hasNew = false
+    for (const el of pendingRecheck) {
+      if (!el.hasAttribute(PROCESSED_ATTR)) continue
+      const storedText = el.getAttribute('data-imp-text')
+      if (!storedText) continue
+      const currentText = getVisibleText(el).trim()
+      if (storedText === currentText) continue
+      clearTranslations(el)
+      const newBlocks = extractBlocks(el)
+      if (newBlocks.length > 0) {
+        pendingBlocks.push(...newBlocks)
+        hasNew = true
+      }
+    }
+    pendingRecheck.clear()
+    if (hasNew) translateVisible()
+  }
+
   function startObserver() {
     observer = new MutationObserver((mutations) => {
       if (!isTranslating) return
       let hasNew = false
       for (const mutation of mutations) {
+        const target = mutation.target
+        if (target instanceof Element && target.closest(`.${RESULT_CLASS}`)) continue
+        const el = target instanceof Element ? target : target.parentElement
+        const translated = el?.closest(`[${PROCESSED_ATTR}]`)
+        if (translated) {
+          pendingRecheck.add(translated as Element)
+          continue
+        }
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue
-          const el = node as Element
-          if (el.classList?.contains('imp-translate-result')) continue
-          const newBlocks = extractBlocks(el)
+          const addedEl = node as Element
+          if (addedEl.classList?.contains(RESULT_CLASS)) continue
+          const newBlocks = extractBlocks(addedEl)
           if (newBlocks.length > 0) {
             pendingBlocks.push(...newBlocks)
             hasNew = true
           }
         }
       }
+      if (pendingRecheck.size > 0) {
+        if (recheckTimer) clearTimeout(recheckTimer)
+        recheckTimer = setTimeout(flushRecheck, 300)
+      }
       if (hasNew) translateVisible()
     })
-    observer.observe(document.body, { childList: true, subtree: true })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
   }
 
   function startUrlWatcher() {
@@ -158,14 +197,23 @@ export default defineUnlistedScript(() => {
     toastTimer = setTimeout(dismissToast, 5000)
   }
 
-  async function startTranslation(lang: string) {
+  function waitForDOMReady(): Promise<void> {
+    if (document.readyState !== 'loading') return Promise.resolve()
+    return new Promise((resolve) => {
+      document.addEventListener('DOMContentLoaded', () => resolve(), { once: true })
+    })
+  }
+
+  async function startTranslation(lang: string, showToast = false) {
     if (isTranslating) return
     isTranslating = true
     targetLang = lang
+    await waitForDOMReady()
+    if (!isTranslating) return
     lastUrl = location.href
-    maybeShowToast()
+    if (showToast) maybeShowToast()
     pendingBlocks = extractBlocks(document.body)
-    window.addEventListener('scroll', onScroll, { passive: true })
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true })
     startObserver()
     startUrlWatcher()
     await translateVisible()
@@ -185,7 +233,12 @@ export default defineUnlistedScript(() => {
       clearInterval(urlCheckTimer)
       urlCheckTimer = null
     }
-    window.removeEventListener('scroll', onScroll)
+    if (recheckTimer) {
+      clearTimeout(recheckTimer)
+      recheckTimer = null
+    }
+    pendingRecheck.clear()
+    document.removeEventListener('scroll', onScroll, { capture: true })
     clearTranslations(document.body)
     removeStyles()
     dismissToast()
@@ -196,7 +249,7 @@ export default defineUnlistedScript(() => {
     (message: ContentAction, _sender, sendResponse) => {
       if (!message?.action) return
       if (message.action === 'startTranslation') {
-        startTranslation(message.targetLang)
+        startTranslation(message.targetLang, message.showToast)
       } else if (message.action === 'stopTranslation') {
         stopTranslation()
       } else if (message.action === 'getState') {
