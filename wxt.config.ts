@@ -1,5 +1,6 @@
 import { defineConfig, UserManifest } from 'wxt'
 import tailwindcss from '@tailwindcss/vite'
+import { PublicPath } from 'wxt/browser'
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react', 'wxt-module-safari-xcode'],
@@ -19,8 +20,8 @@ export default defineConfig({
     const manifest: UserManifest = {
       name: 'Imp Translate',
       description:
-        'A template for WXT, a WebExtension framework based on Vite and React',
-      permissions: ['storage'],
+        'Bilingual page translation with Microsoft, Google, and OpenAI-compatible APIs',
+      permissions: ['storage', 'scripting'],
       host_permissions: ['<all_urls>'],
       author: {
         email: 'rxliuli@gmail.com',
@@ -33,8 +34,23 @@ export default defineConfig({
           '96': 'icon/96.png',
           '128': 'icon/128.png',
         },
+        default_popup: 'popup.html',
       },
+      web_accessible_resources: [
+        {
+          resources: ['/inject.js'] as PublicPath[],
+          matches: ['<all_urls>'],
+        },
+      ],
       homepage_url: 'https://rxliuli.com/project/imp-translate',
+      commands: {
+        'toggle-translate': {
+          suggested_key: {
+            default: 'Alt+A',
+          },
+          description: 'Toggle page translation',
+        },
+      },
     }
     if (env.browser === 'firefox') {
       manifest.browser_specific_settings = {
