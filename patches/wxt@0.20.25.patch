@@ -1,0 +1,13 @@
+diff --git a/dist/core/utils/manifest.mjs b/dist/core/utils/manifest.mjs
+index 7831997de0acf3f76141468028f7db0657998209..5a64f25c62b6479891e6052c9783f9c46ee7200b 100644
+--- a/dist/core/utils/manifest.mjs
++++ b/dist/core/utils/manifest.mjs
+@@ -150,7 +150,7 @@ function addEntrypoints(manifest, entrypoints, buildOutput) {
+ 	if (options) {
+ 		const page = getEntrypointBundlePath(options, wxt.config.outDir, ".html");
+ 		manifest.options_ui = {
+-			open_in_tab: options.options.openInTab ?? false,
++			open_in_tab: wxt.config.browser === "safari" ? void 0 : options.options.openInTab ?? false,
+ 			browser_style: wxt.config.browser === "firefox" ? options.options.browserStyle : void 0,
+ 			chrome_style: wxt.config.browser !== "firefox" ? options.options.chromeStyle : void 0,
+ 			page

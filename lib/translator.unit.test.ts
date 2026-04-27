@@ -14,6 +14,8 @@ vi.mock('./cache', () => ({
 const msSettings: Settings = {
   provider: 'microsoft',
   targetLang: 'zh',
+  developerMode: false,
+  customRules: '',
   openai: {
     apiKey: '',
     endpoint: '',

@@ -11,11 +11,15 @@ export interface Settings {
   provider: TranslationProvider
   targetLang: string
   openai: OpenAIConfig
+  developerMode: boolean
+  customRules: string
 }
 
 const DEFAULT_SETTINGS: Settings = {
   provider: 'microsoft',
   targetLang: navigator.language.split('-')[0] || 'zh',
+  developerMode: false,
+  customRules: '',
   openai: {
     apiKey: '',
     endpoint: 'https://api.openai.com/v1/chat/completions',

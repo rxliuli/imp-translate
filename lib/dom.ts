@@ -47,7 +47,16 @@ export interface TranslatableBlock {
   text: string
 }
 
-function shouldSkip(el: Element): boolean {
+export interface ExtractOptions {
+  skipSelectors?: string[]
+}
+
+function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
+  if (opts?.skipSelectors) {
+    for (const s of opts.skipSelectors) {
+      if (el.matches(s)) return true
+    }
+  }
   if (SKIP_TAGS.has(el.tagName.toLowerCase())) return true
   if (el.classList.contains('notranslate')) return true
   if (el.getAttribute('translate') === 'no') return true
@@ -101,7 +110,7 @@ function isLeafBlock(el: Element): boolean {
   return true
 }
 
-export function extractBlocks(root: Element = document.body): TranslatableBlock[] {
+export function extractBlocks(root: Element = document.body, opts?: ExtractOptions): TranslatableBlock[] {
   const blocks: TranslatableBlock[] = []
 
   function tryExtract(node: Element): boolean {
@@ -122,7 +131,7 @@ export function extractBlocks(root: Element = document.body): TranslatableBlock[
   }
 
   function walk(node: Element) {
-    if (shouldSkip(node)) return
+    if (shouldSkip(node, opts)) return
 
     const tag = node.tagName.toLowerCase()
 

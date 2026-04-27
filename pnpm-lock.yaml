@@ -8,6 +8,9 @@ patchedDependencies:
   '@wxt-dev/browser':
     hash: 84c103658758ba2057e0f3389fb9094537c35872ad3b1dccff40067d927633f2
     path: patches/@wxt-dev__browser.patch
+  wxt@0.20.25:
+    hash: a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea
+    path: patches/wxt@0.20.25.patch
 
 importers:
 
@@ -85,7 +88,7 @@ importers:
         version: 4.1.5(playwright@1.59.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))(vitest@4.1.5)
       '@wxt-dev/module-react':
         specifier: ^1.2.2
-        version: 1.2.2(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))(wxt@0.20.25(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1))
+        version: 1.2.2(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))(wxt@0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1))
       hono:
         specifier: ^4.12.15
         version: 4.12.15
@@ -112,7 +115,7 @@ importers:
         version: 2.2.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vitest@4.1.5)
       wxt:
         specifier: ^0.20.25
-        version: 0.20.25(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
+        version: 0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
       wxt-module-safari-xcode:
         specifier: ^0.1.0
         version: 0.1.0(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
@@ -4660,11 +4663,11 @@ snapshots:
       '@types/filesystem': 0.0.36
       '@types/har-format': 1.2.16
 
-  '@wxt-dev/module-react@1.2.2(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))(wxt@0.20.25(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1))':
+  '@wxt-dev/module-react@1.2.2(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))(wxt@0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1))':
     dependencies:
       '@vitejs/plugin-react': 6.0.1(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))
       vite: 8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)
-      wxt: 0.20.25(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
+      wxt: 0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
     transitivePeerDependencies:
       - '@rolldown/plugin-babel'
       - babel-plugin-react-compiler
@@ -6226,7 +6229,7 @@ snapshots:
     dependencies:
       zx: 8.8.5
     optionalDependencies:
-      wxt: 0.20.25(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
+      wxt: 0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
@@ -6246,7 +6249,7 @@ snapshots:
       - tsx
       - yaml
 
-  wxt@0.20.25(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1):
+  wxt@0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1):
     dependencies:
       '@1natsu/wait-element': 4.2.0
       '@aklinker1/rollup-plugin-visualizer': 5.12.0(rollup@4.57.1)

@@ -6,6 +6,7 @@ import {
   clearTranslations,
   markTranslated,
   type TranslatableBlock,
+  type ExtractOptions,
   PROCESSED_ATTR,
   RESULT_CLASS,
   getVisibleText,
@@ -19,8 +20,13 @@ import {
   hideToastBar,
 } from '@/lib/render'
 import { detectLanguage } from '@/lib/language-detect'
+import { parseRules, matchRulesForDomain } from '@/lib/rules'
+import builtinRulesRaw from '@/lib/rules.txt?raw'
 
 export default defineUnlistedScript(() => {
+  const builtinSelectors = matchRulesForDomain(parseRules(builtinRulesRaw), location.hostname)
+  let extractOpts: ExtractOptions = { skipSelectors: builtinSelectors }
+
   let isTranslating = false
   let targetLang = ''
   let pendingBlocks: TranslatableBlock[] = []
@@ -93,7 +99,7 @@ export default defineUnlistedScript(() => {
     if (!wrapper) {
       el.removeAttribute(PROCESSED_ATTR)
       el.removeAttribute('data-imp-text')
-      const newBlocks = extractBlocks(el)
+      const newBlocks = extractBlocks(el, extractOpts)
       if (newBlocks.length > 0) {
         pendingBlocks.push(...newBlocks)
         translateVisible()
@@ -149,7 +155,7 @@ export default defineUnlistedScript(() => {
           if (node.nodeType !== Node.ELEMENT_NODE) continue
           const addedEl = node as Element
           if (addedEl.classList?.contains(RESULT_CLASS)) continue
-          const newBlocks = extractBlocks(addedEl)
+          const newBlocks = extractBlocks(addedEl, extractOpts)
           if (newBlocks.length > 0) {
             pendingBlocks.push(...newBlocks)
             hasNew = true
@@ -182,7 +188,7 @@ export default defineUnlistedScript(() => {
 
   function rescanBlocks() {
     if (!isTranslating) return
-    const newBlocks = extractBlocks(document.body)
+    const newBlocks = extractBlocks(document.body, extractOpts)
     let hasNew = false
     for (const block of newBlocks) {
       if (!block.element.hasAttribute(PROCESSED_ATTR)) {
@@ -195,7 +201,7 @@ export default defineUnlistedScript(() => {
 
   function onUrlChange() {
     if (!isTranslating) return
-    pendingBlocks = extractBlocks(document.body)
+    pendingBlocks = extractBlocks(document.body, extractOpts)
     translateVisible()
     setTimeout(rescanBlocks, 1000)
   }
@@ -234,15 +240,27 @@ export default defineUnlistedScript(() => {
     })
   }
 
+  async function loadCustomRules() {
+    try {
+      const result = await browser.storage.local.get('settings')
+      const settings = result.settings as Record<string, unknown> | undefined
+      if (settings?.developerMode && typeof settings.customRules === 'string') {
+        const custom = matchRulesForDomain(parseRules(settings.customRules), location.hostname)
+        extractOpts = { skipSelectors: [...builtinSelectors, ...custom] }
+      }
+    } catch {}
+  }
+
   async function startTranslation(lang: string, showToast = false) {
     if (isTranslating) return
     isTranslating = true
     targetLang = lang
+    await loadCustomRules()
     await waitForDOMReady()
     if (!isTranslating) return
     lastUrl = location.href
     if (showToast) maybeShowToast()
-    pendingBlocks = extractBlocks(document.body)
+    pendingBlocks = extractBlocks(document.body, extractOpts)
     document.addEventListener('scroll', onScroll, { passive: true, capture: true })
     startObserver()
     startUrlWatcher()
