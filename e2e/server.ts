@@ -48,6 +48,24 @@ const pages: Record<string, string> = {
   </script>
 </body>
 </html>`,
+  '/details': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Details Toggle</title></head>
+<body>
+  <p>Visible paragraph above the rules.</p>
+  <details id="rule">
+    <summary>Rule: Be civil</summary>
+    <div id="rule-animator" style="display:none">
+      <p id="rule-text">Please be kind to one another. Insults will not be tolerated.</p>
+    </div>
+  </details>
+  <script>
+    document.getElementById('rule').addEventListener('toggle', function() {
+      document.getElementById('rule-animator').style.display = this.open ? 'block' : 'none';
+    });
+  </script>
+</body>
+</html>`,
   '/inner-scroll': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Inner Scroll</title></head>

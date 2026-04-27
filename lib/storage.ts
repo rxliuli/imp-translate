@@ -29,14 +29,15 @@ const DEFAULT_SETTINGS: Settings = {
 }
 
 export async function getSettings(): Promise<Settings> {
-  const stored = await browser.storage.local.get('settings')
+  const stored = await browser.storage.sync.get('settings')
   if (!stored.settings) return { ...DEFAULT_SETTINGS }
   return { ...DEFAULT_SETTINGS, ...stored.settings }
 }
 
 export async function saveSettings(settings: Partial<Settings>): Promise<Settings> {
-  const current = await getSettings()
-  const merged = { ...current, ...settings }
-  await browser.storage.local.set({ settings: merged })
-  return merged
+  const stored = await browser.storage.sync.get('settings')
+  const raw = (stored.settings ?? {}) as Partial<Settings>
+  const merged = { ...raw, ...settings }
+  await browser.storage.sync.set({ settings: merged })
+  return { ...DEFAULT_SETTINGS, ...merged }
 }

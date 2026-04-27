@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { getSettings, saveSettings, type Settings, type TranslationProvider } from '@/lib/storage'
 import { LANGUAGES_SORTED } from '@/lib/languages'
 import { Input } from '@/components/ui/input'
@@ -16,28 +16,22 @@ const PROVIDERS: { value: TranslationProvider; label: string; description: strin
 
 export function App() {
   const [settings, setSettings] = useState<Settings | null>(null)
-  const loaded = useRef(false)
 
   useEffect(() => {
-    getSettings().then((s) => {
-      setSettings(s)
-      loaded.current = true
-    })
+    getSettings().then(setSettings)
   }, [])
-
-  useEffect(() => {
-    if (!loaded.current || !settings) return
-    saveSettings(settings)
-  }, [settings])
 
   if (!settings) return null
 
   function update(patch: Partial<Settings>) {
     setSettings({ ...settings!, ...patch })
+    saveSettings(patch)
   }
 
   function updateOpenAI(patch: Partial<Settings['openai']>) {
-    setSettings({ ...settings!, openai: { ...settings!.openai, ...patch } })
+    const openai = { ...settings!.openai, ...patch }
+    setSettings({ ...settings!, openai })
+    saveSettings({ openai })
   }
 
   return (

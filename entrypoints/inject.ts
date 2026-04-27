@@ -91,6 +91,22 @@ export default defineUnlistedScript(() => {
     }, 300)
   }
 
+  function onToggle(e: Event) {
+    if (!isTranslating) return
+    const details = e.target as HTMLDetailsElement
+    if (!details.open) return
+    setTimeout(() => {
+      if (!isTranslating) return
+      const newBlocks = extractBlocks(details, extractOpts)
+      for (const block of newBlocks) {
+        if (!block.element.hasAttribute(PROCESSED_ATTR)) {
+          pendingBlocks.push(block)
+        }
+      }
+      translateVisible()
+    }, 100)
+  }
+
   let recheckTimer: ReturnType<typeof setTimeout> | null = null
   const pendingRecheck = new Set<Element>()
 
@@ -242,7 +258,7 @@ export default defineUnlistedScript(() => {
 
   async function loadCustomRules() {
     try {
-      const result = await browser.storage.local.get('settings')
+      const result = await browser.storage.sync.get('settings')
       const settings = result.settings as Record<string, unknown> | undefined
       if (settings?.developerMode && typeof settings.customRules === 'string') {
         const custom = matchRulesForDomain(parseRules(settings.customRules), location.hostname)
@@ -262,6 +278,7 @@ export default defineUnlistedScript(() => {
     if (showToast) maybeShowToast()
     pendingBlocks = extractBlocks(document.body, extractOpts)
     document.addEventListener('scroll', onScroll, { passive: true, capture: true })
+    document.addEventListener('toggle', onToggle, { capture: true })
     startObserver()
     startUrlWatcher()
     await translateVisible()
@@ -287,6 +304,7 @@ export default defineUnlistedScript(() => {
     }
     pendingRecheck.clear()
     document.removeEventListener('scroll', onScroll, { capture: true })
+    document.removeEventListener('toggle', onToggle, { capture: true })
     clearTranslations(document.body)
     removeStyles()
     dismissToast()

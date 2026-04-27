@@ -20,7 +20,7 @@ export async function getTabId(page: Page): Promise<number> {
 export async function configureMockProvider(page: Page, baseURL: string) {
   const sw = await getServiceWorker(page.context())
   await sw.evaluate(async (endpoint) => {
-    await chrome.storage.local.set({
+    await chrome.storage.sync.set({
       settings: {
         provider: 'openai',
         targetLang: 'zh',

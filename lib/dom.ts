@@ -1,6 +1,6 @@
 const INLINE_TAGS = new Set([
   '#text', 'a', 'abbr', 'acronym', 'b', 'bdi', 'bdo', 'big', 'br',
-  'cite', 'code', 'del', 'dfn', 'em', 'font', 'i', 'ins', 'kbd',
+  'cite', 'code', 'del', 'dfn', 'em', 'font', 'i', 'input', 'ins', 'kbd',
   'label', 'mark', 'nobr', 'q', 'rp', 'rt', 'ruby', 's',
   'samp', 'small', 'span', 'strong', 'sub', 'sup', 'tt',
   'u', 'var', 'wbr', 'img',
@@ -92,12 +92,32 @@ function getVisibleText(el: Element): string {
   return text
 }
 
+function isBlockTag(tag: string): boolean {
+  return !INLINE_TAGS.has(tag) && !SKIP_TAGS.has(tag)
+}
+
+function isDisplayInline(el: Element): boolean {
+  const display = getComputedStyle(el).display
+  return display.startsWith('inline')
+}
+
 function hasBlockChild(el: Element): boolean {
   for (const child of el.children) {
     const tag = child.tagName.toLowerCase()
-    if (!INLINE_TAGS.has(tag) && !SKIP_TAGS.has(tag)) {
+    if (isBlockTag(tag)) {
       if (tag.includes('-') && !child.textContent?.trim()) continue
+      if (isDisplayInline(child)) continue
       return true
+    }
+    if (INLINE_TAGS.has(tag)) {
+      for (const grandchild of child.children) {
+        const gcTag = grandchild.tagName.toLowerCase()
+        if (isBlockTag(gcTag)) {
+          if (gcTag.includes('-') && !grandchild.textContent?.trim()) continue
+          if (isDisplayInline(grandchild)) continue
+          return true
+        }
+      }
     }
   }
   return false

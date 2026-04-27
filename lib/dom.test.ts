@@ -20,7 +20,7 @@ describe('extractBlocks', () => {
     expect(blocks[1].text).toBe('More text')
   })
 
-  it('should not treat div with form controls as a leaf block', () => {
+  it('should extract text from div with form controls as inline', () => {
     document.body.innerHTML = `
       <div class="tabs">
         <input type="radio" name="group" id="tab-1" checked>
@@ -32,7 +32,8 @@ describe('extractBlocks', () => {
       </div>
     `
     const blocks = extractBlocks(document.body)
-    expect(blocks).toHaveLength(0)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toContain('npm')
   })
 
   it('should not translate nav or footer', () => {
@@ -110,6 +111,48 @@ describe('extractBlocks', () => {
     const blocks = extractBlocks(document.body)
     expect(blocks).toHaveLength(1)
     expect(blocks[0].text).toBe('Resetting feed/algorithm')
+  })
+
+  // npmjs.com wraps README in <div> → <span> → <section> → <article> → <div#readme>
+  // The <span> is inline, so hasBlockChild must look through it to find the block content
+  // Example: https://www.npmjs.com/package/vista
+  it('should walk through inline wrappers containing block content', () => {
+    document.body.innerHTML = `
+      <div>
+        <span>
+          <section>
+            <article>
+              <div>
+                <p>First paragraph</p>
+                <p>Second paragraph</p>
+              </div>
+            </article>
+          </section>
+        </span>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('First paragraph')
+    expect(blocks[1].text).toBe('Second paragraph')
+  })
+
+  // Twitter/X wraps @mentions in <div style="display:inline"> inside the tweet text container.
+  // hasBlockChild must check computed display to avoid splitting the tweet into fragments.
+  // Example: https://x.com/itsstock/status/2048817860261425541
+  it('should extract tweet with inline-displayed div children as one block', () => {
+    document.body.innerHTML = `
+      <div data-testid="tweetText">
+        <span>Just migrated to </span>
+        <div style="display:inline-flex"><span><a>@heliumbrowser</a></span></div>
+        <span> and this works great.</span>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toContain('Just migrated to')
+    expect(blocks[0].text).toContain('@heliumbrowser')
+    expect(blocks[0].text).toContain('this works great')
   })
 
   it('should skip time elements', () => {

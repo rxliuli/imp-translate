@@ -120,6 +120,31 @@ test('SPA navigation preserves existing translations', async ({ context, baseURL
   await expect(pResult).toContainText('Brand new paragraph', { timeout: 15000 })
 })
 
+// Reddit wraps details content in a height-animator that hides content when collapsed.
+// Native <details> children still report offsetHeight>0 in Chromium (content-visibility),
+// so this test uses display:none which is the reliable way to hide content from isHidden.
+test('details element content is translated when expanded', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/details`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  await expect(page.locator('.imp-translate-result:not(.imp-translate-loading)').first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  const ruleText = page.locator('#rule-text')
+  await expect(ruleText.locator('.imp-translate-result')).toHaveCount(0)
+
+  await page.locator('summary').click()
+
+  const contentTranslation = ruleText.locator('.imp-translate-result:not(.imp-translate-loading)')
+  await expect(contentTranslation).toBeVisible({ timeout: 15000 })
+  await expect(contentTranslation).toContainText('[翻译]')
+})
+
 test('content script restores original page', async ({ context, baseURL }) => {
   const page = await context.newPage()
   await page.goto(baseURL)
