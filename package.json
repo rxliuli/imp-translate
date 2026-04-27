@@ -11,7 +11,7 @@
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
-    "build:safari": "wxt zip -b safari",
+    "build:safari": "wxt build -b safari",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
     "test": "is-ci && pnpm exec playwright install || echo 'Not in CI' && vitest run",

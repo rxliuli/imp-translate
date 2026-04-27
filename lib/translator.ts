@@ -6,18 +6,27 @@ export interface TranslationResult {
 }
 
 let msTokenCache: { token: string; expires: number } | null = null
+let msTokenInflight: Promise<string> | null = null
 
 async function getMicrosoftToken(): Promise<string> {
   if (msTokenCache && Date.now() < msTokenCache.expires) {
     return msTokenCache.token
   }
-  const resp = await fetch('https://edge.microsoft.com/translate/auth', {
-    method: 'GET',
-  })
-  if (!resp.ok) throw new Error(`Microsoft auth failed: ${resp.status}`)
-  const token = await resp.text()
-  msTokenCache = { token, expires: Date.now() + 8 * 60 * 1000 }
-  return token
+  if (msTokenInflight) return msTokenInflight
+  msTokenInflight = (async () => {
+    try {
+      const resp = await fetch('https://edge.microsoft.com/translate/auth', {
+        method: 'GET',
+      })
+      if (!resp.ok) throw new Error(`Microsoft auth failed: ${resp.status}`)
+      const token = await resp.text()
+      msTokenCache = { token, expires: Date.now() + 8 * 60 * 1000 }
+      return token
+    } finally {
+      msTokenInflight = null
+    }
+  })()
+  return msTokenInflight
 }
 
 async function translateMicrosoft(

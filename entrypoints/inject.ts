@@ -66,13 +66,7 @@ export default defineUnlistedScript(() => {
     if (blocks.length === 0) return
 
     injectLoading(blocks)
-
-    const BATCH_SIZE = 20
-    for (let i = 0; i < blocks.length; i += BATCH_SIZE) {
-      if (!isTranslating) return
-      const batch = blocks.slice(i, i + BATCH_SIZE)
-      await translateBatch(batch)
-    }
+    await translateBatch(blocks)
   }
 
   async function translateVisible() {
@@ -94,25 +88,48 @@ export default defineUnlistedScript(() => {
   let recheckTimer: ReturnType<typeof setTimeout> | null = null
   const pendingRecheck = new Set<Element>()
 
+  async function retranslateElement(el: Element, newText: string) {
+    const wrapper = el.querySelector(`.${RESULT_CLASS}`)
+    if (!wrapper) {
+      el.removeAttribute(PROCESSED_ATTR)
+      el.removeAttribute('data-imp-text')
+      const newBlocks = extractBlocks(el)
+      if (newBlocks.length > 0) {
+        pendingBlocks.push(...newBlocks)
+        translateVisible()
+      }
+      return
+    }
+    el.setAttribute('data-imp-text', newText)
+    const block: TranslatableBlock = { element: el as HTMLElement, text: newText }
+    const filtered = await filterByLanguage([block])
+    if (filtered.length === 0) return
+    try {
+      const result = await messager.sendMessage('translate', {
+        texts: [newText],
+        targetLang,
+      })
+      if (!isTranslating) return
+      if (wrapper.parentElement) {
+        wrapper.textContent = result.texts[0]
+      }
+    } catch {
+      // keep old translation on error
+    }
+  }
+
   function flushRecheck() {
     recheckTimer = null
     if (!isTranslating) return
-    let hasNew = false
     for (const el of pendingRecheck) {
       if (!el.hasAttribute(PROCESSED_ATTR)) continue
       const storedText = el.getAttribute('data-imp-text')
       if (!storedText) continue
       const currentText = getVisibleText(el).trim()
       if (storedText === currentText) continue
-      clearTranslations(el)
-      const newBlocks = extractBlocks(el)
-      if (newBlocks.length > 0) {
-        pendingBlocks.push(...newBlocks)
-        hasNew = true
-      }
+      retranslateElement(el, currentText)
     }
     pendingRecheck.clear()
-    if (hasNew) translateVisible()
   }
 
   function startObserver() {
@@ -163,11 +180,24 @@ export default defineUnlistedScript(() => {
     })
   }
 
+  function rescanBlocks() {
+    if (!isTranslating) return
+    const newBlocks = extractBlocks(document.body)
+    let hasNew = false
+    for (const block of newBlocks) {
+      if (!block.element.hasAttribute(PROCESSED_ATTR)) {
+        pendingBlocks.push(block)
+        hasNew = true
+      }
+    }
+    if (hasNew) translateVisible()
+  }
+
   function onUrlChange() {
     if (!isTranslating) return
-    clearTranslations(document.body)
     pendingBlocks = extractBlocks(document.body)
     translateVisible()
+    setTimeout(rescanBlocks, 1000)
   }
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null

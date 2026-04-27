@@ -118,13 +118,32 @@ export default defineBackground(() => {
     )
 
     if (uncachedIndices.length > 0) {
+      const CHUNK_SIZE = 5
+      const MAX_CONCURRENCY = 4
       const settings = await getSettings()
       const uncachedTexts = uncachedIndices.map((i) => texts[i])
-      const translated = await translate(uncachedTexts, targetLang, settings)
-      for (let j = 0; j < uncachedIndices.length; j++) {
-        results[uncachedIndices[j]] = translated.texts[j]
-        setCached(uncachedTexts[j], targetLang, translated.texts[j])
+
+      const chunks: number[][] = []
+      for (let i = 0; i < uncachedIndices.length; i += CHUNK_SIZE) {
+        chunks.push(uncachedIndices.slice(i, i + CHUNK_SIZE))
       }
+
+      let next = 0
+      async function worker() {
+        while (next < chunks.length) {
+          const chunkIndices = chunks[next++]
+          const chunkTexts = chunkIndices.map((i) => texts[i])
+          const translated = await translate(chunkTexts, targetLang, settings)
+          for (let j = 0; j < chunkIndices.length; j++) {
+            results[chunkIndices[j]] = translated.texts[j]
+            setCached(chunkTexts[j], targetLang, translated.texts[j])
+          }
+        }
+      }
+
+      await Promise.all(
+        Array.from({ length: Math.min(MAX_CONCURRENCY, chunks.length) }, () => worker()),
+      )
       evictOldEntries()
     }
 
