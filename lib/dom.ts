@@ -26,6 +26,18 @@ const CONTAINER_TAGS = new Set([
 
 const SKIP_CONTAINERS = new Set(['nav', 'footer'])
 
+const EDITOR_SELECTOR = [
+  '.DraftEditor-root',
+  '[data-lexical-editor]',
+  '.ProseMirror',
+  '[data-slate-editor]',
+  '.ql-editor',
+  '.ck-editor',
+  '.tox-editor-container',
+  '.cm-editor',
+  '.monaco-editor',
+].join(',')
+
 const RESULT_CLASS = 'imp-translate-result'
 const PROCESSED_ATTR = 'data-imp-translated'
 
@@ -40,6 +52,7 @@ function shouldSkip(el: Element): boolean {
   if (el.getAttribute('translate') === 'no') return true
   if (el.getAttribute('aria-hidden') === 'true') return true
   if ((el as HTMLElement).isContentEditable) return true
+  if (el.closest(EDITOR_SELECTOR)) return true
   if (el.classList.contains(RESULT_CLASS)) return true
   if (el.hasAttribute(PROCESSED_ATTR)) return true
   return false
@@ -60,6 +73,7 @@ function getVisibleText(el: Element): string {
       if (childEl.classList.contains(RESULT_CLASS)) continue
       if (childEl.classList.contains('notranslate')) continue
       if (childEl.getAttribute('translate') === 'no') continue
+      if (childEl.isContentEditable) continue
       if (isHidden(childEl)) continue
       text += getVisibleText(childEl)
     }
@@ -70,7 +84,10 @@ function getVisibleText(el: Element): string {
 function hasBlockChild(el: Element): boolean {
   for (const child of el.children) {
     const tag = child.tagName.toLowerCase()
-    if (!INLINE_TAGS.has(tag) && !SKIP_TAGS.has(tag)) return true
+    if (!INLINE_TAGS.has(tag) && !SKIP_TAGS.has(tag)) {
+      if (tag.includes('-') && !child.textContent?.trim()) continue
+      return true
+    }
   }
   return false
 }

@@ -1,11 +1,13 @@
 import { test as base, chromium, type BrowserContext } from '@playwright/test'
 import path from 'path'
+import { createTestServer } from './server'
 
 const pathToExtension = path.resolve('.output/chrome-mv3')
 
 export const test = base.extend<{
   context: BrowserContext
   extensionId: string
+  baseURL: string
 }>({
   context: async ({}, use) => {
     const context = await chromium.launchPersistentContext('', {
@@ -24,6 +26,12 @@ export const test = base.extend<{
     if (!background) background = await context.waitForEvent('serviceworker')
     const extensionId = background.url().split('/')[2]
     await use(extensionId)
+  },
+  baseURL: async ({}, use) => {
+    const server = createTestServer()
+    const url = await server.start()
+    await use(url)
+    await server.stop()
   },
 })
 

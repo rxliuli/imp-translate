@@ -1,121 +1,137 @@
 import { test, expect } from './fixtures'
-import { startTranslation, stopTranslation, getServiceWorker } from './helpers'
+import { startTranslation, stopTranslation, getServiceWorker, configureMockProvider } from './helpers'
 
-test('translation persists across full page navigation', async ({
-  context,
-}) => {
+const TRANSLATED_SELECTOR = '.imp-translate-result:not(.imp-translate-loading)'
+
+test('link click preserves translation', async ({ context, baseURL }) => {
   const page = await context.newPage()
-  await page.goto('https://example.com')
+  await page.goto(baseURL)
   await page.waitForLoadState('domcontentloaded')
 
+  await configureMockProvider(page, baseURL)
   await startTranslation(page)
-  await expect(page.locator('.imp-translate-result:not(.imp-translate-loading)').first()).toBeVisible({
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
     timeout: 15000,
   })
 
-  // Navigate to a different page in the same tab
-  await page.goto('https://www.iana.org/help/example-domains')
+  await page.locator('#link-page2').click()
   await page.waitForLoadState('domcontentloaded')
 
-  // Translation should auto-resume on the new page
-  await expect(page.locator('.imp-translate-result:not(.imp-translate-loading)').first()).toBeVisible({
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
     timeout: 15000,
   })
 })
 
-test('translation state is saved immediately on start', async ({
-  context,
-}) => {
+test('page reload clears translation', async ({ context, baseURL }) => {
   const page = await context.newPage()
-  await page.goto('https://example.com')
+  await page.goto(baseURL)
   await page.waitForLoadState('domcontentloaded')
 
-  const sw = await getServiceWorker(context)
-  const tabId = await sw.evaluate(async (url) => {
-    const tabs = await chrome.tabs.query({ url })
-    return tabs[0]?.id
-  }, 'https://example.com/')
-
-  // Start translation
-  await startTranslation(page, 'zh')
-
-  // State should be saved immediately (not after translation completes)
-  await page.waitForTimeout(200)
-  const state = await sw.evaluate(async (tabId) => {
-    const key = `tab_translating_${tabId}`
-    const result = await chrome.storage.session.get(key)
-    return result[key] ?? null
-  }, tabId)
-  expect(state).toBe('zh')
-})
-
-test('translation state is cleared on stop', async ({ context }) => {
-  const page = await context.newPage()
-  await page.goto('https://example.com')
-  await page.waitForLoadState('domcontentloaded')
-
-  const sw = await getServiceWorker(context)
-  const tabId = await sw.evaluate(async (url) => {
-    const tabs = await chrome.tabs.query({ url })
-    return tabs[0]?.id
-  }, 'https://example.com/')
-
-  await startTranslation(page, 'zh')
-  await expect(page.locator('.imp-translate-result:not(.imp-translate-loading)').first()).toBeVisible({
-    timeout: 15000,
-  })
-
-  await stopTranslation(page)
-  await page.waitForTimeout(200)
-
-  const state = await sw.evaluate(async (tabId) => {
-    const key = `tab_translating_${tabId}`
-    const result = await chrome.storage.session.get(key)
-    return result[key] ?? null
-  }, tabId)
-  expect(state).toBeNull()
-})
-
-test('bfcache restore cleans up translations after stop', async ({
-  context,
-}) => {
-  const page = await context.newPage()
-  await page.goto('https://example.com')
-  await page.waitForLoadState('domcontentloaded')
-
+  await configureMockProvider(page, baseURL)
   await startTranslation(page)
-  await expect(page.locator('.imp-translate-result:not(.imp-translate-loading)').first()).toBeVisible({
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
     timeout: 15000,
   })
 
-  // Navigate away (original page may enter bfcache)
-  await page.goto('https://www.iana.org/help/example-domains')
+  await page.reload({ waitUntil: 'domcontentloaded' })
+
+  await page.waitForTimeout(3000)
+  await expect(page.locator('.imp-translate-result')).toHaveCount(0)
+})
+
+test('typed URL clears translation', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
   await page.waitForLoadState('domcontentloaded')
 
-  // Stop translation on the new page
-  await stopTranslation(page)
-  await page.waitForTimeout(200)
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
 
-  // Go back — browser restores page from bfcache with stale translations
+  // page.goto simulates typed navigation
+  await page.goto(`${baseURL}/page3`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await page.waitForTimeout(3000)
+  await expect(page.locator('.imp-translate-result')).toHaveCount(0)
+})
+
+test('back/forward preserves translation', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  await page.locator('#link-page2').click()
+  await page.waitForLoadState('domcontentloaded')
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
   await page.goBack({ waitUntil: 'domcontentloaded' })
-
-  // pageshow handler should clean up translations
-  await expect(page.locator('.imp-translate-result')).toHaveCount(0, {
-    timeout: 5000,
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
   })
 })
 
-test('translation resumes after SPA navigation', async ({ context }) => {
+test('translation state is saved on start and cleared on stop', async ({
+  context,
+  baseURL,
+}) => {
   const page = await context.newPage()
-  await page.goto('https://example.com')
+  await page.goto(baseURL)
   await page.waitForLoadState('domcontentloaded')
 
-  await startTranslation(page)
-  await expect(page.locator('.imp-translate-result:not(.imp-translate-loading)').first()).toBeVisible({
+  const sw = await getServiceWorker(context)
+  const tabId = await sw.evaluate(async (pattern) => {
+    const tabs = await chrome.tabs.query({ url: `${pattern}/*` })
+    return tabs[0]?.id
+  }, baseURL)
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page, 'zh')
+
+  await page.waitForTimeout(200)
+  const stateAfterStart = await sw.evaluate(async (tabId) => {
+    const key = `tab_translating_${tabId}`
+    const result = await chrome.storage.session.get(key)
+    return result[key] ?? null
+  }, tabId)
+  expect(stateAfterStart).toBe('zh')
+
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
     timeout: 15000,
   })
 
-  // Simulate SPA navigation: change URL and replace content
+  await stopTranslation(page)
+  await page.waitForTimeout(200)
+
+  const stateAfterStop = await sw.evaluate(async (tabId) => {
+    const key = `tab_translating_${tabId}`
+    const result = await chrome.storage.session.get(key)
+    return result[key] ?? null
+  }, tabId)
+  expect(stateAfterStop).toBeNull()
+})
+
+test('SPA navigation continues translation', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
   await page.evaluate(() => {
     history.pushState(null, '', '/new-page')
     document.querySelector('h1')!.textContent = 'New Page Title'
@@ -123,8 +139,31 @@ test('translation resumes after SPA navigation', async ({ context }) => {
       'This is new content after SPA navigation.'
   })
 
-  // URL watcher should detect change and re-translate
   await expect(page.locator('.imp-translate-result').first()).toBeVisible({
     timeout: 15000,
+  })
+})
+
+test('bfcache restore cleans up after stop', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  await page.locator('#link-page2').click()
+  await page.waitForLoadState('domcontentloaded')
+
+  await stopTranslation(page)
+  await page.waitForTimeout(200)
+
+  await page.goBack({ waitUntil: 'domcontentloaded' })
+
+  await expect(page.locator('.imp-translate-result')).toHaveCount(0, {
+    timeout: 5000,
   })
 })

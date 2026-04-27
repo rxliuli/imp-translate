@@ -186,3 +186,103 @@ export function replaceWithError(
 export function removeStyles() {
   document.getElementById(STYLE_ID)?.remove()
 }
+
+const TOAST_ID = 'imp-translate-toast'
+const TOAST_STYLE_ID = 'imp-translate-toast-style'
+
+function ensureToastStyles() {
+  if (document.getElementById(TOAST_STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = TOAST_STYLE_ID
+  style.textContent = `
+    @keyframes imp-toast-slide-in {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes imp-toast-slide-out {
+      from { transform: translateY(0); opacity: 1; }
+      to { transform: translateY(-100%); opacity: 0; }
+    }
+    #${TOAST_ID} {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 2147483647;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      font: 14px/1 system-ui, sans-serif;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(255, 255, 255, 0.85);
+      color: #333;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      animation: imp-toast-slide-in 0.25s ease-out;
+    }
+    #${TOAST_ID}.imp-toast-out {
+      animation: imp-toast-slide-out 0.2s ease-in forwards;
+    }
+    @media (prefers-color-scheme: dark) {
+      #${TOAST_ID} {
+        background: rgba(30, 30, 30, 0.85);
+        color: #e0e0e0;
+        border-bottom-color: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      }
+      #${TOAST_ID} .imp-toast-restore { color: #6ea8fe !important; }
+      #${TOAST_ID} .imp-toast-settings { color: #aaa !important; }
+    }
+    #${TOAST_ID} .imp-toast-text { flex: 1; }
+    #${TOAST_ID} button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font: inherit;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    #${TOAST_ID} button:active { opacity: 0.7; }
+    #${TOAST_ID} .imp-toast-restore { color: #2563eb; }
+    #${TOAST_ID} .imp-toast-settings { color: #666; font-size: 16px; }
+  `
+  document.head.appendChild(style)
+}
+
+export function showToastBar(onRestore: () => void, onSettings: () => void) {
+  if (document.getElementById(TOAST_ID)) return
+  ensureToastStyles()
+
+  const bar = document.createElement('div')
+  bar.id = TOAST_ID
+  bar.setAttribute('translate', 'no')
+
+  const text = document.createElement('span')
+  text.className = 'imp-toast-text'
+  text.textContent = 'Page translated'
+
+  const restoreBtn = document.createElement('button')
+  restoreBtn.className = 'imp-toast-restore'
+  restoreBtn.textContent = 'Show original'
+  restoreBtn.addEventListener('click', onRestore)
+
+  const settingsBtn = document.createElement('button')
+  settingsBtn.className = 'imp-toast-settings'
+  settingsBtn.textContent = '⚙'
+  settingsBtn.addEventListener('click', onSettings)
+
+  bar.append(text, restoreBtn, settingsBtn)
+  document.body.appendChild(bar)
+}
+
+export function hideToastBar() {
+  const bar = document.getElementById(TOAST_ID)
+  if (!bar) return
+  bar.classList.add('imp-toast-out')
+  bar.addEventListener('animationend', () => {
+    bar.remove()
+    document.getElementById(TOAST_STYLE_ID)?.remove()
+  }, { once: true })
+}

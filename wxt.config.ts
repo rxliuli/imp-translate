@@ -21,7 +21,7 @@ export default defineConfig({
       name: 'Imp Translate',
       description:
         'Bilingual page translation with Microsoft, Google, and OpenAI-compatible APIs',
-      permissions: ['storage', 'scripting'],
+      permissions: ['storage', 'scripting', 'webNavigation'],
       host_permissions: ['<all_urls>'],
       author: {
         email: 'rxliuli@gmail.com',

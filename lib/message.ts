@@ -15,6 +15,9 @@ export const messager = defineExtensionMessaging<{
   stopTab(data: { tabId: number }): void
   getTabState(data: { tabId: number }): string | null
   getSelfTabState(): string | null
+  stopSelfTab(): void
+  isMobile(): boolean
+  openOptionsPage(): void
 }>()
 
 // Background/Popup → Content (via browser.tabs.sendMessage)

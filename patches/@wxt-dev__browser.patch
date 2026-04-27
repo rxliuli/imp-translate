@@ -1,0 +1,13 @@
+diff --git a/src/gen/index.d.ts b/src/gen/index.d.ts
+index f9fe8017463b5e96e0581a155d0792b7c4c9751c..8fcf5f191aebdd57a558aacc30b0ffcd2a282a45 100644
+--- a/src/gen/index.d.ts
++++ b/src/gen/index.d.ts
+@@ -8888,6 +8888,8 @@ export namespace Browser {
+             OPENBSD = "openbsd",
+             /** Specifies the Fuchsia operating system. */
+             FUCHSIA = "fuchsia",
++            /** Specifies the iOS operating system. */
++            IOS = "ios",
+         }
+ 
+         /**

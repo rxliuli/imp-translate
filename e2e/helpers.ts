@@ -17,6 +17,24 @@ export async function getTabId(page: Page): Promise<number> {
   return tabId
 }
 
+export async function configureMockProvider(page: Page, baseURL: string) {
+  const sw = await getServiceWorker(page.context())
+  await sw.evaluate(async (endpoint) => {
+    await chrome.storage.local.set({
+      settings: {
+        provider: 'openai',
+        targetLang: 'zh',
+        openai: {
+          apiKey: 'test-key',
+          endpoint,
+          model: 'mock',
+          systemPrompt: 'Translate to {{targetLang}}.',
+        },
+      },
+    })
+  }, `${baseURL}/v1/chat/completions`)
+}
+
 export async function startTranslation(page: Page, targetLang = 'zh') {
   const tabId = await getTabId(page)
   const sw = await getServiceWorker(page.context())

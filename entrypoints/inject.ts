@@ -13,6 +13,8 @@ import {
   replaceWithTranslation,
   replaceWithError,
   removeStyles,
+  showToastBar,
+  hideToastBar,
 } from '@/lib/render'
 import { detectLanguage } from '@/lib/language-detect'
 
@@ -43,7 +45,9 @@ export default defineUnlistedScript(() => {
     }
   }
 
-  async function filterByLanguage(blocks: TranslatableBlock[]): Promise<TranslatableBlock[]> {
+  async function filterByLanguage(
+    blocks: TranslatableBlock[],
+  ): Promise<TranslatableBlock[]> {
     const results = await Promise.all(blocks.map((b) => detectLanguage(b.text)))
     return blocks.filter((_, i) => results[i] !== targetLang)
   }
@@ -127,11 +131,39 @@ export default defineUnlistedScript(() => {
     translateVisible()
   }
 
+  let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+  function dismissToast() {
+    if (toastTimer) {
+      clearTimeout(toastTimer)
+      toastTimer = null
+    }
+    hideToastBar()
+  }
+
+  async function maybeShowToast() {
+    const mobile = await messager.sendMessage('isMobile')
+    if (!mobile) return
+    showToastBar(
+      () => {
+        dismissToast()
+        stopTranslation()
+        messager.sendMessage('stopSelfTab')
+      },
+      () => {
+        dismissToast()
+        messager.sendMessage('openOptionsPage')
+      },
+    )
+    toastTimer = setTimeout(dismissToast, 5000)
+  }
+
   async function startTranslation(lang: string) {
     if (isTranslating) return
     isTranslating = true
     targetLang = lang
     lastUrl = location.href
+    maybeShowToast()
     pendingBlocks = extractBlocks(document.body)
     window.addEventListener('scroll', onScroll, { passive: true })
     startObserver()
@@ -156,6 +188,7 @@ export default defineUnlistedScript(() => {
     window.removeEventListener('scroll', onScroll)
     clearTranslations(document.body)
     removeStyles()
+    dismissToast()
     pendingBlocks = []
   }
 
@@ -175,7 +208,7 @@ export default defineUnlistedScript(() => {
 
   window.addEventListener('pageshow', async (e) => {
     if (!e.persisted) return
-    const lang = await messager.sendMessage('getSelfTabState', undefined)
+    const lang = await messager.sendMessage('getSelfTabState')
     if (!lang && isTranslating) {
       stopTranslation()
     }

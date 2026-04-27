@@ -1,13 +1,12 @@
 import { test, expect } from './fixtures'
-import { startTranslation, stopTranslation } from './helpers'
+import { startTranslation, stopTranslation, configureMockProvider } from './helpers'
 
-test('content script translates page via Microsoft Translator', async ({
-  context,
-}) => {
+test('content script translates page', async ({ context, baseURL }) => {
   const page = await context.newPage()
-  await page.goto('https://example.com')
+  await page.goto(baseURL)
   await page.waitForLoadState('domcontentloaded')
 
+  await configureMockProvider(page, baseURL)
   await startTranslation(page)
 
   const translatedEl = page.locator('.imp-translate-result:not(.imp-translate-loading)').first()
@@ -15,16 +14,17 @@ test('content script translates page via Microsoft Translator', async ({
 
   const text = await translatedEl.textContent()
   expect(text).toBeTruthy()
-  expect(text!.length).toBeGreaterThan(0)
+  expect(text).toContain('[翻译]')
 
-  await expect(page.locator('h1').first()).toContainText('Example Domain')
+  await expect(page.locator('h1').first()).toContainText('Home Page')
 })
 
-test('content script restores original page', async ({ context }) => {
+test('content script restores original page', async ({ context, baseURL }) => {
   const page = await context.newPage()
-  await page.goto('https://example.com')
+  await page.goto(baseURL)
   await page.waitForLoadState('domcontentloaded')
 
+  await configureMockProvider(page, baseURL)
   await startTranslation(page)
   await expect(page.locator('.imp-translate-result:not(.imp-translate-loading)').first()).toBeVisible({
     timeout: 15000,
@@ -33,5 +33,5 @@ test('content script restores original page', async ({ context }) => {
   await stopTranslation(page)
 
   await expect(page.locator('.imp-translate-result')).toHaveCount(0)
-  await expect(page.locator('h1')).toContainText('Example Domain')
+  await expect(page.locator('h1')).toContainText('Home Page')
 })

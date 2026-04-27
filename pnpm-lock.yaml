@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@wxt-dev/browser':
+    hash: 84c103658758ba2057e0f3389fb9094537c35872ad3b1dccff40067d927633f2
+    path: patches/@wxt-dev__browser.patch
+
 importers:
 
   .:
@@ -54,6 +59,9 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0
     devDependencies:
+      '@hono/node-server':
+        specifier: ^2.0.0
+        version: 2.0.0(hono@4.12.15)
       '@playwright/test':
         specifier: ^1.59.1
         version: 1.59.1
@@ -78,6 +86,9 @@ importers:
       '@wxt-dev/module-react':
         specifier: ^1.2.2
         version: 1.2.2(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))(wxt@0.20.25(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1))
+      hono:
+        specifier: ^4.12.15
+        version: 4.12.15
       is-ci:
         specifier: ^4.1.0
         version: 4.1.0
@@ -345,6 +356,12 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@hono/node-server@2.0.0':
+    resolution: {integrity: sha512-n3GfHwwCvHCkGmOwKfxUPOlbfzuO64Sbc5XC4NGPIXxkuOnJrdgExdRKmHfF924r914WRJPT397GdqLvdYTeyQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -2084,6 +2101,10 @@ packages:
   growly@1.3.0:
     resolution: {integrity: sha512-+xGQY0YyAWCnqy7Cd++hc2JqMYzlm0dG30Jd0beaA64sROr8C4nt8Yc9V5Ro3avlSUDTN0ulqP/VBKi1/lLygw==}
 
+  hono@4.12.15:
+    resolution: {integrity: sha512-qM0jDhFEaCBb4TxoW7f53Qrpv9RBiayUHo0S52JudprkhvpjIrGoU1mnnr29Fvd1U335ZFPZQY1wlkqgfGXyLg==}
+    engines: {node: '>=16.9.0'}
+
   hookable@6.1.1:
     resolution: {integrity: sha512-U9LYDy1CwhMCnprUfeAZWZGByVbhd54hwepegYTK7Pi5NvqEj63ifz5z+xukznehT7i6NIZRu89Ay1AZmRsLEQ==}
 
@@ -3418,6 +3439,10 @@ snapshots:
 
   '@floating-ui/utils@0.2.11': {}
 
+  '@hono/node-server@2.0.0(hono@4.12.15)':
+    dependencies:
+      hono: 4.12.15
+
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -4627,7 +4652,7 @@ snapshots:
       uid: 2.0.2
       webextension-polyfill: 0.10.0
 
-  '@wxt-dev/browser@0.1.40':
+  '@wxt-dev/browser@0.1.40(patch_hash=84c103658758ba2057e0f3389fb9094537c35872ad3b1dccff40067d927633f2)':
     dependencies:
       '@types/filesystem': 0.0.36
       '@types/har-format': 1.2.16
@@ -4643,7 +4668,7 @@ snapshots:
 
   '@wxt-dev/storage@1.2.8':
     dependencies:
-      '@wxt-dev/browser': 0.1.40
+      '@wxt-dev/browser': 0.1.40(patch_hash=84c103658758ba2057e0f3389fb9094537c35872ad3b1dccff40067d927633f2)
       async-mutex: 0.5.0
       dequal: 2.0.3
 
@@ -5060,6 +5085,8 @@ snapshots:
   graceful-readlink@1.0.1: {}
 
   growly@1.3.0: {}
+
+  hono@4.12.15: {}
 
   hookable@6.1.1: {}
 
@@ -6223,7 +6250,7 @@ snapshots:
       '@webext-core/fake-browser': 1.3.4
       '@webext-core/isolated-element': 1.1.5
       '@webext-core/match-patterns': 1.0.3
-      '@wxt-dev/browser': 0.1.40
+      '@wxt-dev/browser': 0.1.40(patch_hash=84c103658758ba2057e0f3389fb9094537c35872ad3b1dccff40067d927633f2)
       '@wxt-dev/storage': 1.2.8
       async-mutex: 0.5.0
       c12: 3.3.4(magicast@0.5.2)

@@ -40,20 +40,39 @@ async function stopTranslationForTab(tabId: number) {
   await setTabTranslatingLang(tabId, null)
 }
 
+async function toggleTranslationForActiveTab() {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id) return
+  const lang = await getTabTranslatingLang(tab.id)
+  if (lang) {
+    await stopTranslationForTab(tab.id)
+  } else {
+    const settings = await getSettings()
+    await startTranslationForTab(tab.id, settings.targetLang)
+  }
+}
+
+async function isMobile(): Promise<boolean> {
+  const info = await browser.runtime.getPlatformInfo()
+  return info.os === 'android' || info.os === 'ios'
+}
+
+async function setupMobileAction() {
+  if (await isMobile()) {
+    await browser.action.setPopup({ popup: '' })
+  }
+}
+
 export default defineBackground(() => {
+  browser.runtime.onInstalled.addListener(() => setupMobileAction())
+  browser.runtime.onStartup.addListener(() => setupMobileAction())
+
+  browser.action.onClicked.addListener(() => toggleTranslationForActiveTab())
+
   browser.commands.onCommand.addListener(async (command) => {
     if (command !== 'toggle-translate') return
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
-    if (!tab?.id) return
-    const lang = await getTabTranslatingLang(tab.id)
-    if (lang) {
-      await stopTranslationForTab(tab.id)
-    } else {
-      const settings = await getSettings()
-      await startTranslationForTab(tab.id, settings.targetLang)
-    }
+    await toggleTranslationForActiveTab()
   })
-
 
   messager.onMessage('getSettings', async () => {
     return await getSettings()
@@ -107,9 +126,44 @@ export default defineBackground(() => {
     return await getTabTranslatingLang(tabId)
   })
 
-  // Auto-resume translation after navigation (full page reload)
+  messager.onMessage('stopSelfTab', async ({ sender }) => {
+    const tabId = sender.tab?.id
+    if (!tabId) return
+    await setTabTranslatingLang(tabId, null)
+  })
+
+  messager.onMessage('isMobile', async () => {
+    return await isMobile()
+  })
+
+  messager.onMessage('openOptionsPage', async () => {
+    await browser.runtime.openOptionsPage()
+  })
+
+  // Track tabs where translation should not resume (reload/typed navigation)
+  const skipResumeTabs = new Set<number>()
+
+  browser.webNavigation.onCommitted.addListener((details) => {
+    if (details.frameId !== 0) return
+    const isForwardBack = (details as any).transitionQualifiers?.includes(
+      'forward_back',
+    )
+    if (
+      !isForwardBack &&
+      (details.transitionType === 'reload' ||
+        details.transitionType === 'typed')
+    ) {
+      skipResumeTabs.add(details.tabId)
+      setTabTranslatingLang(details.tabId, null)
+    }
+  })
+
   browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     if (changeInfo.status !== 'complete') return
+    if (skipResumeTabs.has(tabId)) {
+      skipResumeTabs.delete(tabId)
+      return
+    }
     const lang = await getTabTranslatingLang(tabId)
     if (!lang) return
     await injectContentScript(tabId)

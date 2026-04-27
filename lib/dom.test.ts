@@ -99,6 +99,19 @@ describe('extractBlocks', () => {
     expect(blocks[0].text).toBe('Learn JavaScript Online')
   })
 
+  it('should ignore empty custom elements when checking block children', () => {
+    document.body.innerHTML = `
+      <div>
+        <a href="#">
+          Resetting feed/algorithm <faceplate-perfmark name="first-post-meaningful-paint"></faceplate-perfmark>
+        </a>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('Resetting feed/algorithm')
+  })
+
   it('should skip time elements', () => {
     document.body.innerHTML = `
       <div>

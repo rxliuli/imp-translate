@@ -61,7 +61,7 @@ export function App() {
   if (!settings) return null
 
   return (
-    <div className="w-72 p-4 space-y-3">
+    <div className="min-w-72 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h1 className="text-base font-semibold flex items-center gap-1.5">
           <LanguagesIcon className="w-4 h-4" />
