@@ -15,6 +15,7 @@ const msSettings: Settings = {
   provider: 'microsoft',
   targetLang: 'zh',
   developerMode: false,
+  debugMode: false,
   customRules: '',
   openai: {
     apiKey: '',

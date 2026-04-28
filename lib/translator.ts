@@ -1,3 +1,4 @@
+import { decodeHTML } from 'entities'
 import type { Settings } from './storage'
 
 export interface TranslationResult {
@@ -59,36 +60,39 @@ async function translateMicrosoft(
   }
 }
 
+const GOOGLE_TRANSLATE_HTML_KEY = 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520'
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 async function translateGoogle(
   texts: string[],
   targetLang: string,
 ): Promise<TranslationResult> {
-  const results: string[] = []
-  let detectedLang: string | undefined
+  const escaped = texts.map(escapeHtml)
+  const resp = await fetch(
+    'https://translate-pa.googleapis.com/v1/translateHtml',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json+protobuf',
+        'X-Goog-API-Key': GOOGLE_TRANSLATE_HTML_KEY,
+      },
+      body: JSON.stringify([[escaped, 'auto', targetLang], 'te_lib']),
+    },
+  )
 
-  for (const text of texts) {
-    const url = new URL('https://translate.googleapis.com/translate_a/single')
-    url.searchParams.set('client', 'gtx')
-    url.searchParams.set('dt', 't')
-    url.searchParams.set('dj', '1')
-    url.searchParams.set('ie', 'UTF-8')
-    url.searchParams.set('sl', 'auto')
-    url.searchParams.set('tl', targetLang)
-    url.searchParams.set('q', text)
+  if (!resp.ok) throw new Error(`Google translate failed: ${resp.status}`)
 
-    const resp = await fetch(url.toString())
-    if (!resp.ok) throw new Error(`Google translate failed: ${resp.status}`)
+  const data = await resp.json()
+  const translated = data[0] as string[]
+  const detectedLangs = data[1] as string[] | undefined
 
-    const data = await resp.json()
-    const translated = data.sentences
-      ?.filter((s: any) => s.trans)
-      .map((s: any) => s.trans)
-      .join('')
-    results.push(translated || text)
-    if (!detectedLang) detectedLang = data.src
+  return {
+    texts: translated.map((t) => decodeHTML(t)),
+    detectedLang: detectedLangs?.[0],
   }
-
-  return { texts: results, detectedLang }
 }
 
 async function translateOpenAI(

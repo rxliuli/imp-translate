@@ -79,6 +79,46 @@ const pages: Record<string, string> = {
   </div>
 </body>
 </html>`,
+  '/sibling-after-translate': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Sibling After Translate</title></head>
+<body>
+  <div id="block">
+    <span id="text">This is a long sentence that should be translated as one block. Source:</span>
+  </div>
+  <button id="add-mention">Add mention</button>
+  <script>
+    document.getElementById('add-mention').addEventListener('click', function() {
+      var block = document.getElementById('block');
+      var wrapper = document.createElement('div');
+      wrapper.id = 'mention-wrapper';
+      wrapper.style.display = 'inline-flex';
+      wrapper.innerHTML = '<a href="/user" id="mention-link">@user</a>';
+      block.appendChild(wrapper);
+    });
+  </script>
+</body>
+</html>`,
+  '/delayed-render': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Delayed Render</title></head>
+<body>
+  <p>Initial content on page.</p>
+  <button id="load-content">Load content</button>
+  <script>
+    document.getElementById('load-content').addEventListener('click', function() {
+      var wrapper = document.createElement('div');
+      wrapper.id = 'lazy-wrapper';
+      wrapper.style.display = 'none';
+      wrapper.innerHTML = '<p id="lazy-text">This content was loaded lazily after a delay.</p>';
+      document.body.appendChild(wrapper);
+      setTimeout(function() {
+        wrapper.style.display = 'block';
+      }, 300);
+    });
+  </script>
+</body>
+</html>`,
 }
 
 const app = new Hono()

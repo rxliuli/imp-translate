@@ -129,6 +129,32 @@ export function injectLoading(blocks: TranslatableBlock[]) {
   }
 }
 
+export function repositionTranslation(element: HTMLElement, expectedText: string): void {
+  const wrapper = element.querySelector(`.${RESULT_CLASS}`) as HTMLElement | null
+  if (!wrapper) return
+
+  const correctTarget = findInjectionPoint(element)
+  if (wrapper.parentElement === correctTarget) return
+
+  const prev = wrapper.previousSibling
+  wrapper.remove()
+  if (prev?.nodeType === Node.ELEMENT_NODE && (prev as Element).classList.contains(BR_CLASS)) {
+    prev.parentElement?.removeChild(prev)
+  } else if (prev?.nodeType === Node.TEXT_NODE && prev.textContent === ' ') {
+    prev.parentElement?.removeChild(prev)
+  }
+
+  const isShort = expectedText.length <= SHORT_TEXT_THRESHOLD
+  if (isShort) {
+    correctTarget.appendChild(document.createTextNode(' '))
+  } else {
+    const br = document.createElement('br')
+    br.className = BR_CLASS
+    correctTarget.appendChild(br)
+  }
+  correctTarget.appendChild(wrapper)
+}
+
 export function replaceWithTranslation(blocks: TranslatableBlock[], translations: string[]) {
   for (let i = 0; i < blocks.length; i++) {
     const { element } = blocks[i]
@@ -144,12 +170,26 @@ export function replaceWithTranslation(blocks: TranslatableBlock[], translations
         prev.remove()
       }
       wrapper.remove()
+      element.setAttribute('data-imp-noop', '')
       continue
     }
 
     wrapper.className = RESULT_CLASS
     wrapper.textContent = translated
   }
+}
+
+function collectAllErrorBlocks(): TranslatableBlock[] {
+  const errorWrappers = document.querySelectorAll(`.${ERROR_CLASS}`)
+  const blocks: TranslatableBlock[] = []
+  for (const wrapper of errorWrappers) {
+    const el = wrapper.closest('[data-imp-text]') as HTMLElement | null
+    if (!el) continue
+    const text = el.getAttribute('data-imp-text')
+    if (!text) continue
+    blocks.push({ element: el, text })
+  }
+  return blocks
 }
 
 export function replaceWithError(
@@ -169,14 +209,15 @@ export function replaceWithError(
     retryBtn.addEventListener('click', (e) => {
       e.stopPropagation()
       e.preventDefault()
-      for (const { element: el } of blocks) {
+      const allErrors = collectAllErrorBlocks()
+      for (const { element: el } of allErrors) {
         const w = el.querySelector(`.${RESULT_CLASS}`)
         if (w) {
           w.className = `${RESULT_CLASS} ${LOADING_CLASS}`
           w.textContent = ''
         }
       }
-      onRetry(blocks)
+      onRetry(allErrors)
     }, { once: true })
     wrapper.appendChild(retryBtn)
   }
@@ -185,6 +226,39 @@ export function replaceWithError(
 
 export function removeStyles() {
   document.getElementById(STYLE_ID)?.remove()
+}
+
+const DEBUG_STYLE_ID = 'imp-translate-debug-style'
+
+export function injectDebugStyles() {
+  if (document.getElementById(DEBUG_STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = DEBUG_STYLE_ID
+  style.textContent = `
+    [data-imp-noop] {
+      outline: 2px dashed rgba(255, 80, 80, 0.7) !important;
+      outline-offset: -2px !important;
+      position: relative !important;
+    }
+    [data-imp-noop]::after {
+      content: 'no-op';
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: 1px 4px;
+      font: 10px/1.2 system-ui, sans-serif;
+      background: rgba(255, 80, 80, 0.9);
+      color: white;
+      border-radius: 0 0 0 3px;
+      z-index: 2147483647;
+      pointer-events: none;
+    }
+  `
+  document.head.appendChild(style)
+}
+
+export function removeDebugStyles() {
+  document.getElementById(DEBUG_STYLE_ID)?.remove()
 }
 
 const TOAST_ID = 'imp-translate-toast'

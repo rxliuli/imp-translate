@@ -13,18 +13,21 @@ export interface Settings {
   openai: OpenAIConfig
   developerMode: boolean
   customRules: string
+  debugMode: boolean
 }
 
 const DEFAULT_SETTINGS: Settings = {
   provider: 'microsoft',
   targetLang: navigator.language.split('-')[0] || 'zh',
   developerMode: false,
+  debugMode: false,
   customRules: '',
   openai: {
     apiKey: '',
     endpoint: 'https://api.openai.com/v1/chat/completions',
     model: 'gpt-4o-mini',
-    systemPrompt: 'You are a translator. Translate the following text to {{targetLang}}. Return only the translation, no explanations.',
+    systemPrompt:
+      'You are a translator. Translate the following text to {{targetLang}}. Return only the translation, no explanations.',
   },
 }
 
@@ -34,7 +37,9 @@ export async function getSettings(): Promise<Settings> {
   return { ...DEFAULT_SETTINGS, ...stored.settings }
 }
 
-export async function saveSettings(settings: Partial<Settings>): Promise<Settings> {
+export async function saveSettings(
+  settings: Partial<Settings>,
+): Promise<Settings> {
   const stored = await browser.storage.sync.get('settings')
   const raw = (stored.settings ?? {}) as Partial<Settings>
   const merged = { ...raw, ...settings }

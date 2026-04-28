@@ -1,7 +1,8 @@
 import { messager, sendToTab } from '@/lib/message'
-import { getSettings } from '@/lib/storage'
+import { getSettings, type TranslationProvider } from '@/lib/storage'
 import { translate } from '@/lib/translator'
 import { getCached, setCached, evictOldEntries } from '@/lib/cache'
+import { createTranslateService, type TranslateService } from '@/lib/translate-service'
 import { PublicPath } from 'wxt/browser'
 
 async function injectContentScript(tabId: number) {
@@ -101,53 +102,39 @@ export default defineBackground(() => {
     return await getSettings()
   })
 
-  messager.onMessage('translate', async ({ data }) => {
-    const { texts, targetLang } = data
-    const results = new Array<string>(texts.length)
-    const uncachedIndices: number[] = []
+  const BATCH_PARAMS: Record<
+    TranslationProvider,
+    { batchWindowMs: number; maxBatchSize: number; maxBatchChars?: number }
+  > = {
+    microsoft: { batchWindowMs: 50, maxBatchSize: 25 },
+    google: { batchWindowMs: 50, maxBatchSize: 20, maxBatchChars: 14000 },
+    openai: { batchWindowMs: 100, maxBatchSize: 20, maxBatchChars: 4000 },
+  }
 
-    await Promise.all(
-      texts.map(async (text, i) => {
-        const cached = await getCached(text, targetLang)
-        if (cached !== undefined) {
-          results[i] = cached
-        } else {
-          uncachedIndices.push(i)
-        }
-      }),
-    )
+  const services = new Map<TranslationProvider, TranslateService>()
 
-    if (uncachedIndices.length > 0) {
-      const CHUNK_SIZE = 5
-      const MAX_CONCURRENCY = 4
-      const settings = await getSettings()
-      const uncachedTexts = uncachedIndices.map((i) => texts[i])
-
-      const chunks: number[][] = []
-      for (let i = 0; i < uncachedIndices.length; i += CHUNK_SIZE) {
-        chunks.push(uncachedIndices.slice(i, i + CHUNK_SIZE))
-      }
-
-      let next = 0
-      async function worker() {
-        while (next < chunks.length) {
-          const chunkIndices = chunks[next++]
-          const chunkTexts = chunkIndices.map((i) => texts[i])
-          const translated = await translate(chunkTexts, targetLang, settings)
-          for (let j = 0; j < chunkIndices.length; j++) {
-            results[chunkIndices[j]] = translated.texts[j]
-            setCached(chunkTexts[j], targetLang, translated.texts[j])
-          }
-        }
-      }
-
-      await Promise.all(
-        Array.from({ length: Math.min(MAX_CONCURRENCY, chunks.length) }, () => worker()),
-      )
-      evictOldEntries()
+  function getService(provider: TranslationProvider): TranslateService {
+    let service = services.get(provider)
+    if (!service) {
+      service = createTranslateService({
+        ...BATCH_PARAMS[provider],
+        getCached,
+        setCached,
+        translator: async (texts, lang) => {
+          const settings = await getSettings()
+          const result = await translate(texts, lang, settings)
+          return result.texts
+        },
+        onAfterFlush: () => evictOldEntries(),
+      })
+      services.set(provider, service)
     }
+    return service
+  }
 
-    return { texts: results }
+  messager.onMessage('translate', async ({ data }) => {
+    const settings = await getSettings()
+    return getService(settings.provider).translate(data.text, data.targetLang)
   })
 
   messager.onMessage('startTab', async ({ data }) => {

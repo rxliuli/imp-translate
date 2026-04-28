@@ -3,7 +3,21 @@
 ! Reference: https://en.wikipedia.org/wiki/List_of_most-visited_websites
 !
 ! Syntax:
-!   domain##selector  — skip (do not translate)
+!   domain##selector   — skip (do not translate)
+!   domain#+#selector  — include (only translate inside)
+!   entity.* — match any TLD (e.g. google.* matches google.com, google.com.hk, google.co.uk)
+
+! Google Search (www.google.* avoids matching mail/drive/docs subdomains)
+www.google.*#+#[id="rcnt"]
+www.google.*##:has(>[hreftranslate])
+www.google.*##[role="navigation"]
+
+! Twitter/X
+x.com#+#[data-testid="tweetText"]
+x.com#+#[data-testid="UserDescription"]
+x.com#+#[data-testid="article-cover-image"]+div
+x.com#+#[data-testid="twitter-article-title"]
+x.com#+#[data-testid="longformRichTextComponent"]
 
 ! Reddit
 reddit.com##[id="expand-search-button"]

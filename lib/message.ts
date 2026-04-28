@@ -1,15 +1,14 @@
 import { defineExtensionMessaging } from '@webext-core/messaging'
-import type { TranslationResult } from './translator'
 import type { Settings } from './storage'
 
 export interface TranslateRequest {
-  texts: string[]
+  text: string
   targetLang: string
 }
 
 // Content/Popup → Background
 export const messager = defineExtensionMessaging<{
-  translate(req: TranslateRequest): TranslationResult
+  translate(req: TranslateRequest): string
   getSettings(): Settings
   startTab(data: { tabId: number; targetLang: string }): void
   stopTab(data: { tabId: number }): void

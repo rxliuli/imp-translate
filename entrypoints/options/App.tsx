@@ -1,17 +1,44 @@
 import { useState, useEffect } from 'react'
-import { getSettings, saveSettings, type Settings, type TranslationProvider } from '@/lib/storage'
+import {
+  getSettings,
+  saveSettings,
+  type Settings,
+  type TranslationProvider,
+} from '@/lib/storage'
 import { LANGUAGES_SORTED } from '@/lib/languages'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
-const PROVIDERS: { value: TranslationProvider; label: string; description: string }[] = [
-  { value: 'microsoft', label: 'Microsoft Translator', description: 'Free, no API key required' },
-  { value: 'google', label: 'Google Translate', description: 'Free, no API key required' },
-  { value: 'openai', label: 'OpenAI Compatible', description: 'Requires API key' },
+const PROVIDERS: {
+  value: TranslationProvider
+  label: string
+  description: string
+}[] = [
+  {
+    value: 'microsoft',
+    label: 'Microsoft Translator',
+    description: 'Free, no API key required',
+  },
+  {
+    value: 'google',
+    label: 'Google Translate',
+    description: 'Free, no API key required',
+  },
+  {
+    value: 'openai',
+    label: 'OpenAI Compatible',
+    description: 'Requires API key',
+  },
 ]
 
 export function App() {
@@ -41,7 +68,10 @@ export function App() {
       <section className="space-y-4">
         <div className="space-y-1.5">
           <Label>Target Language</Label>
-          <Select value={settings.targetLang} onValueChange={(v) => update({ targetLang: v })}>
+          <Select
+            value={settings.targetLang}
+            onValueChange={(v) => update({ targetLang: v })}
+          >
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -59,7 +89,9 @@ export function App() {
           <Label>Translation Provider</Label>
           <RadioGroup
             value={settings.provider}
-            onValueChange={(v) => update({ provider: v as TranslationProvider })}
+            onValueChange={(v) =>
+              update({ provider: v as TranslationProvider })
+            }
           >
             {PROVIDERS.map((p) => (
               <label
@@ -73,7 +105,9 @@ export function App() {
                 <RadioGroupItem value={p.value} className="mt-0.5" />
                 <div>
                   <div className="text-sm font-medium">{p.label}</div>
-                  <div className="text-xs text-muted-foreground">{p.description}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {p.description}
+                  </div>
                 </div>
               </label>
             ))}
@@ -138,10 +172,14 @@ export function App() {
           <Checkbox
             id="developer-mode"
             checked={settings.developerMode}
-            onCheckedChange={(checked) => update({ developerMode: checked === true })}
+            onCheckedChange={(checked) =>
+              update({ developerMode: checked === true })
+            }
           />
           <div className="grid gap-0.5 leading-none">
-            <Label htmlFor="developer-mode" className="cursor-pointer">Developer Mode</Label>
+            <Label htmlFor="developer-mode" className="cursor-pointer">
+              Developer Mode
+            </Label>
             <p className="text-xs text-muted-foreground">
               Enables access to features suitable for technical users.
             </p>
@@ -149,18 +187,43 @@ export function App() {
         </div>
 
         {settings.developerMode && (
-          <div className="space-y-1.5">
-            <Label>Custom Skip Rules</Label>
-            <Textarea
-              value={settings.customRules}
-              onChange={(e) => update({ customRules: e.target.value })}
-              placeholder={'! Example: skip element on a specific site\n! reddit.com##[id="expand-search-button"]'}
-              className="min-h-32 font-mono text-xs"
-            />
-            <p className="text-xs text-muted-foreground">
-              Syntax: <code className="bg-muted px-1 rounded">domain##selector</code> — elements matching the CSS selector will not be translated.
-            </p>
-          </div>
+          <>
+            <div className="space-y-1.5">
+              <Label>Custom Skip Rules</Label>
+              <Textarea
+                value={settings.customRules}
+                onChange={(e) => update({ customRules: e.target.value })}
+                placeholder={
+                  '! Example: skip element on a specific site\n! reddit.com##[id="expand-search-button"]'
+                }
+                className="min-h-32 font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Syntax:{' '}
+                <code className="bg-muted px-1 rounded">domain##selector</code>{' '}
+                — elements matching the CSS selector will not be translated.
+              </p>
+            </div>
+
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="debug-mode"
+                checked={settings.debugMode}
+                onCheckedChange={(checked) =>
+                  update({ debugMode: checked === true })
+                }
+              />
+              <div className="grid gap-0.5 leading-none">
+                <Label htmlFor="debug-mode" className="cursor-pointer">
+                  Debug Mode
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Outline blocks whose translation matched the original (likely
+                  false positives) so you can write skip rules for them.
+                </p>
+              </div>
+            </div>
+          </>
         )}
       </section>
     </div>

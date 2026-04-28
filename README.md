@@ -1,60 +1,65 @@
-# Browser Extension Template
+# Imp Translate
 
-A modern browser extension development template built with React, Shadcn/ui, and WXT. Supports building cross-browser extensions compatible with Chrome, Edge, Firefox, and Safari (requires macOS).
+An open-source, cross-platform browser extension for bilingual web page translation. Minimal by design.
 
-## Getting Started
+## Goals
 
-### Initialize Project
+- Full-page bilingual translation only — original text stays visible
+- Zero overhead by default — no code is injected into any page until you ask for translation
+- Minimal — do one thing well, resist feature creep
+- Cross-platform — Chrome, Edge, Firefox, Safari, including mobile
 
-```sh
-git clone https://github.com/<your-github-username>/<your-project-name>.git
-cd <your-project-name>
-pnpm i
-pnpm init-project
-```
+## Non-Goals
 
-Follow the prompts to enter your project name and complete the initialization.
+- Auto-injected UI (floating buttons, popups on hover, etc.)
+- In-place replacement translation (like Google Translate)
+- Word or sentence-level translation (selection, lookup, dictionaries)
+- Input box translation (Discord, Slack, etc.)
+- Video subtitle translation (YouTube, Netflix, etc.)
+- Custom translation styling — will never be considered
+- Document translation of any format (Docs, PDF, etc.)
+- Compatibility with every website via custom rules — only the world's top 50 most-visited sites are prioritized
+- Support for every LLM API provider — only OpenAI-compatible APIs are supported (many tools exist to convert other providers)
+
+## Features
+
+- Bilingual display: translations appear below original text
+- Supports OpenAI-compatible, Google, and Microsoft translation providers
+- Smart DOM walker: only translates visible content, handles SPAs, lazy-loaded content, and dynamic text changes
+- Site-specific rules for skipping or targeting content areas
+- Shadow DOM isolation for injected UI
 
 ## Development
 
-Chrome is used as the baseline version for development. Edge, Firefox, and Safari builds are only created when needed for publishing, testing, or debugging platform-specific issues.
-
-### Start Development Server
-
 ```sh
-pnpm dev
+pnpm i
+pnpm dev          # Chrome
+pnpm dev:firefox  # Firefox
 ```
 
-After running the development server:
-
-1. Navigate to the `*.output/chrome-mv3-dev` directory to find the compiled extension files
-2. Open `chrome://extensions` in Chrome
-3. Enable "Developer mode"
-4. Drag and drop the output directory to load the extension for debugging
-
-## Build & Package
-
-### Chrome, Edge, and Firefox
-
-Generate production builds and create zip files for distribution:
+## Build
 
 ```sh
-pnpm zip && pnpm zip:firefox
+pnpm zip            # Chrome / Edge
+pnpm zip:firefox    # Firefox
+pnpm build:safari   # Safari (macOS + Xcode required)
 ```
 
-### Safari
+## Test
 
-Safari extension requires macOS environment and Xcode for building and publishing.
+```sh
+pnpm test   # unit tests (vitest, browser mode)
+pnpm e2e    # end-to-end tests (playwright + real extension)
+```
 
-#### Build Steps
+## Site Rules
 
-1. Update `developmentTeam` in `wxt.config.ts` with your Apple Developer Team ID
-2. Run `pnpm build:safari` - this will automatically build and open Xcode
-3. Build the project in Xcode and test in Safari
-4. To publish: In Xcode, select **Product → Archive** to submit to the App Store
+Built-in rules live in `lib/rules.txt` using uBlock Origin-inspired syntax:
 
-## Requirements
+```
+domain##selector    — skip (do not translate) matching elements
+domain#+#selector   — include (only translate inside) matching elements
+entity.*            — match any TLD via Public Suffix List (e.g. google.* covers google.com, google.com.hk, google.co.uk)
+```
 
-- Node.js (latest LTS recommended)
-- pnpm package manager
-- macOS with Xcode (for Safari development only)
+Users can add custom rules via Developer Mode in the options page.

@@ -27,14 +27,14 @@ const CONTAINER_TAGS = new Set([
 const SKIP_CONTAINERS = new Set(['nav', 'footer'])
 
 const EDITOR_SELECTOR = [
-  '.RichEditor-root',
-  '.DraftEditor-root',
-  '[data-lexical-editor]',
-  '.ProseMirror',
-  '[data-slate-editor]',
-  '.ql-editor',
-  '.ck-editor',
-  '.tox-editor-container',
+  '.RichEditor-root:has([contenteditable="true"])',
+  '.DraftEditor-root:has([contenteditable="true"])',
+  '[data-lexical-editor][contenteditable="true"]',
+  '.ProseMirror[contenteditable="true"]',
+  '[data-slate-editor][contenteditable="true"]',
+  '.ql-editor[contenteditable="true"]',
+  '.ck-editor:has([contenteditable="true"])',
+  '.tox-editor-container:has([contenteditable="true"])',
   '.cm-editor',
   '.monaco-editor',
 ].join(',')
@@ -49,9 +49,17 @@ export interface TranslatableBlock {
 
 export interface ExtractOptions {
   skipSelectors?: string[]
+  includeSelectors?: string[]
 }
 
 function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
+  if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
+    const inside = opts.includeSelectors.some((s) => el.closest(s))
+    if (!inside) {
+      const contains = opts.includeSelectors.some((s) => el.querySelector(s))
+      if (!contains) return true
+    }
+  }
   if (opts?.skipSelectors) {
     for (const s of opts.skipSelectors) {
       if (el.matches(s)) return true
@@ -143,13 +151,6 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     return false
   }
 
-  function canExtract(node: Element): boolean {
-    const tag = node.tagName.toLowerCase()
-    if (!INLINE_TAGS.has(tag)) return true
-    const display = getComputedStyle(node).display
-    return display === 'block' || display === 'flex' || display === 'grid' || display === 'list-item'
-  }
-
   function walk(node: Element) {
     if (shouldSkip(node, opts)) return
 
@@ -172,7 +173,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       return
     }
 
-    if (!hasBlockChild(node) && canExtract(node)) {
+    if (!hasBlockChild(node)) {
       if (tryExtract(node)) return
     }
 
@@ -203,9 +204,11 @@ export function clearTranslations(root: Element = document.body) {
   root.querySelectorAll(`[${PROCESSED_ATTR}]`).forEach((el) => {
     el.removeAttribute(PROCESSED_ATTR)
     el.removeAttribute('data-imp-text')
+    el.removeAttribute('data-imp-noop')
   })
   root.removeAttribute(PROCESSED_ATTR)
   root.removeAttribute('data-imp-text')
+  root.removeAttribute('data-imp-noop')
 }
 
 export { RESULT_CLASS, PROCESSED_ATTR, getVisibleText }

@@ -155,6 +155,84 @@ describe('extractBlocks', () => {
     expect(blocks[0].text).toContain('this works great')
   })
 
+  // Discord wraps message paragraphs in <span> siblings of <ol> list blocks.
+  // The walker must extract inline siblings when their parent has block children.
+  // Example: https://discord.com/channels/1371251680787824650/1470342586031145040/1478845063504068638
+  it('should extract inline siblings of block elements in mixed content', () => {
+    document.body.innerHTML = `
+      <div>
+        <span>First paragraph of the message.</span>
+        <ol><li>List item one</li></ol>
+        <span>Second paragraph of the message.</span>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(3)
+    expect(blocks[0].text).toBe('First paragraph of the message.')
+    expect(blocks[1].text).toBe('List item one')
+    expect(blocks[2].text).toBe('Second paragraph of the message.')
+  })
+
+  it('should only translate inside include selectors', () => {
+    document.body.innerHTML = `
+      <div>
+        <div class="sidebar"><p>Sidebar content</p></div>
+        <div class="main-content"><p>Main content to translate</p></div>
+      </div>
+    `
+    const blocks = extractBlocks(document.body, { includeSelectors: ['.main-content'] })
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('Main content to translate')
+  })
+
+  it('should apply both include and skip rules together', () => {
+    document.body.innerHTML = `
+      <div class="post">
+        <p>Translate this</p>
+        <p class="metadata">Skip this</p>
+      </div>
+    `
+    const blocks = extractBlocks(document.body, {
+      includeSelectors: ['.post'],
+      skipSelectors: ['.metadata'],
+    })
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('Translate this')
+  })
+
+  it('should skip editable rich text editors', () => {
+    document.body.innerHTML = `
+      <div>
+        <p>Normal text</p>
+        <div class="DraftEditor-root">
+          <div contenteditable="true">
+            <p>Editable draft content</p>
+          </div>
+        </div>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('Normal text')
+  })
+
+  it('should translate read-only rich text renderers', () => {
+    document.body.innerHTML = `
+      <div>
+        <p>Normal text</p>
+        <div class="DraftEditor-root">
+          <div>
+            <p>Read-only draft content</p>
+          </div>
+        </div>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('Normal text')
+    expect(blocks[1].text).toBe('Read-only draft content')
+  })
+
   it('should skip time elements', () => {
     document.body.innerHTML = `
       <div>

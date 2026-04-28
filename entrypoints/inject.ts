@@ -15,7 +15,10 @@ import {
   injectLoading,
   replaceWithTranslation,
   replaceWithError,
+  repositionTranslation,
   removeStyles,
+  injectDebugStyles,
+  removeDebugStyles,
   showToastBar,
   hideToastBar,
 } from '@/lib/render'
@@ -24,8 +27,11 @@ import { parseRules, matchRulesForDomain } from '@/lib/rules'
 import builtinRulesRaw from '@/lib/rules.txt?raw'
 
 export default defineUnlistedScript(() => {
-  const builtinSelectors = matchRulesForDomain(parseRules(builtinRulesRaw), location.hostname)
-  let extractOpts: ExtractOptions = { skipSelectors: builtinSelectors }
+  const builtinRules = matchRulesForDomain(parseRules(builtinRulesRaw), location.hostname)
+  let extractOpts: ExtractOptions = {
+    skipSelectors: builtinRules.skipSelectors,
+    includeSelectors: builtinRules.includeSelectors,
+  }
 
   let isTranslating = false
   let targetLang = ''
@@ -35,21 +41,21 @@ export default defineUnlistedScript(() => {
   let urlCheckTimer: ReturnType<typeof setInterval> | null = null
   let lastUrl = location.href
 
-  async function translateBatch(batch: TranslatableBlock[]) {
-    const texts = batch.map((b) => b.text)
-    try {
-      const result = await messager.sendMessage('translate', {
-        texts,
-        targetLang,
-      })
-      if (!isTranslating) return
-      replaceWithTranslation(batch, result.texts)
-    } catch (err) {
-      console.error('[imp-translate] translation error:', err)
-      if (!isTranslating) return
-      replaceWithError(batch, (retryBlocks) => {
-        translateBatch(retryBlocks)
-      })
+  function translateBatch(batch: TranslatableBlock[]) {
+    for (const block of batch) {
+      messager
+        .sendMessage('translate', { text: block.text, targetLang })
+        .then((translated) => {
+          if (!isTranslating) return
+          replaceWithTranslation([block], [translated])
+        })
+        .catch((err) => {
+          console.error('[imp-translate] translation error:', err)
+          if (!isTranslating) return
+          replaceWithError([block], (retryBlocks) => {
+            translateBatch(retryBlocks)
+          })
+        })
     }
   }
 
@@ -72,7 +78,7 @@ export default defineUnlistedScript(() => {
     if (blocks.length === 0) return
 
     injectLoading(blocks)
-    await translateBatch(blocks)
+    translateBatch(blocks)
   }
 
   async function translateVisible() {
@@ -122,18 +128,19 @@ export default defineUnlistedScript(() => {
       }
       return
     }
+    repositionTranslation(el as HTMLElement, newText)
     el.setAttribute('data-imp-text', newText)
     const block: TranslatableBlock = { element: el as HTMLElement, text: newText }
     const filtered = await filterByLanguage([block])
     if (filtered.length === 0) return
     try {
-      const result = await messager.sendMessage('translate', {
-        texts: [newText],
+      const translated = await messager.sendMessage('translate', {
+        text: newText,
         targetLang,
       })
       if (!isTranslating) return
       if (wrapper.parentElement) {
-        wrapper.textContent = result.texts[0]
+        wrapper.textContent = translated
       }
     } catch {
       // keep old translation on error
@@ -154,10 +161,13 @@ export default defineUnlistedScript(() => {
     pendingRecheck.clear()
   }
 
+  let delayedRescanTimer: ReturnType<typeof setTimeout> | null = null
+
   function startObserver() {
     observer = new MutationObserver((mutations) => {
       if (!isTranslating) return
       let hasNew = false
+      let needsDelayedRescan = false
       for (const mutation of mutations) {
         const target = mutation.target
         if (target instanceof Element && target.closest(`.${RESULT_CLASS}`)) continue
@@ -165,22 +175,35 @@ export default defineUnlistedScript(() => {
         const translated = el?.closest(`[${PROCESSED_ATTR}]`)
         if (translated) {
           pendingRecheck.add(translated as Element)
-          continue
         }
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue
           const addedEl = node as Element
           if (addedEl.classList?.contains(RESULT_CLASS)) continue
+          if (addedEl.hasAttribute(PROCESSED_ATTR)) continue
+          if (addedEl.closest(`[${PROCESSED_ATTR}]`)) continue
           const newBlocks = extractBlocks(addedEl, extractOpts)
           if (newBlocks.length > 0) {
             pendingBlocks.push(...newBlocks)
             hasNew = true
+          } else {
+            const tag = addedEl.tagName.toLowerCase()
+            if (!tag.includes('loader') && tag !== 'script' && tag !== 'style') {
+              const text = addedEl.textContent?.trim()
+              if (text && text.length > 20) {
+                needsDelayedRescan = true
+              }
+            }
           }
         }
       }
       if (pendingRecheck.size > 0) {
         if (recheckTimer) clearTimeout(recheckTimer)
         recheckTimer = setTimeout(flushRecheck, 300)
+      }
+      if (needsDelayedRescan) {
+        if (delayedRescanTimer) clearTimeout(delayedRescanTimer)
+        delayedRescanTimer = setTimeout(rescanBlocks, 500)
       }
       if (hasNew) translateVisible()
     })
@@ -256,14 +279,21 @@ export default defineUnlistedScript(() => {
     })
   }
 
-  async function loadCustomRules() {
+  let debugMode = false
+
+  async function loadDeveloperSettings() {
     try {
       const result = await browser.storage.sync.get('settings')
       const settings = result.settings as Record<string, unknown> | undefined
-      if (settings?.developerMode && typeof settings.customRules === 'string') {
+      if (!settings?.developerMode) return
+      if (typeof settings.customRules === 'string') {
         const custom = matchRulesForDomain(parseRules(settings.customRules), location.hostname)
-        extractOpts = { skipSelectors: [...builtinSelectors, ...custom] }
+        extractOpts = {
+          skipSelectors: [...builtinRules.skipSelectors, ...custom.skipSelectors],
+          includeSelectors: [...builtinRules.includeSelectors, ...custom.includeSelectors],
+        }
       }
+      debugMode = settings.debugMode === true
     } catch {}
   }
 
@@ -271,7 +301,8 @@ export default defineUnlistedScript(() => {
     if (isTranslating) return
     isTranslating = true
     targetLang = lang
-    await loadCustomRules()
+    await loadDeveloperSettings()
+    if (debugMode) injectDebugStyles()
     await waitForDOMReady()
     if (!isTranslating) return
     lastUrl = location.href
@@ -302,11 +333,17 @@ export default defineUnlistedScript(() => {
       clearTimeout(recheckTimer)
       recheckTimer = null
     }
+    if (delayedRescanTimer) {
+      clearTimeout(delayedRescanTimer)
+      delayedRescanTimer = null
+    }
     pendingRecheck.clear()
     document.removeEventListener('scroll', onScroll, { capture: true })
     document.removeEventListener('toggle', onToggle, { capture: true })
     clearTranslations(document.body)
     removeStyles()
+    removeDebugStyles()
+    debugMode = false
     dismissToast()
     pendingBlocks = []
   }

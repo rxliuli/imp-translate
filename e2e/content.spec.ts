@@ -145,6 +145,75 @@ test('details element content is translated when expanded', async ({ context, ba
   await expect(contentTranslation).toContainText('[翻译]')
 })
 
+// Twitter timeline scenario: translate first, then click "Show more" which
+// appends an @mention link as a sibling of the originally-truncated <span>.
+// findInjectionPoint drilled into the span at translation time, so the <font>
+// would be stuck before the new link unless retranslateElement repositions it.
+// Regression test for the case demonstrated on
+// https://x.com/MarioNawfal/status/2049040672083345418 viewed via T3chFalcon's timeline.
+test('repositions translation when block gains new siblings after translation', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/sibling-after-translate`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  const block = page.locator('#block')
+  const result = block.locator('.imp-translate-result:not(.imp-translate-loading)')
+  await expect(result).toBeVisible({ timeout: 15000 })
+
+  // Initial: findInjectionPoint drilled into the only child span
+  const initialParentId = await result.evaluate((el) => el.parentElement?.id)
+  expect(initialParentId).toBe('text')
+
+  // Append a sibling div — simulates "Show more" expanding a tweet
+  await page.click('#add-mention')
+
+  // Recheck retranslates with new text including @user
+  await expect(result).toContainText('@user', { timeout: 15000 })
+
+  // After repositioning: <font> must be a direct child of #block
+  const finalParentId = await result.evaluate((el) => el.parentElement?.id)
+  expect(finalParentId).toBe('block')
+
+  // And it must come after the new mention wrapper
+  const order = await page.evaluate(() => {
+    const block = document.getElementById('block')!
+    const children = Array.from(block.children)
+    const mentionIndex = children.findIndex((c) => c.id === 'mention-wrapper')
+    const fontIndex = children.findIndex((c) => c.classList.contains('imp-translate-result'))
+    return { mentionIndex, fontIndex }
+  })
+  expect(order.fontIndex).toBeGreaterThan(order.mentionIndex)
+
+  // The originally-injected separator inside the span must be cleaned up
+  const leftoverBr = await page.locator('#text br.imp-translate-br').count()
+  expect(leftoverBr).toBe(0)
+})
+
+test('translates content that renders after being added to DOM', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/delayed-render`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  await expect(page.locator('.imp-translate-result:not(.imp-translate-loading)').first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  const lazyText = page.locator('#lazy-text')
+  await expect(lazyText).toHaveCount(0)
+
+  await page.click('#load-content')
+
+  const lazyTranslation = lazyText.locator('.imp-translate-result:not(.imp-translate-loading)')
+  await expect(lazyTranslation).toBeVisible({ timeout: 15000 })
+  await expect(lazyTranslation).toContainText('[翻译]')
+})
+
 test('content script restores original page', async ({ context, baseURL }) => {
   const page = await context.newPage()
   await page.goto(baseURL)
