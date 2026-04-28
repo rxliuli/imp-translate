@@ -1,4 +1,4 @@
-import { eld } from 'eld/large'
+import { messager } from './message'
 
 let nativeDetector: LanguageDetector | null = null
 let nativeUnavailable = false
@@ -30,6 +30,5 @@ export async function detectLanguage(text: string): Promise<string> {
     const results = await detector.detect(text)
     if (results.length > 0) return results[0].detectedLanguage
   }
-  const result = eld.detect(text)
-  return result.language
+  return await messager.sendMessage('detectLanguage', { text })
 }

@@ -17,11 +17,18 @@ export const messager = defineExtensionMessaging<{
   stopSelfTab(): void
   isMobile(): boolean
   openOptionsPage(): void
+  detectLanguage(data: { text: string }): string
 }>()
 
 // Background/Popup → Content (via browser.tabs.sendMessage)
 export type ContentAction =
-  | { action: 'startTranslation'; targetLang: string; showToast?: boolean }
+  | {
+      action: 'startTranslation'
+      targetLang: string
+      showToast?: boolean
+      skipSelectors?: string[]
+      includeSelectors?: string[]
+    }
   | { action: 'stopTranslation' }
   | { action: 'getState' }
 

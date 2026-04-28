@@ -23,15 +23,9 @@ import {
   hideToastBar,
 } from '@/lib/render'
 import { detectLanguage } from '@/lib/language-detect'
-import { parseRules, matchRulesForDomain } from '@/lib/rules'
-import builtinRulesRaw from '@/lib/rules.txt?raw'
 
 export default defineUnlistedScript(() => {
-  const builtinRules = matchRulesForDomain(parseRules(builtinRulesRaw), location.hostname)
-  let extractOpts: ExtractOptions = {
-    skipSelectors: builtinRules.skipSelectors,
-    includeSelectors: builtinRules.includeSelectors,
-  }
+  let extractOpts: ExtractOptions = { skipSelectors: [], includeSelectors: [] }
 
   let isTranslating = false
   let targetLang = ''
@@ -285,22 +279,20 @@ export default defineUnlistedScript(() => {
     try {
       const result = await browser.storage.sync.get('settings')
       const settings = result.settings as Record<string, unknown> | undefined
-      if (!settings?.developerMode) return
-      if (typeof settings.customRules === 'string') {
-        const custom = matchRulesForDomain(parseRules(settings.customRules), location.hostname)
-        extractOpts = {
-          skipSelectors: [...builtinRules.skipSelectors, ...custom.skipSelectors],
-          includeSelectors: [...builtinRules.includeSelectors, ...custom.includeSelectors],
-        }
-      }
-      debugMode = settings.debugMode === true
+      debugMode = settings?.debugMode === true
     } catch {}
   }
 
-  async function startTranslation(lang: string, showToast = false) {
+  async function startTranslation(
+    lang: string,
+    showToast = false,
+    skipSelectors: string[] = [],
+    includeSelectors: string[] = [],
+  ) {
     if (isTranslating) return
     isTranslating = true
     targetLang = lang
+    extractOpts = { skipSelectors, includeSelectors }
     await loadDeveloperSettings()
     if (debugMode) injectDebugStyles()
     await waitForDOMReady()
@@ -352,7 +344,12 @@ export default defineUnlistedScript(() => {
     (message: ContentAction, _sender, sendResponse) => {
       if (!message?.action) return
       if (message.action === 'startTranslation') {
-        startTranslation(message.targetLang, message.showToast)
+        startTranslation(
+          message.targetLang,
+          message.showToast,
+          message.skipSelectors,
+          message.includeSelectors,
+        )
       } else if (message.action === 'stopTranslation') {
         stopTranslation()
       } else if (message.action === 'getState') {

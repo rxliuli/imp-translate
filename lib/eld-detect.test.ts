@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { detectLanguage } from './language-detect'
+import { eldDetectLanguage } from './eld-detect'
 
-describe('detectLanguage', () => {
+describe('eldDetectLanguage', () => {
   describe('long text', () => {
     it.each([
       { text: 'This is a long paragraph that describes the feature in detail.', expected: 'en' },
@@ -9,8 +9,8 @@ describe('detectLanguage', () => {
       { text: 'これは日本語のテスト文章です。言語検出の精度を確認します。', expected: 'ja' },
       { text: 'Bonjour le monde! Ceci est un test de détection de langue.', expected: 'fr' },
       { text: '이것은 한국어 테스트 문장입니다. 언어 감지 정확도를 확인합니다.', expected: 'ko' },
-    ])('should detect "$expected"', async ({ text, expected }) => {
-      expect(await detectLanguage(text)).toBe(expected)
+    ])('should detect "$expected"', ({ text, expected }) => {
+      expect(eldDetectLanguage(text)).toBe(expected)
     })
   })
 
@@ -22,8 +22,8 @@ describe('detectLanguage', () => {
       { text: '查看更多详细信息', expected: 'zh' },
       { text: '使用 React 的 useState 来管理组件状态', expected: 'zh' },
       { text: 'Use the useState hook to manage React state', expected: 'en' },
-    ])('should detect "$text" as $expected', async ({ text, expected }) => {
-      expect(await detectLanguage(text)).toBe(expected)
+    ])('should detect "$text" as $expected', ({ text, expected }) => {
+      expect(eldDetectLanguage(text)).toBe(expected)
     })
   })
 
@@ -35,18 +35,18 @@ describe('detectLanguage', () => {
       { text: '首页', expected: 'zh' },
       { text: 'Archive', expected: 'en' },
       { text: 'general', expected: 'en' },
-    ])('$text => $expected', async ({ text, expected }) => {
-      expect(await detectLanguage(text)).toBe(expected)
+    ])('$text => $expected', ({ text, expected }) => {
+      expect(eldDetectLanguage(text)).toBe(expected)
     })
   })
 
   describe('mixed content', () => {
-    it('English with code terms', async () => {
-      expect(await detectLanguage('Use the useState hook to manage React state')).toBe('en')
+    it('English with code terms', () => {
+      expect(eldDetectLanguage('Use the useState hook to manage React state')).toBe('en')
     })
 
-    it('Chinese with English terms', async () => {
-      expect(await detectLanguage('使用 React 的 useState 来管理组件状态')).toBe('zh')
+    it('Chinese with English terms', () => {
+      expect(eldDetectLanguage('使用 React 的 useState 来管理组件状态')).toBe('zh')
     })
   })
 })

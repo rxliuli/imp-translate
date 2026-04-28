@@ -3,7 +3,37 @@ import { getSettings, type TranslationProvider } from '@/lib/storage'
 import { translate } from '@/lib/translator'
 import { getCached, setCached, evictOldEntries } from '@/lib/cache'
 import { createTranslateService, type TranslateService } from '@/lib/translate-service'
+import { eldDetectLanguage } from '@/lib/eld-detect'
+import { parseRules, matchRulesForDomain } from '@/lib/rules'
+import builtinRulesRaw from '@/lib/rules.txt?raw'
 import { PublicPath } from 'wxt/browser'
+
+const builtinRules = parseRules(builtinRulesRaw)
+
+async function getMatchedRulesForHostname(hostname: string) {
+  const builtin = matchRulesForDomain(builtinRules, hostname)
+  let skipSelectors = builtin.skipSelectors
+  let includeSelectors = builtin.includeSelectors
+  try {
+    const result = await browser.storage.sync.get('settings')
+    const settings = result.settings as Record<string, unknown> | undefined
+    if (settings?.developerMode && typeof settings.customRules === 'string') {
+      const custom = matchRulesForDomain(parseRules(settings.customRules), hostname)
+      skipSelectors = [...skipSelectors, ...custom.skipSelectors]
+      includeSelectors = [...includeSelectors, ...custom.includeSelectors]
+    }
+  } catch {}
+  return { skipSelectors, includeSelectors }
+}
+
+function hostnameFromUrl(url: string | undefined): string {
+  if (!url) return ''
+  try {
+    return new URL(url).hostname
+  } catch {
+    return ''
+  }
+}
 
 async function injectContentScript(tabId: number) {
   await browser.scripting.executeScript({
@@ -51,7 +81,17 @@ async function startTranslationForTab(
   await setTabTranslatingLang(tabId, targetLang)
   await browser.action.setIcon({ tabId, path: activeIcon })
   await injectContentScript(tabId)
-  await sendToTab(tabId, { action: 'startTranslation', targetLang, showToast })
+  const tab = await browser.tabs.get(tabId)
+  const { skipSelectors, includeSelectors } = await getMatchedRulesForHostname(
+    hostnameFromUrl(tab.url),
+  )
+  await sendToTab(tabId, {
+    action: 'startTranslation',
+    targetLang,
+    showToast,
+    skipSelectors,
+    includeSelectors,
+  })
 }
 
 async function stopTranslationForTab(tabId: number) {
@@ -181,6 +221,10 @@ export default defineBackground(() => {
     await browser.runtime.openOptionsPage()
   })
 
+  messager.onMessage('detectLanguage', ({ data }) => {
+    return eldDetectLanguage(data.text)
+  })
+
   browser.webNavigation.onDOMContentLoaded.addListener(async (details) => {
     if (details.frameId !== 0) return
     const lang = await getTabTranslatingLang(details.tabId)
@@ -203,9 +247,14 @@ export default defineBackground(() => {
     }
 
     await injectContentScript(details.tabId)
+    const { skipSelectors, includeSelectors } = await getMatchedRulesForHostname(
+      hostnameFromUrl(details.url),
+    )
     await sendToTab(details.tabId, {
       action: 'startTranslation',
       targetLang: lang,
+      skipSelectors,
+      includeSelectors,
     })
   })
 
