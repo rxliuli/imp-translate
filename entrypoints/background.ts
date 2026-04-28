@@ -64,11 +64,21 @@ async function stopTranslationForTab(tabId: number) {
   await setTabTranslatingLang(tabId, null)
 }
 
+async function isPageTranslating(tabId: number): Promise<boolean> {
+  try {
+    const response = (await sendToTab(tabId, { action: 'getState' })) as
+      | { isTranslating: boolean }
+      | undefined
+    return response?.isTranslating === true
+  } catch {
+    return false
+  }
+}
+
 async function toggleTranslationForActiveTab() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id) return
-  const lang = await getTabTranslatingLang(tab.id)
-  if (lang) {
+  if (await isPageTranslating(tab.id)) {
     await stopTranslationForTab(tab.id)
   } else {
     const settings = await getSettings()
@@ -108,7 +118,7 @@ export default defineBackground(() => {
   > = {
     microsoft: { batchWindowMs: 50, maxBatchSize: 25 },
     google: { batchWindowMs: 50, maxBatchSize: 20, maxBatchChars: 14000 },
-    openai: { batchWindowMs: 100, maxBatchSize: 20, maxBatchChars: 4000 },
+    openai: { batchWindowMs: 100, maxBatchSize: 8, maxBatchChars: 1000 },
   }
 
   const services = new Map<TranslationProvider, TranslateService>()
@@ -146,6 +156,7 @@ export default defineBackground(() => {
   })
 
   messager.onMessage('getTabState', async ({ data }) => {
+    if (!(await isPageTranslating(data.tabId))) return null
     return await getTabTranslatingLang(data.tabId)
   })
 

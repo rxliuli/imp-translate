@@ -5,10 +5,12 @@ import {
   type Settings,
   type TranslationProvider,
 } from '@/lib/storage'
+import { translate } from '@/lib/translator'
 import { LANGUAGES_SORTED } from '@/lib/languages'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Button } from '@/components/ui/button'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import {
@@ -18,6 +20,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+
+function humanizeOpenAIError(raw: string): string {
+  if (raw.includes('401')) return 'Invalid API key.'
+  if (raw.includes('403')) return 'Forbidden — check your API key permissions.'
+  if (raw.includes('429')) return 'Rate limited — try again in a moment.'
+  if (raw.includes('404'))
+    return 'Endpoint or model not found — verify the URL and model name.'
+  if (raw.includes('400'))
+    return `Bad request — likely the model is not supported by this endpoint, or required fields are missing. Some newer models (e.g. gpt-5 family) only work via OpenAI's Responses API, which this extension doesn't support. Raw: ${raw}`
+  if (raw.match(/\b5\d\d\b/)) return 'Provider error — try again later.'
+  if (raw.toLowerCase().includes('failed to fetch'))
+    return 'Cannot reach endpoint — check the URL and your network.'
+  return raw
+}
 
 const PROVIDERS: {
   value: TranslationProvider
@@ -43,6 +59,11 @@ const PROVIDERS: {
 
 export function App() {
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{
+    ok: boolean
+    msg: string
+  } | null>(null)
 
   useEffect(() => {
     getSettings().then(setSettings)
@@ -59,6 +80,25 @@ export function App() {
     const openai = { ...settings!.openai, ...patch }
     setSettings({ ...settings!, openai })
     saveSettings({ openai })
+    setTestResult(null)
+  }
+
+  async function testOpenAIConnection() {
+    if (!settings) return
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const result = await translate(['Hello'], settings.targetLang, settings)
+      setTestResult({
+        ok: true,
+        msg: `Connected. Translated "Hello" → "${result.texts[0]}".`,
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setTestResult({ ok: false, msg: humanizeOpenAIError(message) })
+    } finally {
+      setTesting(false)
+    }
   }
 
   return (
@@ -163,6 +203,25 @@ export function App() {
             <p className="text-xs text-muted-foreground">
               Use {'{{targetLang}}'} as a placeholder for the target language.
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Button
+              variant="outline"
+              onClick={testOpenAIConnection}
+              disabled={testing || !settings.openai.apiKey}
+            >
+              {testing ? 'Testing...' : 'Test connection'}
+            </Button>
+            {testResult && (
+              <p
+                className={`text-sm ${
+                  testResult.ok ? 'text-green-600' : 'text-red-600'
+                }`}
+              >
+                {testResult.msg}
+              </p>
+            )}
           </div>
         </section>
       )}
