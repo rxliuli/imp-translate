@@ -40,10 +40,33 @@ x.com#+#[data-testid^="news_sidebar_article_"]
 x.com#+#[data-testid="eventHero"]
 x.com##[data-testid="trend"] span[dir="ltr"]
 
-! Reddit
-! https://www.reddit.com/  (search button label is auto-localized)
-reddit.com##[id="expand-search-button"]
-reddit.com##[data-testid="subreddit-name"]
+! Reddit — component-based platform; include the post/comment text slots only. Author names, vote counts, action rows, and chrome (header, sidebar) sit outside the include set automatically.
+! https://www.reddit.com/r/programming/  (subreddit feed: titles + text-body for text posts)
+! https://www.reddit.com/r/programming/comments/<id>/  (post detail: title + body + comments)
+reddit.com#+#[slot="title"]
+reddit.com#+#[slot="text-body"]
+reddit.com#+#[slot="comment"]
+! Reddit Chat — message bodies + link-preview cards live inside nested Shadow DOM (rs-timeline-event > shadow > rs-external-link-preview > shadow). The walker pierces open shadow roots, and include matching crosses shadow boundaries via closestThroughShadow.
+! https://chat.reddit.com/  (any chat room — actual room URLs are private)
+reddit.com#+#.room-message-text
+reddit.com#+#rs-external-link-preview
+
+! Wikipedia — document-style site; default walker handles main content. Only one nuisance: section-heading [edit] links bleed into the heading translation.
+! https://en.wikipedia.org/wiki/Public_Suffix_List
+wikipedia.org##.mw-editsection
+
+! GitHub — document-style site; default walker handles README / issue / PR body via .markdown-body. Skip the repo home file tree where filenames merge with commit messages.
+! https://github.com/microsoft/vscode  (repo home: file tree)
+github.com##.react-directory-row
+
+! ChatGPT — chat platform; include user prompts and assistant responses only. Code blocks (<pre>) are already skipped by the default walker.
+! https://chatgpt.com/c/<id>  (any conversation)
+chatgpt.com#+#[data-message-author-role]
+
+! Telegram Web (K client) — chat platform; include text-message containers, skip time/read-receipt span. Service bubbles (date dividers, "user joined") and media-only bubbles fall outside the include set automatically.
+! https://web.telegram.org/k/  (any chat)
+web.telegram.org#+#.bubble .message
+web.telegram.org##.message .time
 
 ! YouTube — include UGC containers; skip already-localized fields inside them
 
@@ -61,4 +84,11 @@ youtube.com#+#ytd-watch-metadata
 youtube.com#+#ytd-comments
 youtube.com##ytd-watch-metadata #owner
 youtube.com##ytd-watch-metadata #actions
+youtube.com##ytd-watch-metadata #expand
+youtube.com##ytd-watch-metadata #social-links
 youtube.com##ytd-watch-info-text
+
+! Discord — chat platform; include message text and accessories. Reply-context preview is covered automatically because Discord renders the quoted text as another [id^="message-content-"] inside the reply block. Channel sidebar, member list, header chrome, and the message composer fall outside the include set.
+! https://discord.com/channels/<server>/<channel>  (private servers — verify against any text channel)
+discord.com#+#[id^="message-content-"]
+discord.com#+#[id^="message-accessories-"]

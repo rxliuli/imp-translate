@@ -414,6 +414,84 @@ describe('extractBlocks', () => {
     expect(shadow.querySelector('.imp-translate-result')).toBe(null)
   })
 
+  it('extracts shadow content matching include selector through light-DOM ancestors', () => {
+    // Regression: include-mode fast-path used querySelector(), which doesn't pierce
+    // shadow boundaries. Light-DOM ancestors of shadow hosts were skipped before
+    // walkShadow could run, hiding all shadow content from the include matcher.
+    document.body.innerHTML = '<div id="outer"><div id="mid"><div id="host"></div></div></div>'
+    const host = document.getElementById('host')!
+    const shadow = host.attachShadow({ mode: 'open' })
+    shadow.innerHTML = '<p class="target">Shadow target</p><p class="other">Shadow other</p>'
+    const blocks = extractBlocks(document.body, { includeSelectors: ['.target'] })
+    expect(blocks.map((b) => b.text)).toEqual(['Shadow target'])
+  })
+
+  it('include selector matches a shadow host from inside its own shadow root', () => {
+    // Regression: closest() doesn't cross shadow boundaries upward.
+    // Without closestThroughShadow, include 'my-card' matches the host element
+    // itself, but content inside its shadow root would be skipped because
+    // closest('my-card') returns null from inside the host's own shadow.
+    document.body.innerHTML = '<my-card></my-card>'
+    const card = document.body.firstElementChild!
+    card.attachShadow({ mode: 'open' }).innerHTML =
+      '<div><p>Card title</p><p>Card description</p></div>'
+    const blocks = extractBlocks(document.body, { includeSelectors: ['my-card'] })
+    const texts = blocks.map((b) => b.text)
+    expect(texts).toContain('Card title')
+    expect(texts).toContain('Card description')
+  })
+
+  it('does not over-extract sibling content when shadow descendants force walker to descend', () => {
+    // Regression: hasShadowDescendant lets the walker into a subtree even if
+    // that subtree itself isn't inside an include match. tryExtract must still
+    // gate on closestThroughShadow include check so unrelated inline content
+    // (e.g. a username row + timestamp on Reddit Chat) doesn't leak as a block.
+    document.body.innerHTML = `
+      <div id="root">
+        <div class="header">
+          <my-hovercard></my-hovercard>
+          <span>Sibling label</span>
+        </div>
+        <p class="target">Real content</p>
+      </div>
+    `
+    const hovercard = document.querySelector('my-hovercard')!
+    hovercard.attachShadow({ mode: 'open' }).innerHTML = '<span>username</span>'
+    const blocks = extractBlocks(document.body, { includeSelectors: ['.target'] })
+    const texts = blocks.map((b) => b.text)
+    expect(texts).toContain('Real content')
+    // Sibling header (which contains a shadow host) must NOT be extracted
+    expect(texts.some((t) => t.includes('Sibling label'))).toBe(false)
+    expect(texts.some((t) => t.includes('username'))).toBe(false)
+  })
+
+  it('does not wrap slotted children of a custom element (would break slot distribution)', () => {
+    // Regression: walkMixed used to wrap inline-ish sibling children into a
+    // <span data-imp-wrap>. For a custom element like <shreddit-post>, that
+    // <span> becomes the new direct child, so slot="title" / slot="post-flair"
+    // children are no longer direct children of the host and slot distribution
+    // breaks (title repositions to the default slot).
+    document.body.innerHTML = `
+      <style>my-card { display: block; } my-flair, my-loader { display: inline; }</style>
+      <my-card>
+        <div slot="header"></div>
+        <a slot="title">Card title</a>
+        <my-flair slot="flair"></my-flair>
+        <my-loader></my-loader>
+        <div slot="media">media</div>
+      </my-card>
+    `
+    const card = document.querySelector('my-card')!
+    const titleA = card.querySelector('a[slot="title"]')!
+    const blocks = extractBlocks(document.body)
+    const texts = blocks.map((b) => b.text)
+    expect(texts).toContain('Card title')
+    // The <a slot="title"> must remain a direct child of <my-card>
+    expect(titleA.parentElement).toBe(card)
+    // No wrapper span should have been inserted as a direct child
+    expect(card.querySelector(':scope > [data-imp-wrap]')).toBe(null)
+  })
+
   it('walks shadow even when host element is also a leaf block', () => {
     // A leaf-block tag like <h2> attaching a shadow is unusual but legal
     document.body.innerHTML = '<h2 id="host">light heading</h2>'

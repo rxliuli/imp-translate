@@ -64,6 +64,8 @@ entity.*            — match any TLD via Public Suffix List (e.g. google.* cove
 
 Users can add custom rules via Developer Mode in the options page.
 
+For per-site coverage status (which top-50 sites have explicit rules vs rely on the default DOM walker), see [`COMPATIBILITY.md`](./COMPATIBILITY.md).
+
 ### Contributing rules for a new site
 
 If you use [Claude Code](https://claude.com/claude-code), this repo ships a project-scoped skill that automates the workflow: open the page, inspect the DOM, find the missing selectors, and append them to `lib/rules.txt`.

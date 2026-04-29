@@ -73,12 +73,33 @@ export interface ExtractOptions {
   onShadowRoot?: (root: ShadowRoot) => void
 }
 
+function hasShadowDescendant(el: Element): boolean {
+  if (el.shadowRoot) return true
+  const all = el.querySelectorAll('*')
+  for (const desc of all) {
+    if (desc.shadowRoot) return true
+  }
+  return false
+}
+
+function closestThroughShadow(el: Element, selector: string): Element | null {
+  let current: Element | null = el
+  while (current) {
+    const found = current.closest(selector)
+    if (found) return found
+    const root = current.getRootNode()
+    if (root instanceof ShadowRoot) current = root.host
+    else current = null
+  }
+  return null
+}
+
 function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
   if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
-    const inside = opts.includeSelectors.some((s) => el.closest(s))
+    const inside = opts.includeSelectors.some((s) => closestThroughShadow(el, s))
     if (!inside) {
       const contains = opts.includeSelectors.some((s) => el.querySelector(s))
-      if (!contains) return true
+      if (!contains && !hasShadowDescendant(el)) return true
     }
   }
   if (opts?.skipSelectors) {
@@ -165,6 +186,10 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
   function tryExtract(node: Element): boolean {
     if (isHidden(node as HTMLElement)) return false
+    if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
+      const inside = opts.includeSelectors.some((s) => closestThroughShadow(node, s))
+      if (!inside) return false
+    }
     const text = getVisibleText(node, opts?.skipSelectors).trim()
     if (text && !NO_LETTER_RE.test(text)) {
       if (import.meta.env.DEV && text.length > OVERSIZED_BLOCK_THRESHOLD) {
@@ -180,6 +205,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
   }
 
   function walkMixed(parent: Element) {
+    const isCustomElement = parent.tagName.includes('-')
     const children = Array.from(parent.childNodes)
     let run: Node[] = []
 
@@ -190,6 +216,17 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
       if (run.length === 1 && run[0].nodeType === Node.ELEMENT_NODE) {
         walk(run[0] as Element)
+        run = []
+        return
+      }
+
+      if (isCustomElement) {
+        // Wrapping breaks Web Component slot distribution: only direct children
+        // of the host carry slot="..." semantics. Walk each element child
+        // individually; loose text between them is unrendered without slotting.
+        for (const n of run) {
+          if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element)
+        }
         run = []
         return
       }
