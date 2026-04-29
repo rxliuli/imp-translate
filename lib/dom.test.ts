@@ -290,6 +290,40 @@ describe('extractBlocks', () => {
     expect(blocks[0].element.hasAttribute('data-imp-wrap')).toBe(false)
   })
 
+  it('extracts a Discord-style URL-only message as one block whose text is the URL', () => {
+    // The container div holds a single <a> wrapping a <span> with the URL.
+    // This is the input shape inject.ts's URL filter relies on — if extractBlocks
+    // ever split or trimmed the URL, the noop fast-path would silently miss it.
+    document.body.innerHTML =
+      '<div id="msg" class="messageContent"><a href="https://ismy.blue/" target="_blank"><span>https://ismy.blue/</span></a></div>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('https://ismy.blue/')
+    expect(blocks[0].element.id).toBe('msg')
+  })
+
+  it('extracts a paragraph containing an inline link as one block including link text', () => {
+    // A URL embedded in a sentence must NOT be classified as URL-only: the block
+    // text contains the surrounding prose, so isUrlOnly() returns false and the
+    // sentence is translated normally.
+    document.body.innerHTML =
+      '<p>Check out <a href="https://example.com">this site</a> for more info</p>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('Check out this site for more info')
+    expect(blocks[0].element.tagName).toBe('P')
+  })
+
+  it('extracts a paragraph where the link text is the URL itself as one mixed block', () => {
+    // Same shape but the anchor's visible text is the URL — still not URL-only
+    // because the surrounding sentence is part of the same block.
+    document.body.innerHTML =
+      '<p>See <a href="https://example.com">https://example.com</a> today</p>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('See https://example.com today')
+  })
+
   it('clearTranslations unwraps synthesized wrappers, restoring DOM', () => {
     document.body.innerHTML =
       '<div id="root">' +

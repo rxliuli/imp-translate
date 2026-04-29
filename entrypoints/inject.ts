@@ -24,6 +24,7 @@ import {
   ensureShadowStyles,
 } from '@/lib/render'
 import { detectLanguage } from '@/lib/language-detect'
+import { isUrlOnly } from '@/lib/utils'
 
 export default defineUnlistedScript(() => {
   let extractOpts: ExtractOptions = {
@@ -67,6 +68,9 @@ export default defineUnlistedScript(() => {
   }
 
   async function translateBlocks(blocks: TranslatableBlock[]) {
+    if (blocks.length === 0) return
+
+    blocks = blocks.filter((b) => !isUrlOnly(b.text))
     if (blocks.length === 0) return
 
     for (const block of blocks) {
