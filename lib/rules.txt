@@ -6,21 +6,59 @@
 !   domain##selector   — skip (do not translate)
 !   domain#+#selector  — include (only translate inside)
 !   entity.* — match any TLD (e.g. google.* matches google.com, google.com.hk, google.co.uk)
+!
+! Each rule (or rule group) is preceded by a `!` URL comment listing the
+! page(s) it was verified against. This lets future maintainers re-visit
+! the page, confirm whether the rule is still needed, and safely remove
+! obsolete rules — without URL annotations the list is a one-way ratchet.
 
 ! Google Search (www.google.* avoids matching mail/drive/docs subdomains)
+! https://www.google.com/search?q=test
 www.google.*#+#[id="rcnt"]
 www.google.*##:has(>[hreftranslate])
 www.google.*##[role="navigation"]
 
 ! Twitter/X
+! https://x.com/home, https://x.com/x  (timeline tweets + profile bio)
 x.com#+#[data-testid="tweetText"]
 x.com#+#[data-testid="UserDescription"]
+! https://x.com/elonmusk/status/1768217967220789299  (long-form article tweet)
 x.com#+#[data-testid="article-cover-image"]+div
 x.com#+#[data-testid="twitter-article-title"]
 x.com#+#[data-testid="longformRichTextComponent"]
+! Direct messages — real URLs are private and not shareable; verify against any DM thread.
+! https://x.com/messages
 x.com#+#[data-testid^="message-text-"]
 x.com#+#[data-testid^="dm-conversation-item-"]
+! https://x.com/x/followers, https://x.com/x/following  (user cell rows: only bio; name + handle + button stay as-is)
+x.com#+#[data-testid="UserCell"] [dir="auto"]
+! https://x.com/explore  (trending topics + event/promoted cards; same trend cards also appear in search sidebar)
+! https://x.com/explore/tabs/entertainment  (verified trend metadata "X hours ago · Category · N posts" stays as-is)
+! https://x.com/search?q=javascript&src=typed_query
+x.com#+#[data-testid="trend"]
+x.com#+#[data-testid^="news_sidebar_article_"]
+x.com#+#[data-testid="eventHero"]
+x.com##[data-testid="trend"] span[dir="ltr"]
 
 ! Reddit
+! https://www.reddit.com/  (search button label is auto-localized)
 reddit.com##[id="expand-search-button"]
 reddit.com##[data-testid="subreddit-name"]
+
+! YouTube — include UGC containers; skip already-localized fields inside them
+
+! https://www.youtube.com/, https://www.youtube.com/results?search_query=javascript  (modern lockup: homepage cards + search secondary results)
+youtube.com#+#yt-lockup-view-model
+youtube.com##yt-content-metadata-view-model
+
+! https://www.youtube.com/results?search_query=javascript  (older lockup: primary search results)
+youtube.com#+#ytd-video-renderer
+youtube.com###metadata-line
+youtube.com##ytd-channel-name
+
+! https://www.youtube.com/watch?v=V6kJKxvbgZ0  (title + description block, comments below)
+youtube.com#+#ytd-watch-metadata
+youtube.com#+#ytd-comments
+youtube.com##ytd-watch-metadata #owner
+youtube.com##ytd-watch-metadata #actions
+youtube.com##ytd-watch-info-text
