@@ -42,6 +42,7 @@ const EDITOR_SELECTOR = [
 const RESULT_CLASS = 'imp-translate-result'
 const PROCESSED_ATTR = 'data-imp-translated'
 const WRAP_ATTR = 'data-imp-wrap'
+const OVERSIZED_BLOCK_THRESHOLD = 8000
 
 function isInlineish(node: Node): boolean {
   if (node.nodeType === Node.TEXT_NODE) return true
@@ -165,6 +166,12 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     if (isHidden(node as HTMLElement)) return false
     const text = getVisibleText(node, opts?.skipSelectors).trim()
     if (text && !NO_LETTER_RE.test(text)) {
+      if (import.meta.env.DEV && text.length > OVERSIZED_BLOCK_THRESHOLD) {
+        console.warn(
+          `[imp-translate] oversized block (${text.length} chars) — likely a walker bug. Element:`,
+          node,
+        )
+      }
       blocks.push({ element: node as HTMLElement, text })
       return true
     }
