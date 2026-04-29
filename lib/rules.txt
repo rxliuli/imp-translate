@@ -88,7 +88,12 @@ youtube.com##ytd-watch-metadata #expand
 youtube.com##ytd-watch-metadata #social-links
 youtube.com##ytd-watch-info-text
 
-! Discord — chat platform; include message text and accessories. Reply-context preview is covered automatically because Discord renders the quoted text as another [id^="message-content-"] inside the reply block. Channel sidebar, member list, header chrome, and the message composer fall outside the include set.
+! Discord — chat platform; include message text and accessories. Reply-context preview is covered automatically because Discord renders the quoted text as another [id^="message-content-"] inside the reply block. Channel sidebar, member list, and the message composer fall outside the include set.
 ! https://discord.com/channels/<server>/<channel>  (private servers — verify against any text channel)
 discord.com#+#[id^="message-content-"]
 discord.com#+#[id^="message-accessories-"]
+! Channel mention chips inside messages (e.g. `# twitter-exporter`) are navigation links — the slug shouldn't be translated.
+discord.com##.channelMention
+! Channel header topic bar + click-to-expand topic modal. Narrow scopes so we don't pull in chrome (channel name H1, search box, modal "Channel Topic" heading). [class*="topic__"] depends on Discord's CSS-module source-name prefix being stable across deploys; section[aria-label="Channel header"] anchors it safely. [data-dialog="modal"] main targets the modal body only — its <header> with the title stays untranslated.
+discord.com#+#section[aria-label="Channel header"] [class*="topic__"]
+discord.com#+#[data-dialog="modal"] main
