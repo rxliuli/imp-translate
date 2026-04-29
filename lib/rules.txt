@@ -18,6 +18,8 @@ x.com#+#[data-testid="UserDescription"]
 x.com#+#[data-testid="article-cover-image"]+div
 x.com#+#[data-testid="twitter-article-title"]
 x.com#+#[data-testid="longformRichTextComponent"]
+x.com#+#[data-testid^="message-text-"]
+x.com#+#[data-testid^="dm-conversation-item-"]
 
 ! Reddit
 reddit.com##[id="expand-search-button"]

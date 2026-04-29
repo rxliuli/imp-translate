@@ -63,3 +63,13 @@ entity.*            — match any TLD via Public Suffix List (e.g. google.* cove
 ```
 
 Users can add custom rules via Developer Mode in the options page.
+
+### Contributing rules for a new site
+
+If you use [Claude Code](https://claude.com/claude-code), this repo ships a project-scoped skill that automates the workflow: open the page, inspect the DOM, find the missing selectors, and append them to `lib/rules.txt`.
+
+```
+/add-site-rules https://example.com/some/page
+```
+
+Without Claude Code, the same workflow is documented step-by-step in `.claude/skills/add-site-rules/SKILL.md` — you can follow it manually with browser DevTools.

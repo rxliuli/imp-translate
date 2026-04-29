@@ -16,7 +16,7 @@ web-ext.config.ts
 test-results
 playwright-report
 .env.local
-.claude
+.claude/settings.local.json
 
 # Editor directories and files
 .vscode/*
