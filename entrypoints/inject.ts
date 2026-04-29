@@ -148,7 +148,7 @@ export default defineUnlistedScript(() => {
       if (!el.hasAttribute(PROCESSED_ATTR)) continue
       const storedText = el.getAttribute('data-imp-text')
       if (!storedText) continue
-      const currentText = getVisibleText(el).trim()
+      const currentText = getVisibleText(el, extractOpts.skipSelectors).trim()
       if (storedText === currentText) continue
       retranslateElement(el, currentText)
     }

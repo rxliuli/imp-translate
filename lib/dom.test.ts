@@ -185,6 +185,24 @@ describe('extractBlocks', () => {
     expect(blocks[0].text).toBe('Main content to translate')
   })
 
+  it('should not pull text from a skip-matched descendant up into an ancestor block', () => {
+    // Repro: x.com trend metadata. The skip rule targets the inner span,
+    // but its parent div was still picked up as a block and slurped the text back in.
+    document.body.innerHTML = `
+      <div data-testid="trend">
+        <div dir="ltr">
+          <span dir="ltr">
+            <span>21 hours ago · Entertainment · 115K posts</span>
+          </span>
+        </div>
+      </div>
+    `
+    const blocks = extractBlocks(document.body, {
+      skipSelectors: ['[data-testid="trend"] span[dir="ltr"]'],
+    })
+    expect(blocks).toHaveLength(0)
+  })
+
   it('should apply both include and skip rules together', () => {
     document.body.innerHTML = `
       <div class="post">

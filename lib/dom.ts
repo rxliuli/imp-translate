@@ -81,7 +81,7 @@ function isHidden(el: HTMLElement): boolean {
   return getComputedStyle(el).visibility === 'hidden'
 }
 
-function getVisibleText(el: Element): string {
+function getVisibleText(el: Element, skipSelectors?: string[]): string {
   let text = ''
   for (const child of el.childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
@@ -94,7 +94,8 @@ function getVisibleText(el: Element): string {
       if (childEl.getAttribute('translate') === 'no') continue
       if (childEl.isContentEditable) continue
       if (isHidden(childEl)) continue
-      text += getVisibleText(childEl)
+      if (skipSelectors && skipSelectors.some((s) => childEl.matches(s))) continue
+      text += getVisibleText(childEl, skipSelectors)
     }
   }
   return text
@@ -143,7 +144,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
   function tryExtract(node: Element): boolean {
     if (isHidden(node as HTMLElement)) return false
-    const text = getVisibleText(node).trim()
+    const text = getVisibleText(node, opts?.skipSelectors).trim()
     if (text && !NO_LETTER_RE.test(text)) {
       blocks.push({ element: node as HTMLElement, text })
       return true
