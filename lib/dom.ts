@@ -82,6 +82,10 @@ function hasShadowDescendant(el: Element): boolean {
   return false
 }
 
+function hasStatefulInteractive(el: Element): boolean {
+  return el.matches('[aria-expanded]') || el.querySelector('[aria-expanded]') !== null
+}
+
 function closestThroughShadow(el: Element, selector: string): Element | null {
   let current: Element | null = el
   while (current) {
@@ -224,6 +228,21 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
         // Wrapping breaks Web Component slot distribution: only direct children
         // of the host carry slot="..." semantics. Walk each element child
         // individually; loose text between them is unrendered without slotting.
+        for (const n of run) {
+          if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element)
+        }
+        run = []
+        return
+      }
+
+      // Reparenting framework-managed stateful nodes (e.g. spoilers, accordions)
+      // breaks React reconciliation: when the framework later runs removeChild
+      // on a node it expects under `parent`, our wrapper is in the way and
+      // the call throws NotFoundError.
+      const hasStateful = run.some(
+        (n) => n.nodeType === Node.ELEMENT_NODE && hasStatefulInteractive(n as Element),
+      )
+      if (hasStateful) {
         for (const n of run) {
           if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element)
         }

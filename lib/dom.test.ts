@@ -290,6 +290,27 @@ describe('extractBlocks', () => {
     expect(blocks[0].element.hasAttribute('data-imp-wrap')).toBe(false)
   })
 
+  it('does not synthesize a wrap around inline runs that contain a stateful interactive element', () => {
+    // Regression: Discord renders message content as a flat list of React
+    // components — mention, anchors, spoiler — directly inside the message div.
+    // Wrapping the run reparents the spoiler (aria-expanded) into our synthesized
+    // span; when the user clicks to reveal, React's reconciliation calls
+    // removeChild on a node whose parent has changed and crashes the page.
+    document.body.innerHTML = `
+      <div id="msg">
+        <span class="mention"><span>@everyone</span></span>
+        <a href="https://example.com"><span>https://example.com</span></a>
+        <span class="spoiler" aria-expanded="false" role="button" tabindex="0">hidden text</span>
+      </div>
+    `
+    const msg = document.getElementById('msg')!
+    extractBlocks(document.body)
+    // No synthesized wrap should be inserted — the spoiler must remain a direct
+    // child of the message div so React's fiber-tree parent matches the DOM.
+    expect(msg.querySelector('[data-imp-wrap]')).toBe(null)
+    expect(document.querySelector('.spoiler')!.parentElement).toBe(msg)
+  })
+
   it('extracts a Discord-style URL-only message as one block whose text is the URL', () => {
     // The container div holds a single <a> wrapping a <span> with the URL.
     // This is the input shape inject.ts's URL filter relies on — if extractBlocks
