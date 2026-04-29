@@ -345,6 +345,86 @@ describe('extractBlocks', () => {
     expect(blocks[1].text).toContain('more visible text')
   })
 
+  it('walks into open shadow root and extracts text', () => {
+    document.body.innerHTML = '<div id="host"></div>'
+    const host = document.getElementById('host')!
+    const shadow = host.attachShadow({ mode: 'open' })
+    shadow.innerHTML = '<p>Shadow paragraph</p><h2>Shadow heading</h2>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks.map((b) => b.text)).toEqual(['Shadow paragraph', 'Shadow heading'])
+  })
+
+  it('walks into nested shadow roots', () => {
+    document.body.innerHTML = '<div id="outer"></div>'
+    const outer = document.getElementById('outer')!
+    const outerShadow = outer.attachShadow({ mode: 'open' })
+    outerShadow.innerHTML = '<div id="inner"></div>'
+    const inner = outerShadow.getElementById('inner')!
+    const innerShadow = inner.attachShadow({ mode: 'open' })
+    innerShadow.innerHTML = '<p>Deeply nested text</p>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks.map((b) => b.text)).toEqual(['Deeply nested text'])
+  })
+
+  it('extracts both light children (via slot) and shadow content', () => {
+    // Real-world web components project light children through <slot>.
+    // Without a slot, light children are unrendered and isHidden filters them.
+    document.body.innerHTML = '<div id="host"><p>Light paragraph</p></div>'
+    const host = document.getElementById('host')!
+    host.attachShadow({ mode: 'open' }).innerHTML =
+      '<h2>Shadow heading</h2><slot></slot>'
+    const blocks = extractBlocks(document.body)
+    const texts = blocks.map((b) => b.text)
+    expect(texts).toContain('Light paragraph')
+    expect(texts).toContain('Shadow heading')
+  })
+
+  it('onShadowRoot callback fires for each shadow root encountered', () => {
+    document.body.innerHTML = '<div id="a"></div><div id="b"></div>'
+    const a = document.getElementById('a')!
+    const b = document.getElementById('b')!
+    const aRoot = a.attachShadow({ mode: 'open' })
+    const bRoot = b.attachShadow({ mode: 'open' })
+    aRoot.innerHTML = '<p>a</p>'
+    bRoot.innerHTML = '<p>b</p>'
+    const seen: ShadowRoot[] = []
+    extractBlocks(document.body, { onShadowRoot: (r) => seen.push(r) })
+    expect(seen).toHaveLength(2)
+    expect(seen).toContain(aRoot)
+    expect(seen).toContain(bRoot)
+  })
+
+  it('clearTranslations recurses into shadow roots', () => {
+    document.body.innerHTML = '<div id="host"></div>'
+    const host = document.getElementById('host')!
+    const shadow = host.attachShadow({ mode: 'open' })
+    shadow.innerHTML = '<p>Shadow text</p>'
+    extractBlocks(document.body)
+    // Simulate translation: mark the shadow <p> as translated and add result
+    const p = shadow.querySelector('p')!
+    p.setAttribute('data-imp-translated', 'true')
+    p.setAttribute('data-imp-text', 'Shadow text')
+    const result = document.createElement('font')
+    result.className = 'imp-translate-result'
+    result.textContent = 'Translated'
+    p.appendChild(result)
+
+    clearTranslations(document.body)
+    expect(p.hasAttribute('data-imp-translated')).toBe(false)
+    expect(shadow.querySelector('.imp-translate-result')).toBe(null)
+  })
+
+  it('walks shadow even when host element is also a leaf block', () => {
+    // A leaf-block tag like <h2> attaching a shadow is unusual but legal
+    document.body.innerHTML = '<h2 id="host">light heading</h2>'
+    const host = document.getElementById('host')!
+    host.attachShadow({ mode: 'open' }).innerHTML = '<span>shadow span</span>'
+    const blocks = extractBlocks(document.body)
+    const texts = blocks.map((b) => b.text)
+    expect(texts).toContain('light heading')
+    expect(texts).toContain('shadow span')
+  })
+
   it('should skip time elements', () => {
     document.body.innerHTML = `
       <div>

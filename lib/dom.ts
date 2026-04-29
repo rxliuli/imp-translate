@@ -70,6 +70,7 @@ export interface TranslatableBlock {
 export interface ExtractOptions {
   skipSelectors?: string[]
   includeSelectors?: string[]
+  onShadowRoot?: (root: ShadowRoot) => void
 }
 
 function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
@@ -223,22 +224,38 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
     if (isLeafBlock(node)) {
       tryExtract(node)
+      walkShadow(node)
       return
     }
 
     if (hasBlockChild(node)) {
       walkMixed(node)
+      walkShadow(node)
       return
     }
 
-    if (tryExtract(node)) return
+    if (tryExtract(node)) {
+      walkShadow(node)
+      return
+    }
 
     for (const child of node.children) {
+      walk(child)
+    }
+    walkShadow(node)
+  }
+
+  function walkShadow(node: Element) {
+    const root = node.shadowRoot
+    if (!root) return
+    opts?.onShadowRoot?.(root)
+    for (const child of root.children) {
       walk(child)
     }
   }
 
   walk(root)
+  if (root instanceof Element) walkShadow(root)
   return blocks
 }
 
@@ -255,21 +272,28 @@ export function markTranslated(el: HTMLElement) {
 }
 
 export function clearTranslations(root: Element = document.body) {
-  root.querySelectorAll(`.${RESULT_CLASS}`).forEach((el) => el.remove())
-  root.querySelectorAll('.imp-translate-br').forEach((el) => el.remove())
-  root.querySelectorAll(`[${PROCESSED_ATTR}]`).forEach((el) => {
-    el.removeAttribute(PROCESSED_ATTR)
-    el.removeAttribute('data-imp-text')
-    el.removeAttribute('data-imp-noop')
-  })
-  root.querySelectorAll(`[${WRAP_ATTR}]`).forEach((wrapper) => {
-    const parent = wrapper.parentNode
-    if (!parent) return
-    while (wrapper.firstChild) {
-      parent.insertBefore(wrapper.firstChild, wrapper)
-    }
-    parent.removeChild(wrapper)
-  })
+  function clearScope(scope: ParentNode) {
+    scope.querySelectorAll(`.${RESULT_CLASS}`).forEach((el) => el.remove())
+    scope.querySelectorAll('.imp-translate-br').forEach((el) => el.remove())
+    scope.querySelectorAll(`[${PROCESSED_ATTR}]`).forEach((el) => {
+      el.removeAttribute(PROCESSED_ATTR)
+      el.removeAttribute('data-imp-text')
+      el.removeAttribute('data-imp-noop')
+    })
+    scope.querySelectorAll(`[${WRAP_ATTR}]`).forEach((wrapper) => {
+      const parent = wrapper.parentNode
+      if (!parent) return
+      while (wrapper.firstChild) {
+        parent.insertBefore(wrapper.firstChild, wrapper)
+      }
+      parent.removeChild(wrapper)
+    })
+    scope.querySelectorAll('*').forEach((el) => {
+      if (el.shadowRoot) clearScope(el.shadowRoot)
+    })
+  }
+
+  clearScope(root)
   root.removeAttribute(PROCESSED_ATTR)
   root.removeAttribute('data-imp-text')
   root.removeAttribute('data-imp-noop')

@@ -21,16 +21,22 @@ import {
   removeDebugStyles,
   showToastBar,
   hideToastBar,
+  ensureShadowStyles,
 } from '@/lib/render'
 import { detectLanguage } from '@/lib/language-detect'
 
 export default defineUnlistedScript(() => {
-  let extractOpts: ExtractOptions = { skipSelectors: [], includeSelectors: [] }
+  let extractOpts: ExtractOptions = {
+    skipSelectors: [],
+    includeSelectors: [],
+    onShadowRoot: (r) => attachShadowObserver(r),
+  }
 
   let isTranslating = false
   let targetLang = ''
   let pendingBlocks: TranslatableBlock[] = []
   let observer: MutationObserver | null = null
+  const shadowObservers = new Map<ShadowRoot, MutationObserver>()
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
   let urlCheckTimer: ReturnType<typeof setInterval> | null = null
   let lastUrl = location.href
@@ -157,50 +163,61 @@ export default defineUnlistedScript(() => {
 
   let delayedRescanTimer: ReturnType<typeof setTimeout> | null = null
 
-  function startObserver() {
-    observer = new MutationObserver((mutations) => {
-      if (!isTranslating) return
-      let hasNew = false
-      let needsDelayedRescan = false
-      for (const mutation of mutations) {
-        const target = mutation.target
-        if (target instanceof Element && target.closest(`.${RESULT_CLASS}`)) continue
-        const el = target instanceof Element ? target : target.parentElement
-        const translated = el?.closest(`[${PROCESSED_ATTR}]`)
-        if (translated) {
-          pendingRecheck.add(translated as Element)
-        }
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue
-          const addedEl = node as Element
-          if (addedEl.classList?.contains(RESULT_CLASS)) continue
-          if (addedEl.hasAttribute(PROCESSED_ATTR)) continue
-          if (addedEl.closest(`[${PROCESSED_ATTR}]`)) continue
-          const newBlocks = extractBlocks(addedEl, extractOpts)
-          if (newBlocks.length > 0) {
-            pendingBlocks.push(...newBlocks)
-            hasNew = true
-          } else {
-            const tag = addedEl.tagName.toLowerCase()
-            if (!tag.includes('loader') && tag !== 'script' && tag !== 'style') {
-              const text = addedEl.textContent?.trim()
-              if (text && text.length > 20) {
-                needsDelayedRescan = true
-              }
+  function handleMutations(mutations: MutationRecord[]) {
+    if (!isTranslating) return
+    let hasNew = false
+    let needsDelayedRescan = false
+    for (const mutation of mutations) {
+      const target = mutation.target
+      if (target instanceof Element && target.closest(`.${RESULT_CLASS}`)) continue
+      const el = target instanceof Element ? target : target.parentElement
+      const translated = el?.closest(`[${PROCESSED_ATTR}]`)
+      if (translated) {
+        pendingRecheck.add(translated as Element)
+      }
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue
+        const addedEl = node as Element
+        if (addedEl.classList?.contains(RESULT_CLASS)) continue
+        if (addedEl.hasAttribute(PROCESSED_ATTR)) continue
+        if (addedEl.closest(`[${PROCESSED_ATTR}]`)) continue
+        const newBlocks = extractBlocks(addedEl, extractOpts)
+        if (newBlocks.length > 0) {
+          pendingBlocks.push(...newBlocks)
+          hasNew = true
+        } else {
+          const tag = addedEl.tagName.toLowerCase()
+          if (!tag.includes('loader') && tag !== 'script' && tag !== 'style') {
+            const text = addedEl.textContent?.trim()
+            if (text && text.length > 20) {
+              needsDelayedRescan = true
             }
           }
         }
       }
-      if (pendingRecheck.size > 0) {
-        if (recheckTimer) clearTimeout(recheckTimer)
-        recheckTimer = setTimeout(flushRecheck, 300)
-      }
-      if (needsDelayedRescan) {
-        if (delayedRescanTimer) clearTimeout(delayedRescanTimer)
-        delayedRescanTimer = setTimeout(rescanBlocks, 500)
-      }
-      if (hasNew) translateVisible()
-    })
+    }
+    if (pendingRecheck.size > 0) {
+      if (recheckTimer) clearTimeout(recheckTimer)
+      recheckTimer = setTimeout(flushRecheck, 300)
+    }
+    if (needsDelayedRescan) {
+      if (delayedRescanTimer) clearTimeout(delayedRescanTimer)
+      delayedRescanTimer = setTimeout(rescanBlocks, 500)
+    }
+    if (hasNew) translateVisible()
+  }
+
+  function attachShadowObserver(root: ShadowRoot) {
+    if (shadowObservers.has(root)) return
+    ensureShadowStyles(root)
+    if (!isTranslating) return
+    const obs = new MutationObserver(handleMutations)
+    obs.observe(root, { childList: true, subtree: true, characterData: true })
+    shadowObservers.set(root, obs)
+  }
+
+  function startObserver() {
+    observer = new MutationObserver(handleMutations)
     observer.observe(document.body, { childList: true, subtree: true, characterData: true })
   }
 
@@ -292,7 +309,11 @@ export default defineUnlistedScript(() => {
     if (isTranslating) return
     isTranslating = true
     targetLang = lang
-    extractOpts = { skipSelectors, includeSelectors }
+    extractOpts = {
+      skipSelectors,
+      includeSelectors,
+      onShadowRoot: (r) => attachShadowObserver(r),
+    }
     await loadDeveloperSettings()
     if (debugMode) injectDebugStyles()
     await waitForDOMReady()
@@ -313,6 +334,10 @@ export default defineUnlistedScript(() => {
       observer.disconnect()
       observer = null
     }
+    for (const obs of shadowObservers.values()) {
+      obs.disconnect()
+    }
+    shadowObservers.clear()
     if (scrollTimer) {
       clearTimeout(scrollTimer)
       scrollTimer = null

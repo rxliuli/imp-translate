@@ -41,11 +41,7 @@ const ERROR_CLASS = 'imp-translate-error'
 const RETRY_CLASS = 'imp-translate-retry'
 const SHORT_TEXT_THRESHOLD = 40
 
-function ensureStyles() {
-  if (document.getElementById(STYLE_ID)) return
-  const style = document.createElement('style')
-  style.id = STYLE_ID
-  style.textContent = `
+const STYLES_TEXT = `
     .${RESULT_CLASS} {
       font-style: normal;
       font-weight: inherit;
@@ -92,7 +88,42 @@ function ensureStyles() {
       opacity: 1;
     }
   `
+
+let sharedSheet: CSSStyleSheet | null = null
+
+function getSharedSheet(): CSSStyleSheet | null {
+  if (typeof CSSStyleSheet === 'undefined') return null
+  if (sharedSheet) return sharedSheet
+  try {
+    sharedSheet = new CSSStyleSheet()
+    sharedSheet.replaceSync(STYLES_TEXT)
+    return sharedSheet
+  } catch {
+    return null
+  }
+}
+
+function ensureStyles() {
+  if (document.getElementById(STYLE_ID)) return
+  const style = document.createElement('style')
+  style.id = STYLE_ID
+  style.textContent = STYLES_TEXT
   document.head.appendChild(style)
+}
+
+export function ensureShadowStyles(root: ShadowRoot) {
+  const sheet = getSharedSheet()
+  if (sheet) {
+    if (root.adoptedStyleSheets.includes(sheet)) return
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet]
+    return
+  }
+  // Fallback for environments without constructable stylesheets
+  if (root.querySelector(`#${STYLE_ID}`)) return
+  const style = document.createElement('style')
+  style.id = STYLE_ID
+  style.textContent = STYLES_TEXT
+  root.appendChild(style)
 }
 
 function clearLineClamp(el: HTMLElement) {
