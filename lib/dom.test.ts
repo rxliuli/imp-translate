@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { extractBlocks } from './dom'
+import { extractBlocks, clearTranslations } from './dom'
 
 describe('extractBlocks', () => {
   beforeEach(() => {
@@ -249,6 +249,100 @@ describe('extractBlocks', () => {
     expect(blocks).toHaveLength(2)
     expect(blocks[0].text).toBe('Normal text')
     expect(blocks[1].text).toBe('Read-only draft content')
+  })
+
+  it('should extract loose text nodes interleaved with block and inline siblings', () => {
+    // Repro: Apple's app review page — div contains h3 + bare text + b + bare text...
+    document.body.innerHTML =
+      '<div>' +
+      '<h3>Guideline 2.1</h3>' +
+      'We need additional information to continue the review.' +
+      '<b>Next Steps</b>' +
+      'Reply with the following.' +
+      '</div>'
+    const blocks = extractBlocks(document.body)
+    // h3 + one wrapped run for the rest of the inline content
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('Guideline 2.1')
+    expect(blocks[1].text).toContain('We need additional information')
+    expect(blocks[1].text).toContain('Next Steps')
+    expect(blocks[1].text).toContain('Reply with the following')
+    // The wrapper element should be a synthesized span with data-imp-wrap
+    expect(blocks[1].element.tagName).toBe('SPAN')
+    expect(blocks[1].element.hasAttribute('data-imp-wrap')).toBe(true)
+  })
+
+  it('should not wrap a single inline element that is already a translation block', () => {
+    document.body.innerHTML =
+      '<div><h3>Title</h3><b>Subtitle</b></div>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].element.tagName).toBe('H3')
+    // <b> alone in its run should not get wrapped
+    expect(blocks[1].element.tagName).toBe('B')
+  })
+
+  it('should not wrap when container has no block children (existing leaf path)', () => {
+    document.body.innerHTML = '<div>Hello world</div>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].element.tagName).toBe('DIV')
+    expect(blocks[0].element.hasAttribute('data-imp-wrap')).toBe(false)
+  })
+
+  it('clearTranslations unwraps synthesized wrappers, restoring DOM', () => {
+    document.body.innerHTML =
+      '<div id="root">' +
+      '<h3>Heading</h3>' +
+      'loose text' +
+      '<b>Bold</b>' +
+      ' more text' +
+      '</div>'
+    const root = document.getElementById('root')!
+    const before = root.innerHTML
+    extractBlocks(root)
+    expect(root.querySelectorAll('[data-imp-wrap]').length).toBe(1)
+    clearTranslations(root)
+    expect(root.querySelectorAll('[data-imp-wrap]').length).toBe(0)
+    expect(root.innerHTML).toBe(before)
+  })
+
+  it('should not wrap sibling inline elements that contain block-level content', () => {
+    // Repro: npm.com readme structure — outer div has two span siblings,
+    // first span contains the entire readme body inside <section>/<h1>/<p>...
+    document.body.innerHTML =
+      '<div>' +
+      '<span>' +
+      '<section><h1>Title</h1><p>Paragraph 1</p><p>Paragraph 2</p></section>' +
+      '</span>' +
+      '<span></span>' +
+      '</div>'
+    const blocks = extractBlocks(document.body)
+    // Should produce 3 separate blocks (h1 + 2x p), NOT one wrapped span
+    expect(blocks.map((b) => b.text)).toEqual([
+      'Title',
+      'Paragraph 1',
+      'Paragraph 2',
+    ])
+    expect(document.querySelectorAll('[data-imp-wrap]').length).toBe(0)
+  })
+
+  it('skipSelectors filter content inside synthesized wrappers', () => {
+    document.body.innerHTML =
+      '<div>' +
+      '<h3>Title</h3>' +
+      'Visible text ' +
+      '<span class="meta">hidden meta</span>' +
+      ' more visible text' +
+      '</div>'
+    const blocks = extractBlocks(document.body, {
+      skipSelectors: ['.meta'],
+    })
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('Title')
+    expect(blocks[1].text).not.toContain('hidden meta')
+    expect(blocks[1].text).toContain('Visible text')
+    expect(blocks[1].text).toContain('more visible text')
   })
 
   it('should skip time elements', () => {

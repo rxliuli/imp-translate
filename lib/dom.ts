@@ -41,6 +41,25 @@ const EDITOR_SELECTOR = [
 
 const RESULT_CLASS = 'imp-translate-result'
 const PROCESSED_ATTR = 'data-imp-translated'
+const WRAP_ATTR = 'data-imp-wrap'
+
+function isInlineish(node: Node): boolean {
+  if (node.nodeType === Node.TEXT_NODE) return true
+  if (node.nodeType !== Node.ELEMENT_NODE) return false
+  const el = node as Element
+  const tag = el.tagName.toLowerCase()
+  if (SKIP_TAGS.has(tag)) return false
+  if (hasBlockChild(el)) return false
+  if (INLINE_TAGS.has(tag)) return true
+  if (isDisplayInline(el)) return true
+  return false
+}
+
+function isWhitespaceText(node: Node): boolean {
+  return (
+    node.nodeType === Node.TEXT_NODE && !(node.textContent || '').trim()
+  )
+}
 
 export interface TranslatableBlock {
   element: HTMLElement
@@ -152,6 +171,42 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     return false
   }
 
+  function walkMixed(parent: Element) {
+    const children = Array.from(parent.childNodes)
+    let run: Node[] = []
+
+    const flush = () => {
+      while (run.length > 0 && isWhitespaceText(run[0])) run.shift()
+      while (run.length > 0 && isWhitespaceText(run[run.length - 1])) run.pop()
+      if (run.length === 0) return
+
+      if (run.length === 1 && run[0].nodeType === Node.ELEMENT_NODE) {
+        walk(run[0] as Element)
+        run = []
+        return
+      }
+
+      const wrapper = parent.ownerDocument!.createElement('span')
+      wrapper.setAttribute(WRAP_ATTR, 'true')
+      parent.insertBefore(wrapper, run[0])
+      for (const n of run) {
+        wrapper.appendChild(n)
+      }
+      tryExtract(wrapper)
+      run = []
+    }
+
+    for (const child of children) {
+      if (isInlineish(child)) {
+        run.push(child)
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        flush()
+        walk(child as Element)
+      }
+    }
+    flush()
+  }
+
   function walk(node: Element) {
     if (shouldSkip(node, opts)) return
 
@@ -164,19 +219,12 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       return
     }
 
-    if (CONTAINER_TAGS.has(tag)) {
-      if (!hasBlockChild(node)) {
-        if (tryExtract(node)) return
-      }
-      for (const child of node.children) {
-        walk(child)
-      }
+    if (hasBlockChild(node)) {
+      walkMixed(node)
       return
     }
 
-    if (!hasBlockChild(node)) {
-      if (tryExtract(node)) return
-    }
+    if (tryExtract(node)) return
 
     for (const child of node.children) {
       walk(child)
@@ -206,6 +254,14 @@ export function clearTranslations(root: Element = document.body) {
     el.removeAttribute(PROCESSED_ATTR)
     el.removeAttribute('data-imp-text')
     el.removeAttribute('data-imp-noop')
+  })
+  root.querySelectorAll(`[${WRAP_ATTR}]`).forEach((wrapper) => {
+    const parent = wrapper.parentNode
+    if (!parent) return
+    while (wrapper.firstChild) {
+      parent.insertBefore(wrapper.firstChild, wrapper)
+    }
+    parent.removeChild(wrapper)
   })
   root.removeAttribute(PROCESSED_ATTR)
   root.removeAttribute('data-imp-text')
