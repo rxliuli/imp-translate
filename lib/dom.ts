@@ -62,6 +62,50 @@ function isWhitespaceText(node: Node): boolean {
   )
 }
 
+function isBr(node: Node): boolean {
+  return (
+    node.nodeType === Node.ELEMENT_NODE &&
+    (node as Element).tagName.toLowerCase() === 'br'
+  )
+}
+
+// Split a run of inline-ish siblings on <br>{2,}* boundaries (allowing whitespace
+// text nodes between the brs). A single <br> is a soft line break and stays in
+// the segment. Two or more consecutive brs act as a "fake paragraph" separator
+// — the pattern App Store / old webmail / Discord embed style emails use.
+function segmentRunByBrBr(run: Node[]): Node[][] {
+  const segments: Node[][] = []
+  let current: Node[] = []
+  let i = 0
+  while (i < run.length) {
+    if (!isBr(run[i])) {
+      current.push(run[i])
+      i++
+      continue
+    }
+    let j = i
+    let brCount = 0
+    while (j < run.length && (isBr(run[j]) || isWhitespaceText(run[j]))) {
+      if (isBr(run[j])) brCount++
+      j++
+    }
+    if (brCount >= 2) {
+      if (current.length > 0) {
+        segments.push(current)
+        current = []
+      }
+      i = j
+    } else {
+      while (i < j) {
+        current.push(run[i])
+        i++
+      }
+    }
+  }
+  if (current.length > 0) segments.push(current)
+  return segments
+}
+
 export interface TranslatableBlock {
   element: HTMLElement
   text: string
@@ -156,6 +200,22 @@ function isDisplayInline(el: Element): boolean {
   return display.startsWith('inline')
 }
 
+// Detect "fake paragraph" markup: 2+ <br>s in a row (possibly with whitespace
+// text between them). Triggers walkMixed even on otherwise-leaf containers so
+// br-br segmentation can run.
+function hasBrBrSeparator(el: Element): boolean {
+  let consecutiveBrs = 0
+  for (const child of el.childNodes) {
+    if (isBr(child)) {
+      consecutiveBrs++
+      if (consecutiveBrs >= 2) return true
+    } else if (!isWhitespaceText(child)) {
+      consecutiveBrs = 0
+    }
+  }
+  return false
+}
+
 function hasBlockChild(el: Element): boolean {
   for (const child of el.children) {
     const tag = child.tagName.toLowerCase()
@@ -213,14 +273,20 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     const children = Array.from(parent.childNodes)
     let run: Node[] = []
 
-    const flush = () => {
-      while (run.length > 0 && isWhitespaceText(run[0])) run.shift()
-      while (run.length > 0 && isWhitespaceText(run[run.length - 1])) run.pop()
-      if (run.length === 0) return
+    const flushSegment = (seg: Node[]) => {
+      while (seg.length > 0 && (isWhitespaceText(seg[0]) || isBr(seg[0]))) {
+        seg.shift()
+      }
+      while (
+        seg.length > 0 &&
+        (isWhitespaceText(seg[seg.length - 1]) || isBr(seg[seg.length - 1]))
+      ) {
+        seg.pop()
+      }
+      if (seg.length === 0) return
 
-      if (run.length === 1 && run[0].nodeType === Node.ELEMENT_NODE) {
-        walk(run[0] as Element)
-        run = []
+      if (seg.length === 1 && seg[0].nodeType === Node.ELEMENT_NODE) {
+        walk(seg[0] as Element)
         return
       }
 
@@ -228,10 +294,9 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
         // Wrapping breaks Web Component slot distribution: only direct children
         // of the host carry slot="..." semantics. Walk each element child
         // individually; loose text between them is unrendered without slotting.
-        for (const n of run) {
+        for (const n of seg) {
           if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element)
         }
-        run = []
         return
       }
 
@@ -239,24 +304,34 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       // breaks React reconciliation: when the framework later runs removeChild
       // on a node it expects under `parent`, our wrapper is in the way and
       // the call throws NotFoundError.
-      const hasStateful = run.some(
+      const hasStateful = seg.some(
         (n) => n.nodeType === Node.ELEMENT_NODE && hasStatefulInteractive(n as Element),
       )
       if (hasStateful) {
-        for (const n of run) {
+        for (const n of seg) {
           if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element)
         }
-        run = []
         return
       }
 
-      const wrapper = parent.ownerDocument!.createElement('span')
+      // <font> over <span>: site CSS/JS targets `span` far more often than the
+      // near-deprecated `<font>`, so a font wrapper is more transparent to the
+      // host page. Same tag as our translation result element.
+      const wrapper = parent.ownerDocument!.createElement('font')
       wrapper.setAttribute(WRAP_ATTR, 'true')
-      parent.insertBefore(wrapper, run[0])
-      for (const n of run) {
+      parent.insertBefore(wrapper, seg[0])
+      for (const n of seg) {
         wrapper.appendChild(n)
       }
       tryExtract(wrapper)
+    }
+
+    const flush = () => {
+      if (run.length === 0) return
+      const segments = segmentRunByBrBr(run)
+      for (const seg of segments) {
+        flushSegment(seg)
+      }
       run = []
     }
 
@@ -284,7 +359,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       return
     }
 
-    if (hasBlockChild(node)) {
+    if (hasBlockChild(node) || hasBrBrSeparator(node)) {
       walkMixed(node)
       walkShadow(node)
       return

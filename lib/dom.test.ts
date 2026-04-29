@@ -267,9 +267,64 @@ describe('extractBlocks', () => {
     expect(blocks[1].text).toContain('We need additional information')
     expect(blocks[1].text).toContain('Next Steps')
     expect(blocks[1].text).toContain('Reply with the following')
-    // The wrapper element should be a synthesized span with data-imp-wrap
-    expect(blocks[1].element.tagName).toBe('SPAN')
+    // The wrapper element should be a synthesized <font> with data-imp-wrap.
+    // <font> over <span> because site CSS/JS rarely targets the near-deprecated
+    // <font> tag, keeping the wrapper transparent to the host page.
+    expect(blocks[1].element.tagName).toBe('FONT')
     expect(blocks[1].element.hasAttribute('data-imp-wrap')).toBe(true)
+  })
+
+  it('segments inline runs at <br><br> boundaries (App Store-style email layout)', () => {
+    // Repro: App Store Connect rejection emails render as a flat <div> with
+    // text/anchor/<b> nodes separated by <br><br> "fake paragraphs". Without
+    // segmentation the entire div became one giant translation block whose
+    // result was a single run-on paragraph, losing all visual structure.
+    document.body.innerHTML =
+      '<div>' +
+      'Hello,<br><br>' +
+      'Thank you for your message.<br><br>' +
+      '<b>Issue Description</b><br><br>' +
+      'The app metadata includes references that are not relevant.<br><br>' +
+      'Best regards,<br>' +
+      '</div>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks.map((b) => b.text)).toEqual([
+      'Hello,',
+      'Thank you for your message.',
+      'Issue Description',
+      'The app metadata includes references that are not relevant.',
+      'Best regards,',
+    ])
+    // <b> stays as its own block (single inline element, no wrap)
+    const bBlock = blocks.find((b) => b.text === 'Issue Description')!
+    expect(bBlock.element.tagName).toBe('B')
+    // Trailing single <br> is trimmed off the last segment
+    const lastBlock = blocks[blocks.length - 1]
+    expect(lastBlock.text).toBe('Best regards,')
+  })
+
+  it('keeps a single <br> as a soft line break inside one segment', () => {
+    // A solo <br> between text means "soft wrap", not "paragraph break".
+    // Both halves stay in the same translation block.
+    document.body.innerHTML =
+      '<div>' +
+      'first part<br>second part<br><br>' +
+      'next paragraph' +
+      '</div>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toContain('first part')
+    expect(blocks[0].text).toContain('second part')
+    expect(blocks[1].text).toBe('next paragraph')
+  })
+
+  it('treats 3+ consecutive <br> as one paragraph boundary', () => {
+    // Pathological author markup: triple <br>. Should still be one separator,
+    // not produce empty segments.
+    document.body.innerHTML =
+      '<div>alpha<br><br><br>beta</div>'
+    const blocks = extractBlocks(document.body)
+    expect(blocks.map((b) => b.text)).toEqual(['alpha', 'beta'])
   })
 
   it('should not wrap a single inline element that is already a translation block', () => {
