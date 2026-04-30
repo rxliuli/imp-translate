@@ -225,6 +225,18 @@ export default defineBackground(() => {
     return eldDetectLanguage(data.text)
   })
 
+  // Per WebExtension spec, per-tab action icons reset on navigation (Chrome +
+  // Firefox follow this; Safari preserves them). Reapply on commit — the
+  // earliest event we can hook — so the icon doesn't blink to default during
+  // link nav. If the navigation turns out to be a reload, the reload branch
+  // in onDOMContentLoaded below will revert it.
+  browser.webNavigation.onCommitted.addListener(async (details) => {
+    if (details.frameId !== 0) return
+    const lang = await getTabTranslatingLang(details.tabId)
+    if (!lang) return
+    await browser.action.setIcon({ tabId: details.tabId, path: activeIcon })
+  })
+
   browser.webNavigation.onDOMContentLoaded.addListener(async (details) => {
     if (details.frameId !== 0) return
     const lang = await getTabTranslatingLang(details.tabId)

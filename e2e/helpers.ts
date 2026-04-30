@@ -67,3 +67,45 @@ export async function stopTranslation(page: Page) {
     [tabId] as const,
   )
 }
+
+// Chrome has no chrome.action.getIcon, so to assert icon state in e2e we
+// monkey-patch chrome.action.setIcon in the service worker and record every
+// call. Detect kind by path: '/icon/active/...' is active, anything else is
+// default. Idempotent — safe to call once per test before the navigation we
+// care about.
+export async function instrumentSetIcon(context: BrowserContext) {
+  const sw = await getServiceWorker(context)
+  await sw.evaluate(() => {
+    type Call = { tabId?: number; icon: 'active' | 'default' }
+    const g = globalThis as {
+      __setIconCalls?: Call[]
+      __setIconOrig?: typeof chrome.action.setIcon
+    }
+    if (g.__setIconCalls) return
+    g.__setIconCalls = []
+    g.__setIconOrig = chrome.action.setIcon.bind(chrome.action)
+    chrome.action.setIcon = ((details: chrome.action.TabIconDetails) => {
+      const path = details.path
+      const sample =
+        typeof path === 'string'
+          ? path
+          : ((path as Record<string, string> | undefined)?.['16'] ?? '')
+      const icon: Call['icon'] = sample.includes('active') ? 'active' : 'default'
+      g.__setIconCalls!.push({ tabId: details.tabId, icon })
+      return g.__setIconOrig!(details)
+    }) as typeof chrome.action.setIcon
+  })
+}
+
+export async function getLastIcon(
+  context: BrowserContext,
+  tabId: number,
+): Promise<'active' | 'default' | null> {
+  const sw = await getServiceWorker(context)
+  return sw.evaluate((tabId) => {
+    type Call = { tabId?: number; icon: 'active' | 'default' }
+    const calls = (globalThis as { __setIconCalls?: Call[] }).__setIconCalls ?? []
+    const mine = calls.filter((c) => c.tabId === tabId)
+    return mine.length > 0 ? mine[mine.length - 1].icon : null
+  }, tabId)
+}

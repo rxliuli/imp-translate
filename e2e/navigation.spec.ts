@@ -1,5 +1,13 @@
 import { test, expect } from './fixtures'
-import { startTranslation, stopTranslation, getServiceWorker, configureMockProvider } from './helpers'
+import {
+  startTranslation,
+  stopTranslation,
+  getServiceWorker,
+  configureMockProvider,
+  getTabId,
+  instrumentSetIcon,
+  getLastIcon,
+} from './helpers'
 
 const TRANSLATED_SELECTOR = '.imp-translate-result:not(.imp-translate-loading)'
 
@@ -142,6 +150,51 @@ test('SPA navigation continues translation', async ({ context, baseURL }) => {
   await expect(page.locator('.imp-translate-result').first()).toBeVisible({
     timeout: 15000,
   })
+})
+
+// Toolbar icon regression tests. Per WebExtension spec, per-tab action icons
+// reset on navigation in Chrome+Firefox; the SW must reapply on onCommitted.
+// We've regressed this twice — storage.session was correct each time, but
+// the icon was wrong. These tests pin the icon-state assertion explicitly.
+test('icon stays active across link navigation', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await instrumentSetIcon(context)
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  const tabId = await getTabId(page)
+  await page.locator('#link-page2').click()
+  await page.waitForLoadState('domcontentloaded')
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  expect(await getLastIcon(context, tabId)).toBe('active')
+})
+
+test('icon resets to default on reload', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await instrumentSetIcon(context)
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  const tabId = await getTabId(page)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(3000)
+
+  expect(await getLastIcon(context, tabId)).toBe('default')
 })
 
 test('bfcache restore cleans up after stop', async ({ context, baseURL }) => {
