@@ -1,6 +1,15 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const appleRejectionBrFixture = readFileSync(
+  resolve(__dirname, '../lib/__fixtures__/apple-rejection-br.html'),
+  'utf-8',
+)
 
 const pages: Record<string, string> = {
   '/': `<!DOCTYPE html>
@@ -97,6 +106,13 @@ const pages: Record<string, string> = {
       block.appendChild(wrapper);
     });
   </script>
+</body>
+</html>`,
+  '/apple-rejection-br': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Apple Rejection (br-br)</title></head>
+<body>
+${appleRejectionBrFixture}
 </body>
 </html>`,
   '/delayed-render': `<!DOCTYPE html>
