@@ -221,7 +221,15 @@ function hasBlockChild(el: Element): boolean {
     const tag = child.tagName.toLowerCase()
     if (isBlockTag(tag)) {
       if (tag.includes('-') && !child.textContent?.trim()) continue
-      if (isDisplayInline(child)) continue
+      // A block-tag element with display:inline-* (e.g. Google's
+      // overflow-x carousel uses an inline-block <div> wrapper above the
+      // flex card row) is a transparent wrapper for layout purposes — its
+      // descendants can still contain real blocks. Recurse instead of
+      // skipping outright.
+      if (isDisplayInline(child)) {
+        if (hasBlockChild(child)) return true
+        continue
+      }
       return true
     }
     // Recurse through inline-tag wrappers so nested inline chains (e.g.

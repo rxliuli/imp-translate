@@ -248,3 +248,50 @@ describe('Quora answer with nested inline wrappers', () => {
     }
   })
 })
+
+// Google search "Questions & answers" carousel. The outer container has
+// overflow-x:auto for horizontal scroll, and its single child div is set
+// to display:inline-block so it can extend wider than the parent. Without
+// recursion through inline-displayed block-tag wrappers, hasBlockChild
+// skipped that inline-block div outright (block-tag check passes, but the
+// `if (isDisplayInline(child)) continue` branch returned without looking
+// inside) — so the walker extracted the whole carousel (both cards) as
+// one megablock.
+describe('Google carousel with inline-block wrapper', () => {
+  const googleCarousel = `
+    <div style="overflow-x: auto;">
+      <div style="display: inline-block;">
+        <div class="card-row">
+          <div class="card">
+            <a>
+              <span>Reddit</span>
+              <span>Why do people get so offended by swear words?</span>
+            </a>
+          </div>
+          <div class="card">
+            <a>
+              <span>Quora</span>
+              <span>Why do some people like using foul language?</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('does not merge both cards into a single megablock', () => {
+    document.body.innerHTML = googleCarousel
+    const blocks = extractBlocks(document.body)
+
+    expect(blocks.length).toBeGreaterThanOrEqual(2)
+
+    const merged = blocks.some(
+      (b) => b.text.includes('Reddit') && b.text.includes('Quora'),
+    )
+    expect(merged).toBe(false)
+  })
+})
