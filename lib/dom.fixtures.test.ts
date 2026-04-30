@@ -199,3 +199,52 @@ describe('App Store Connect rejection emails', () => {
     expect(calls).toBeLessThan(22)
   })
 })
+
+// Quora answer body. The container <div class="q-text"> wraps content in
+// TWO levels of <span> before reaching the actual <p> paragraphs. With the
+// previous 1-level grandchild peek, hasBlockChild missed the <p>s entirely
+// and the walker extracted the whole answer (4 paragraphs) as a single
+// translation block. Fix: hasBlockChild now recurses through inline-tag
+// chains, so any depth of inline wrapping still surfaces block descendants.
+describe('Quora answer with nested inline wrappers', () => {
+  const quoraAnswer = `
+    <div class="q-text">
+      <span>
+        <span class="q-box qu-userSelect--text">
+          <p class="q-text">
+            <span>I suppose that foul language is found elsewhere in the world, but since we are speaking about Britain I wouldn't disagree with you on this point.</span>
+          </p>
+          <p class="q-text">
+            <span>Why is it there? Because the society as a whole has been induced to tolerate, not only foul language, but often a general lack of respect as well.</span>
+          </p>
+          <p class="q-text">
+            <span>Little is censured or disapproved of today, probably in the name of a (too?) liberal democracy.</span>
+          </p>
+          <p class="q-text">
+            <span>But I often feel that ours may be just a passing phase.</span>
+          </p>
+        </span>
+      </span>
+    </div>
+  `
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('extracts each <p> as its own block, not the whole answer as one', () => {
+    document.body.innerHTML = quoraAnswer
+    const blocks = extractBlocks(document.body)
+
+    expect(blocks.length).toBe(4)
+
+    const texts = blocks.map((b) => b.text)
+    expect(texts[0]).toContain('foul language is found elsewhere')
+    expect(texts[3]).toContain('passing phase')
+
+    // No block should hold more than one paragraph
+    for (const t of texts) {
+      expect(t).not.toContain('passing phase' + 'I suppose')
+    }
+  })
+})

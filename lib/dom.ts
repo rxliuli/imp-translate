@@ -224,15 +224,12 @@ function hasBlockChild(el: Element): boolean {
       if (isDisplayInline(child)) continue
       return true
     }
+    // Recurse through inline-tag wrappers so nested inline chains (e.g.
+    // Quora's div > span > span > p) don't hide real block descendants
+    // from a leaf-extraction decision. Bounded by inline-chain depth,
+    // which is naturally small in real DOM.
     if (INLINE_TAGS.has(tag)) {
-      for (const grandchild of child.children) {
-        const gcTag = grandchild.tagName.toLowerCase()
-        if (isBlockTag(gcTag)) {
-          if (gcTag.includes('-') && !grandchild.textContent?.trim()) continue
-          if (isDisplayInline(grandchild)) continue
-          return true
-        }
-      }
+      if (hasBlockChild(child)) return true
     }
   }
   return false
