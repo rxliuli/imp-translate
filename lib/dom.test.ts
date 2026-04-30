@@ -203,6 +203,28 @@ describe('extractBlocks', () => {
     expect(blocks).toHaveLength(0)
   })
 
+  it('should skip when a skip-matched ancestor is above the walk root', () => {
+    // Repro: YouTube comment engagement bar. When YouTube lazily expands a reply
+    // thread, MutationObserver fires extractBlocks(addedNode) where addedNode is
+    // already deep inside an existing ytd-comment-engagement-bar. With the old
+    // matches()-only check, the walker couldn't see the ancestor skip selector
+    // and translated the "Reply" button label.
+    document.body.innerHTML = `
+      <ytd-comment-engagement-bar>
+        <div id="toolbar">
+          <div id="reply-button-end">
+            <span>Reply</span>
+          </div>
+        </div>
+      </ytd-comment-engagement-bar>
+    `
+    const replyButton = document.querySelector('#reply-button-end')!
+    const blocks = extractBlocks(replyButton, {
+      skipSelectors: ['ytd-comment-engagement-bar'],
+    })
+    expect(blocks).toHaveLength(0)
+  })
+
   it('should apply both include and skip rules together', () => {
     document.body.innerHTML = `
       <div class="post">

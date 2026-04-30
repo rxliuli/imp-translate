@@ -246,6 +246,15 @@ function isLeafBlock(el: Element): boolean {
 }
 
 export function extractBlocks(root: Element = document.body, opts?: ExtractOptions): TranslatableBlock[] {
+  // Skip ancestors of root must be checked here, not per-element in shouldSkip:
+  // walker descends from root, so any skip ancestor inside the subtree gets
+  // visited and matched cheaply via matches(). Ancestors above root are outside
+  // the walk and need a one-time closest() check at entry.
+  if (opts?.skipSelectors) {
+    for (const s of opts.skipSelectors) {
+      if (closestThroughShadow(root, s)) return []
+    }
+  }
   const blocks: TranslatableBlock[] = []
 
   function tryExtract(node: Element): boolean {

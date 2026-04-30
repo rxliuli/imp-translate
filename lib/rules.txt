@@ -87,14 +87,16 @@ youtube.com##ytd-watch-metadata #actions
 youtube.com##ytd-watch-metadata #expand
 youtube.com##ytd-watch-metadata #social-links
 youtube.com##ytd-watch-info-text
-! Comment chrome: usernames, timestamps, like/dislike/reply bar, expander toggles, and reply-thread show/hide buttons.
+! Comment chrome: usernames, timestamps, comments header, like/dislike/reply bar, expander toggles, and reply-thread show/hide buttons.
 youtube.com##ytd-comment-view-model #author-text
 youtube.com##ytd-comment-view-model #published-time-text
+youtube.com##ytd-comments-header-renderer
 youtube.com##ytd-comment-engagement-bar
 youtube.com##ytd-comment-view-model #more
 youtube.com##ytd-comment-view-model #less
 youtube.com##ytd-comment-replies-renderer #more-replies-sub-thread
-youtube.com##ytd-comment-replies-renderer #less-replies-sub-thread
+youtube.com##ytd-comment-replies-renderer #more-replies-sub-thread
+youtube.com##ytd-comment-replies-renderer ytd-continuation-item-renderer:has(yt-touch-feedback-shape)
 
 ! Discord — chat platform; include message text and accessories. Reply-context preview is covered automatically because Discord renders the quoted text as another [id^="message-content-"] inside the reply block. Channel sidebar, member list, and the message composer fall outside the include set.
 ! https://discord.com/channels/<server>/<channel>  (private servers — verify against any text channel)
