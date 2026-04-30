@@ -123,6 +123,37 @@ test('SPA navigation preserves existing translations', async ({ context, baseURL
 // Reddit wraps details content in a height-animator that hides content when collapsed.
 // Native <details> children still report offsetHeight>0 in Chromium (content-visibility),
 // so this test uses display:none which is the reliable way to hide content from isHidden.
+// TV Tropes folder pattern: clicking a label toggles a CSS class, and a CSS
+// rule unhides sibling content. No DOM mutation, no <details> toggle event,
+// no inline style change on the content itself — purely class-driven. The
+// global click listener catches this by triggering a delayed rescan.
+test('class-toggle expanded content is translated', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/folder-class-toggle`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  // Intro paragraph translates immediately
+  await expect(
+    page.locator('.imp-translate-result:not(.imp-translate-loading)').first(),
+  ).toBeVisible({ timeout: 15000 })
+
+  // Hidden content has no translation yet
+  const hidden = page.locator('#hidden-text')
+  await expect(hidden.locator('.imp-translate-result')).toHaveCount(0)
+
+  // Click label — only a class flips, no other mutation
+  await page.locator('#label').click()
+
+  const contentTranslation = hidden.locator(
+    '.imp-translate-result:not(.imp-translate-loading)',
+  )
+  await expect(contentTranslation).toBeVisible({ timeout: 15000 })
+  await expect(contentTranslation).toContainText('[翻译]')
+})
+
 test('details element content is translated when expanded', async ({ context, baseURL }) => {
   const page = await context.newPage()
   await page.goto(`${baseURL}/details`)

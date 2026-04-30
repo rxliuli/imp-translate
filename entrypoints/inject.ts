@@ -40,6 +40,7 @@ export default defineUnlistedScript(() => {
   const shadowObservers = new Map<ShadowRoot, MutationObserver>()
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
   let urlCheckTimer: ReturnType<typeof setInterval> | null = null
+  let clickRescanTimer: ReturnType<typeof setTimeout> | null = null
   let lastUrl = location.href
 
   function translateBatch(batch: TranslatableBlock[]) {
@@ -115,6 +116,20 @@ export default defineUnlistedScript(() => {
       }
       translateVisible()
     }, 100)
+  }
+
+  // Catches click-to-expand patterns where the toggle is a CSS class change
+  // (e.g. TV Tropes' .folderlabel.is-open ~ p { display: block }) — no DOM
+  // mutation, no <details> toggle event, so the regular observer can't see
+  // the newly-visible content. Debounced; rescan is idempotent against
+  // already-translated subtrees via PROCESSED_ATTR.
+  function onClick() {
+    if (!isTranslating) return
+    if (clickRescanTimer) clearTimeout(clickRescanTimer)
+    clickRescanTimer = setTimeout(() => {
+      clickRescanTimer = null
+      rescanBlocks()
+    }, 200)
   }
 
   let recheckTimer: ReturnType<typeof setTimeout> | null = null
@@ -327,6 +342,7 @@ export default defineUnlistedScript(() => {
     pendingBlocks = extractBlocks(document.body, extractOpts)
     document.addEventListener('scroll', onScroll, { passive: true, capture: true })
     document.addEventListener('toggle', onToggle, { capture: true })
+    document.addEventListener('click', onClick, { passive: true, capture: true })
     startObserver()
     startUrlWatcher()
     await translateVisible()
@@ -358,9 +374,14 @@ export default defineUnlistedScript(() => {
       clearTimeout(delayedRescanTimer)
       delayedRescanTimer = null
     }
+    if (clickRescanTimer) {
+      clearTimeout(clickRescanTimer)
+      clickRescanTimer = null
+    }
     pendingRecheck.clear()
     document.removeEventListener('scroll', onScroll, { capture: true })
     document.removeEventListener('toggle', onToggle, { capture: true })
+    document.removeEventListener('click', onClick, { capture: true })
     clearTranslations(document.body)
     removeStyles()
     removeDebugStyles()

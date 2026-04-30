@@ -115,6 +115,28 @@ const pages: Record<string, string> = {
 ${appleRejectionBrFixture}
 </body>
 </html>`,
+  '/folder-class-toggle': `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Folder Class Toggle</title>
+  <style>
+    .folder-content { display: none; }
+    .folderlabel.is-open + .folder-content { display: block; }
+  </style>
+</head>
+<body>
+  <p>Visible intro paragraph above the folder.</p>
+  <div id="label" class="folderlabel">Click to expand</div>
+  <div class="folder-content">
+    <p id="hidden-text">This paragraph starts hidden and becomes visible only via a CSS class change.</p>
+  </div>
+  <script>
+    document.getElementById('label').addEventListener('click', function() {
+      this.classList.toggle('is-open');
+    });
+  </script>
+</body>
+</html>`,
   '/delayed-render': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Delayed Render</title></head>
