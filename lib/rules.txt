@@ -17,6 +17,8 @@
 www.google.*#+#[id="rcnt"]
 www.google.*##:has(>[hreftranslate])
 www.google.*##[role="navigation"]
+! AI Overview show more button
+www.google.*##[role="button"]:has([d="M5.41 7.59L4 9l8 8 8-8-1.41-1.41L12 14.17"])
 
 ! Twitter/X
 ! https://x.com/home, https://x.com/x  (timeline tweets + profile bio)
@@ -39,6 +41,20 @@ x.com#+#[data-testid="trend"]
 x.com#+#[data-testid^="news_sidebar_article_"]
 x.com#+#[data-testid="eventHero"]
 x.com##[data-testid="trend"] span[dir="ltr"]
+! Grok conversation pane — answer body sits in obfuscated divs with no stable testid/aria, so include the whole pane (div[aria-label="Grok"]; DIV-tag scope avoids the sidebar nav <a aria-label="Grok">). Skips inside the pane:
+!   - User-Name: embedded quoted tweet's handle/timestamp
+!   - button: Thoughts collapsible, "N web pages" pill, "Fast" model selector, "See new posts" pill
+!   - :has(+ [data-testid="tweetText"]): the embedded tweet's "Replying to @user" reply-context line — it sits as the immediately-preceding sibling of tweetText
+! https://x.com/i/grok?conversation=2049842901010755900
+x.com#+#div[aria-label="Grok"]
+x.com##div[aria-label="Grok"] [data-testid="User-Name"]
+x.com##div[aria-label="Grok"] button
+x.com##div[aria-label="Grok"] :has(+ [data-testid="tweetText"])
+! Citation drawer ("Relevant Web Pages") opens in #layers > [role="dialog"], outside the Grok pane. Each card is an <a role="link"> wrapping title/description; data-testid^="web_result_item_" sits on a small empty tracking div inside, so reverse-anchor via :has(). Skip the domain badge row (its immediately-following sibling is the tracking div) — translating "x.com"/"github.com" is a no-op churn.
+! https://x.com/i/grok?conversation=2049842901010755900  (click the "N web pages" chip on a Grok answer)
+x.com#+#a[role="link"]:has([data-testid^="web_result_item_"])
+x.com##:has(+ [data-testid^="web_result_item_"])
+x.com##div[aria-label="Grok"] a[rel="noopener noreferrer nofollow"]
 
 ! Reddit — component-based platform; include the post/comment text slots only. Author names, vote counts, action rows, and chrome (header, sidebar) sit outside the include set automatically.
 ! https://www.reddit.com/r/programming/  (subreddit feed: titles + text-body for text posts)
