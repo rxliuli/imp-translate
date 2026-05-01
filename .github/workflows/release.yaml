@@ -52,6 +52,7 @@ jobs:
         with:
           tag_name: 'v${{ needs.version.outputs.version }}'
           name: 'v${{ needs.version.outputs.version }}'
+          generate_release_notes: true
           draft: false
           prerelease: false
           files: |
