@@ -273,4 +273,30 @@ export default defineBackground(() => {
   browser.tabs.onRemoved.addListener(async (tabId) => {
     await browser.storage.session.remove(`tab_translating_${tabId}`)
   })
+
+  if (import.meta.env.DEV) {
+    const activeTabId = async () =>
+      (await browser.tabs.query({ active: true, currentWindow: true }))[0]?.id
+    ;(globalThis as Record<string, unknown>).__imp = {
+      start: async (lang?: string, tabId?: number) => {
+        const id = tabId ?? (await activeTabId())
+        if (!id) return null
+        const settings = await getSettings()
+        await startTranslationForTab(id, lang ?? settings.targetLang, false)
+        return id
+      },
+      stop: async (tabId?: number) => {
+        const id = tabId ?? (await activeTabId())
+        if (!id) return null
+        await stopTranslationForTab(id)
+        return id
+      },
+      toggle: () => toggleTranslationForActiveTab(),
+      state: async (tabId?: number) => {
+        const id = tabId ?? (await activeTabId())
+        if (!id) return null
+        return { tabId: id, lang: await getTabTranslatingLang(id) }
+      },
+    }
+  }
 })

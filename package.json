@@ -5,7 +5,7 @@
   "version": "0.0.3",
   "type": "module",
   "scripts": {
-    "dev": "wxt",
+    "dev": "mkdir -p .tmp/chrome-profile && wxt",
     "dev:firefox": "wxt -b firefox",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
