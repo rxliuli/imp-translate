@@ -62,6 +62,15 @@ x.com##div[aria-label="Grok"] a[rel="noopener noreferrer nofollow"]
 reddit.com#+#[slot="title"]
 reddit.com#+#[slot="text-body"]
 reddit.com#+#[slot="comment"]
+! Notifications inbox — each item is a <notification-item> Web Component. Skips:
+!   - data-testid="title": Reddit's templated header ("X replied to your comment in Y", "Achievement unlocked!", "Your post just hit N views!") — structural chrome with variable user/subreddit/count slots, same role as YouTube comment #author-text. Reddit will localize this server-side.
+!   - data-testid="sent-at": "4h ago" timestamp
+!   - notification-context-menu: kebab menu items (slotted into hover-actions)
+! https://www.reddit.com/notifications
+reddit.com#+#notification-item
+reddit.com##notification-item [data-testid="title"]
+reddit.com##notification-item [data-testid="sent-at"]
+reddit.com##notification-item notification-context-menu
 ! Reddit Chat — message bodies + link-preview cards live inside nested Shadow DOM (rs-timeline-event > shadow > rs-external-link-preview > shadow). The walker pierces open shadow roots, and include matching crosses shadow boundaries via closestThroughShadow.
 ! https://chat.reddit.com/  (any chat room — actual room URLs are private)
 reddit.com#+#.room-message-text
