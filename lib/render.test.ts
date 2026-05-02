@@ -62,6 +62,32 @@ describe('render', () => {
     expect(br).not.toBeNull()
   })
 
+  it('should skip br when last visible child is block-like (flex-column blockifies span)', () => {
+    document.body.innerHTML = `<div id="t" style="display: flex; flex-direction: column;"><span>This is a long paragraph that exceeds the short text threshold limit.</span><span>aside</span></div>`
+    const div = document.querySelector('#t') as HTMLElement
+    const blocks: TranslatableBlock[] = [
+      { element: div, text: 'This is a long paragraph that exceeds the short text threshold limit.' },
+    ]
+    injectLoading(blocks)
+    replaceWithTranslation(blocks, ['这是一段很长的文本，超过了短文本的阈值限制。'])
+
+    expect(div.querySelector('br.imp-translate-br')).toBeNull()
+    const font = div.querySelector('font.imp-translate-result')
+    expect(font?.textContent).toBe('这是一段很长的文本，超过了短文本的阈值限制。')
+  })
+
+  it('should skip br when last visible child is a block element (p inside block parent)', () => {
+    document.body.innerHTML = `<div id="t">leading text <p>This is a long paragraph that exceeds the short text threshold limit.</p></div>`
+    const div = document.querySelector('#t') as HTMLElement
+    const blocks: TranslatableBlock[] = [
+      { element: div, text: 'This is a long paragraph that exceeds the short text threshold limit.' },
+    ]
+    injectLoading(blocks)
+    replaceWithTranslation(blocks, ['这是一段很长的文本，超过了短文本的阈值限制。'])
+
+    expect(div.querySelector('br.imp-translate-br')).toBeNull()
+  })
+
   it('should skip empty icon elements and inject into text-containing child', () => {
     document.body.innerHTML = `
       <div class="scrimba">
@@ -192,10 +218,11 @@ describe('render', () => {
     const fontAfter = block.querySelector('font.imp-translate-result')!
     expect(fontAfter).toBe(fontBefore)
     expect(fontAfter.parentElement).toBe(block)
-    // <font> must come after the new sibling
-    const br = fontAfter.previousElementSibling!
-    expect(br.tagName).toBe('BR')
-    expect(br.previousElementSibling?.id).toBe('mention')
+    // <font> must come after the new sibling. The previous element is the
+    // mention div itself (block-displayed) — no <br> needed because the div
+    // already pushes the translation onto a new line.
+    expect(fontAfter.previousElementSibling?.id).toBe('mention')
+    expect(block.querySelector('br.imp-translate-br')).toBeNull()
     // No leftover separator inside the original span
     expect(document.getElementById('text')!.querySelector('br.imp-translate-br')).toBeNull()
   })

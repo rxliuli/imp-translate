@@ -48,8 +48,23 @@ node scripts/dev-cdp.mjs open https://en.wikipedia.org/wiki/Main_Page
 node scripts/dev-cdp.mjs eval "__imp.start('zh')"
 node scripts/dev-cdp.mjs eval "__imp.state()"
 node scripts/dev-cdp.mjs eval "__imp.toggle()"
+node scripts/dev-cdp.mjs reload                     # chrome.runtime.reload() + wait for new SW
 ```
 
 The script hits `/json/list` to find the extension SW target, opens a WS, runs `Runtime.evaluate` with `awaitPromise: true`. Page DOM / console reads still go through chrome-devtools MCP (`evaluate_script`, `list_console_messages`) since regular http(s) tabs are visible to it.
 
-Full loop: edit → WXT rebuilds + auto-reloads extension → `dev-cdp.mjs eval "__imp.toggle()"` to drive → MCP `evaluate_script` to verify DOM.
+### Full loop
+
+Content-script changes (`lib/render.ts`, `lib/dom.ts`, `entrypoints/content/`) — WXT hot-rebuilds; the new code loads on the next `executeScript` call, so:
+
+```
+edit → WXT rebuilds → MCP navigate_page (reload) → dev-cdp eval "__imp.start('zh')" → MCP evaluate_script to verify
+```
+
+SW-level changes (`entrypoints/background.ts`, `lib/rules.txt`, anything captured at module init in the SW) — the running SW keeps the old module-level state, so a full extension reload is required:
+
+```
+edit → WXT rebuilds → dev-cdp reload → dev-cdp eval "__imp.start('zh')" → MCP evaluate_script to verify
+```
+
+If you're not sure which bucket your edit falls in, `dev-cdp reload` is always safe (it just costs an extra ~1 s). Note: WXT's file watcher occasionally misses an edit on first save — if `.output/chrome-mv3-dev/{background,inject}.js` doesn't update within a couple seconds, `touch` the source file to nudge it.

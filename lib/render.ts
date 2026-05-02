@@ -134,6 +134,32 @@ function clearLineClamp(el: HTMLElement) {
   }
 }
 
+// If the last visible child of the target already creates a visual line break
+// — its computed display is non-inline — then injecting a <br> before the
+// translation produces a redundant blank line. This catches:
+//   - flex-column / grid parents (children get blockified to computed `block`)
+//   - block parents whose last meaningful child is itself a block element (p,
+//     div, etc.)
+// Inline last children (text nodes, <a>, <span> with default display) still
+// need the <br> to push the translation onto its own line.
+function lastVisibleChildIsBlockLike(target: HTMLElement): boolean {
+  for (let i = target.childNodes.length - 1; i >= 0; i--) {
+    const n = target.childNodes[i]
+    if (n.nodeType === Node.TEXT_NODE) {
+      if (!n.textContent?.trim()) continue
+      return false
+    }
+    if (n.nodeType !== Node.ELEMENT_NODE) continue
+    const el = n as HTMLElement
+    // Skip our own injections so a re-injection doesn't read its previous br.
+    if (el.classList.contains(BR_CLASS) || el.classList.contains(RESULT_CLASS)) continue
+    const display = getComputedStyle(el).display
+    if (display === 'none' || display === 'contents') continue
+    return !display.startsWith('inline')
+  }
+  return false
+}
+
 export function injectLoading(blocks: TranslatableBlock[]) {
   ensureStyles()
   for (const { element, text } of blocks) {
@@ -150,6 +176,8 @@ export function injectLoading(blocks: TranslatableBlock[]) {
 
     if (isShort) {
       target.appendChild(document.createTextNode(' '))
+      target.appendChild(wrapper)
+    } else if (lastVisibleChildIsBlockLike(target)) {
       target.appendChild(wrapper)
     } else {
       const br = document.createElement('br')
@@ -178,7 +206,7 @@ export function repositionTranslation(element: HTMLElement, expectedText: string
   const isShort = expectedText.length <= SHORT_TEXT_THRESHOLD
   if (isShort) {
     correctTarget.appendChild(document.createTextNode(' '))
-  } else {
+  } else if (!lastVisibleChildIsBlockLike(correctTarget)) {
     const br = document.createElement('br')
     br.className = BR_CLASS
     correctTarget.appendChild(br)

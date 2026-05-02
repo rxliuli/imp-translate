@@ -5,6 +5,7 @@
 // Usage:
 //   node scripts/dev-cdp.mjs eval "<js-expression>"   # run expression in SW
 //   node scripts/dev-cdp.mjs open <url>               # open a new tab
+//   node scripts/dev-cdp.mjs reload                   # chrome.runtime.reload() + wait for new SW
 
 const HOST = '127.0.0.1'
 const PORT = 9222
@@ -14,7 +15,8 @@ const arg = rest.join(' ')
 
 const usage = `usage:
   dev-cdp.mjs eval "<js-expression>"
-  dev-cdp.mjs open <url>`
+  dev-cdp.mjs open <url>
+  dev-cdp.mjs reload`
 
 if (!cmd) {
   console.error(usage)
@@ -86,6 +88,28 @@ async function main() {
     console.log(JSON.stringify(r.result.value, null, 2))
     c.ws.close()
     return
+  }
+
+  if (cmd === 'reload') {
+    const sw = await findSW()
+    const c = client(sw.webSocketDebuggerUrl)
+    await c.ready
+    // chrome.runtime.reload() tears down the SW immediately, so the response
+    // never arrives — fire and forget, then poll for the new SW target.
+    c.send('Runtime.evaluate', { expression: 'chrome.runtime.reload()' }).catch(() => {})
+    c.ws.close()
+    const start = Date.now()
+    while (Date.now() - start < 10000) {
+      await new Promise((r) => setTimeout(r, 200))
+      try {
+        const next = await findSW()
+        if (next.id !== sw.id) {
+          console.log('reloaded')
+          return
+        }
+      } catch {}
+    }
+    throw new Error('SW did not come back within 10s')
   }
 
   console.error(`unknown command: ${cmd}\n${usage}`)
