@@ -12,13 +12,19 @@
 ! the page, confirm whether the rule is still needed, and safely remove
 ! obsolete rules — without URL annotations the list is a one-way ratchet.
 
-! Google Search (www.google.* avoids matching mail/drive/docs subdomains)
-! https://www.google.com/search?q=test
-www.google.*#+#[id="rcnt"]
+! Google Search (www.google.* avoids matching mail/drive/docs subdomains).
+! Desktop wraps results in #cnt > #rcnt > #center_col; mobile drops #rcnt and goes #cnt > #center_col directly. Including #cnt only when #rcnt is absent picks up the mobile layout without expanding the desktop scope (which would pull in appbar/hdtb chrome above #rcnt).
+! https://www.google.com/search?q=test  (desktop)
+! https://www.google.com/search?q=test  (mobile — DevTools device toolbar, iPhone UA)
+www.google.*#+##rcnt
+www.google.*#+##cnt:not(:has(#rcnt))
+www.google.*#+#[data-subtree="mfc"]
 www.google.*##:has(>[hreftranslate])
 www.google.*##[role="navigation"]
 ! AI Overview show more button
 www.google.*##[role="button"]:has([d="M5.41 7.59L4 9l8 8 8-8-1.41-1.41L12 14.17"])
+! Footer
+www.google.*###fbar
 
 ! Twitter/X
 ! https://x.com/home, https://x.com/x  (timeline tweets + profile bio)
