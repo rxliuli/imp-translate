@@ -1,6 +1,7 @@
 import { messager } from '@/lib/message'
 import type { ContentAction } from '@/lib/message'
 import { ContentScriptContext } from 'wxt/utils/content-script-context'
+import { selectorsForPath, type SiteRule } from '@/lib/rules'
 import {
   extractBlocks,
   getVisibleBlocks,
@@ -30,9 +31,31 @@ import { isUrlOnly } from '@/lib/utils'
 export default defineUnlistedScript(() => {
   const ctx = new ContentScriptContext('inject')
 
-  let extractOpts: ExtractOptions = {
-    skipSelectors: [],
-    includeSelectors: [],
+  // Host-matched rules (each carries its own pathPattern). Path filtering
+  // happens lazily when the walker reads opts.skipSelectors / includeSelectors,
+  // so SPA route changes resolve to the right selector set without an IPC
+  // round-trip — and without the race against MutationObserver that would
+  // appear if pathname-active selectors arrived asynchronously.
+  let hostRules: SiteRule[] = []
+  let cachedPathname: string | null = null
+  let cachedSelectors = { skipSelectors: [] as string[], includeSelectors: [] as string[] }
+
+  function getActiveSelectors() {
+    const p = location.pathname
+    if (p !== cachedPathname) {
+      cachedPathname = p
+      cachedSelectors = selectorsForPath(hostRules, p)
+    }
+    return cachedSelectors
+  }
+
+  const extractOpts: ExtractOptions = {
+    get skipSelectors() {
+      return getActiveSelectors().skipSelectors
+    },
+    get includeSelectors() {
+      return getActiveSelectors().includeSelectors
+    },
     onShadowRoot: (r) => attachShadowObserver(r),
   }
 
@@ -243,11 +266,12 @@ export default defineUnlistedScript(() => {
 
   function startUrlWatcher() {
     // wxt:locationchange fires on history.pushState / replaceState / popstate.
-    // ContentScriptContext patches the History API once and dedupes across
-    // listeners, so we don't need our own polling loop or popstate handler.
-    ctx.addEventListener(window, 'wxt:locationchange', ({ newUrl }) => {
+    // The active selector set updates lazily in getActiveSelectors via
+    // location.pathname, so this handler only triggers a re-walk to pick up
+    // elements that changed eligibility under the new pathname.
+    ctx.addEventListener(window, 'wxt:locationchange', () => {
       if (!isTranslating) return
-      onUrlChange(newUrl.href)
+      onUrlChange()
     })
   }
 
@@ -264,21 +288,8 @@ export default defineUnlistedScript(() => {
     if (hasNew) translateVisible()
   }
 
-  async function onUrlChange(url: string) {
+  function onUrlChange() {
     if (!isTranslating) return
-    // Path-gated rules (:matches-path) may activate or deactivate on navigation,
-    // so refetch selectors for the new URL before re-walking.
-    try {
-      const matched = await messager.sendMessage('getRulesForUrl', { url })
-      if (!isTranslating) return
-      extractOpts = {
-        ...extractOpts,
-        skipSelectors: matched.skipSelectors,
-        includeSelectors: matched.includeSelectors,
-      }
-    } catch {
-      // Background unreachable; reuse the existing selectors.
-    }
     pendingBlocks = extractBlocks(document.body, extractOpts)
     translateVisible()
     setTimeout(rescanBlocks, 1000)
@@ -331,17 +342,13 @@ export default defineUnlistedScript(() => {
   async function startTranslation(
     lang: string,
     showToast = false,
-    skipSelectors: string[] = [],
-    includeSelectors: string[] = [],
+    rules: SiteRule[] = [],
   ) {
     if (isTranslating) return
     isTranslating = true
     targetLang = lang
-    extractOpts = {
-      skipSelectors,
-      includeSelectors,
-      onShadowRoot: (r) => attachShadowObserver(r),
-    }
+    hostRules = rules
+    cachedPathname = null
     await loadDeveloperSettings()
     if (debugMode) injectDebugStyles()
     await waitForDOMReady()
@@ -398,12 +405,7 @@ export default defineUnlistedScript(() => {
     (message: ContentAction, _sender, sendResponse) => {
       if (!message?.action) return
       if (message.action === 'startTranslation') {
-        startTranslation(
-          message.targetLang,
-          message.showToast,
-          message.skipSelectors,
-          message.includeSelectors,
-        )
+        startTranslation(message.targetLang, message.showToast, message.rules)
       } else if (message.action === 'stopTranslation') {
         stopTranslation()
       } else if (message.action === 'getState') {

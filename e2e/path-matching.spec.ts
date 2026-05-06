@@ -89,15 +89,12 @@ test('SPA navigation re-evaluates path-gated rules', async ({ context, baseURL }
     timeout: 15000,
   })
 
-  // SPA navigate to /scoped, then a beat later inject fresh paragraphs. The
-  // gap mirrors realistic SPAs (React render after route change) and gives
-  // the inject script time to round-trip getRulesForUrl with the SW before
-  // the mutation observer sees the new content. Without this gap there is a
-  // race: pushState and DOM update in the same tick let the observer walk
-  // new elements with the previous (rule-inactive) selectors.
-  await page.evaluate(() => history.pushState(null, '', '/scoped'))
-  await page.waitForTimeout(500)
+  // SPA-navigate and inject fresh paragraphs in the SAME tick. The walker
+  // reads location.pathname lazily through getActiveSelectors, so the
+  // MutationObserver callback that fires from the appendChild already sees
+  // the path-active include scope — no IPC round-trip, no race.
   await page.evaluate(() => {
+    history.pushState(null, '', '/scoped')
     const block = document.createElement('div')
     block.id = 'spa-block'
     block.innerHTML =

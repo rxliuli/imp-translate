@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { parseRules, matchRulesForUrl } from './rules'
+import {
+  parseRules,
+  matchRulesForUrl,
+  matchRulesForHostname,
+  selectorsForPath,
+} from './rules'
 
 describe('parseRules', () => {
   it('parses exclude rules', () => {
@@ -227,5 +232,51 @@ chatgpt.com##header
   it('defaults pathname to "/" when omitted', () => {
     const rules = parseRules('example.com#+#:matches-path(/^\\/$/) main')
     expect(matchRulesForUrl(rules, 'example.com').includeSelectors).toEqual(['main'])
+  })
+})
+
+describe('matchRulesForHostname / selectorsForPath', () => {
+  // The two-step API mirrors the architecture: background hands the content
+  // script the host-matched rule set once, and the content script filters by
+  // pathname locally on every walk. This avoids an IPC round-trip on SPA
+  // navigation, which would otherwise race against MutationObserver.
+  const allRules = parseRules(`
+chatgpt.com#+#:matches-path(/^\\/c\\//) [data-message-author-role]
+chatgpt.com##header
+example.com#+#main
+`)
+
+  it('matchRulesForHostname returns full rules including pathPattern', () => {
+    const hostRules = matchRulesForHostname(allRules, 'chatgpt.com')
+    expect(hostRules).toHaveLength(2)
+    expect(hostRules[0]).toMatchObject({
+      pathPattern: '/^\\/c\\//',
+      selector: '[data-message-author-role]',
+      type: 'include',
+    })
+    expect(hostRules[1]).toMatchObject({ pathPattern: null, selector: 'header', type: 'exclude' })
+  })
+
+  it('matchRulesForHostname does not leak rules from other hostnames', () => {
+    expect(matchRulesForHostname(allRules, 'chatgpt.com')).toHaveLength(2)
+    expect(matchRulesForHostname(allRules, 'example.com')).toHaveLength(1)
+  })
+
+  it('selectorsForPath filters host-matched rules by pathname', () => {
+    const hostRules = matchRulesForHostname(allRules, 'chatgpt.com')
+
+    const onConv = selectorsForPath(hostRules, '/c/abc')
+    expect(onConv.includeSelectors).toEqual(['[data-message-author-role]'])
+    expect(onConv.skipSelectors).toEqual(['header'])
+
+    const onLibrary = selectorsForPath(hostRules, '/library')
+    expect(onLibrary.includeSelectors).toHaveLength(0)
+    expect(onLibrary.skipSelectors).toEqual(['header'])
+  })
+
+  it('matchRulesForUrl is the composition of the two', () => {
+    const a = matchRulesForUrl(allRules, 'chatgpt.com', '/c/abc')
+    const b = selectorsForPath(matchRulesForHostname(allRules, 'chatgpt.com'), '/c/abc')
+    expect(a).toEqual(b)
   })
 })

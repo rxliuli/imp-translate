@@ -1,5 +1,6 @@
 import { defineExtensionMessaging } from '@webext-core/messaging'
 import type { Settings } from './storage'
+import type { SiteRule } from './rules'
 
 export interface TranslateRequest {
   text: string
@@ -18,20 +19,18 @@ export const messager = defineExtensionMessaging<{
   isMobile(): boolean
   openOptionsPage(): void
   detectLanguage(data: { text: string }): string
-  getRulesForUrl(data: { url: string }): {
-    skipSelectors: string[]
-    includeSelectors: string[]
-  }
 }>()
 
-// Background/Popup → Content (via browser.tabs.sendMessage)
+// Background/Popup → Content (via browser.tabs.sendMessage). The content
+// script receives the full host-matched rule set (including each rule's
+// pathPattern). Path filtering happens client-side at walk time, so SPA
+// navigation doesn't require a round-trip to refresh the rule set.
 export type ContentAction =
   | {
       action: 'startTranslation'
       targetLang: string
       showToast?: boolean
-      skipSelectors?: string[]
-      includeSelectors?: string[]
+      rules?: SiteRule[]
     }
   | { action: 'stopTranslation' }
   | { action: 'getState' }

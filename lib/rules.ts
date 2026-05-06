@@ -124,18 +124,24 @@ function matchesDomain(pattern: string, hostname: string): boolean {
   return hSub === p.subdomain || hSub.endsWith('.' + p.subdomain)
 }
 
+export function matchRulesForHostname(rules: SiteRule[], hostname: string): SiteRule[] {
+  return rules.filter((r) => matchesDomain(r.domain, hostname))
+}
+
+export function selectorsForPath(rules: SiteRule[], pathname: string): MatchedRules {
+  const active = rules.filter(
+    (r) => r.pathPattern === null || pathMatches(r.pathPattern, pathname),
+  )
+  return {
+    skipSelectors: active.filter((r) => r.type === 'exclude').map((r) => r.selector),
+    includeSelectors: active.filter((r) => r.type === 'include').map((r) => r.selector),
+  }
+}
+
 export function matchRulesForUrl(
   rules: SiteRule[],
   hostname: string,
   pathname: string = '/',
 ): MatchedRules {
-  const matched = rules.filter(
-    (r) =>
-      matchesDomain(r.domain, hostname) &&
-      (r.pathPattern === null || pathMatches(r.pathPattern, pathname)),
-  )
-  return {
-    skipSelectors: matched.filter((r) => r.type === 'exclude').map((r) => r.selector),
-    includeSelectors: matched.filter((r) => r.type === 'include').map((r) => r.selector),
-  }
+  return selectorsForPath(matchRulesForHostname(rules, hostname), pathname)
 }

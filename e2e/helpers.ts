@@ -2,14 +2,14 @@ import type { Page, BrowserContext } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseRules, matchRulesForUrl, type SiteRule } from '../lib/rules'
+import { parseRules, matchRulesForHostname, type SiteRule } from '../lib/rules'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const builtinRulesRaw = readFileSync(resolve(__dirname, '../lib/rules.txt'), 'utf-8')
 const builtinRules = parseRules(builtinRulesRaw)
 
-async function computeSelectorsForPage(page: Page) {
-  const url = new URL(page.url())
+async function computeRulesForPage(page: Page): Promise<SiteRule[]> {
+  const hostname = new URL(page.url()).hostname
   const sw = await getServiceWorker(page.context())
   const settings = (await sw.evaluate(async () => {
     const r = await chrome.storage.sync.get('settings')
@@ -20,7 +20,7 @@ async function computeSelectorsForPage(page: Page) {
   if (settings.developerMode && typeof settings.customRules === 'string') {
     allRules.push(...parseRules(settings.customRules))
   }
-  return matchRulesForUrl(allRules, url.hostname, url.pathname)
+  return matchRulesForHostname(allRules, hostname)
 }
 
 export async function setCustomRules(context: BrowserContext, rules: string) {
@@ -74,9 +74,9 @@ export async function configureMockProvider(page: Page, baseURL: string) {
 export async function startTranslation(page: Page, targetLang = 'zh') {
   const tabId = await getTabId(page)
   const sw = await getServiceWorker(page.context())
-  const { skipSelectors, includeSelectors } = await computeSelectorsForPage(page)
+  const rules = await computeRulesForPage(page)
   await sw.evaluate(
-    async ([tabId, lang, skip, include]) => {
+    async ([tabId, lang, rules]) => {
       const key = `tab_translating_${tabId}`
       await chrome.storage.session.set({ [key]: lang })
       await chrome.scripting.executeScript({
@@ -86,11 +86,10 @@ export async function startTranslation(page: Page, targetLang = 'zh') {
       chrome.tabs.sendMessage(tabId, {
         action: 'startTranslation',
         targetLang: lang,
-        skipSelectors: skip,
-        includeSelectors: include,
+        rules,
       })
     },
-    [tabId, targetLang, skipSelectors, includeSelectors] as const,
+    [tabId, targetLang, rules] as const,
   )
 }
 
