@@ -137,6 +137,22 @@ ${appleRejectionBrFixture}
   </script>
 </body>
 </html>`,
+  '/scoped': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Scoped</title></head>
+<body>
+  <p data-target>This is a paragraph that the include rule should pick up.</p>
+  <p>This plain paragraph sits outside the path-gated include scope.</p>
+</body>
+</html>`,
+  '/regular': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Regular</title></head>
+<body>
+  <p data-target>Pre-existing paragraph on the regular page.</p>
+  <p>Plain paragraph rendered before SPA navigation occurs.</p>
+</body>
+</html>`,
   '/delayed-render': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Delayed Render</title></head>

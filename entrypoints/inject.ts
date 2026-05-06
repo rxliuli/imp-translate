@@ -1,5 +1,6 @@
 import { messager } from '@/lib/message'
 import type { ContentAction } from '@/lib/message'
+import { ContentScriptContext } from 'wxt/utils/content-script-context'
 import {
   extractBlocks,
   getVisibleBlocks,
@@ -27,6 +28,8 @@ import { detectLanguage } from '@/lib/language-detect'
 import { isUrlOnly } from '@/lib/utils'
 
 export default defineUnlistedScript(() => {
+  const ctx = new ContentScriptContext('inject')
+
   let extractOpts: ExtractOptions = {
     skipSelectors: [],
     includeSelectors: [],
@@ -39,9 +42,7 @@ export default defineUnlistedScript(() => {
   let observer: MutationObserver | null = null
   const shadowObservers = new Map<ShadowRoot, MutationObserver>()
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
-  let urlCheckTimer: ReturnType<typeof setInterval> | null = null
   let clickRescanTimer: ReturnType<typeof setTimeout> | null = null
-  let lastUrl = location.href
 
   function translateBatch(batch: TranslatableBlock[]) {
     for (const block of batch) {
@@ -241,17 +242,12 @@ export default defineUnlistedScript(() => {
   }
 
   function startUrlWatcher() {
-    urlCheckTimer = setInterval(() => {
-      if (location.href !== lastUrl) {
-        lastUrl = location.href
-        onUrlChange()
-      }
-    }, 500)
-    window.addEventListener('popstate', () => {
-      if (location.href !== lastUrl) {
-        lastUrl = location.href
-        onUrlChange()
-      }
+    // wxt:locationchange fires on history.pushState / replaceState / popstate.
+    // ContentScriptContext patches the History API once and dedupes across
+    // listeners, so we don't need our own polling loop or popstate handler.
+    ctx.addEventListener(window, 'wxt:locationchange', ({ newUrl }) => {
+      if (!isTranslating) return
+      onUrlChange(newUrl.href)
     })
   }
 
@@ -268,8 +264,21 @@ export default defineUnlistedScript(() => {
     if (hasNew) translateVisible()
   }
 
-  function onUrlChange() {
+  async function onUrlChange(url: string) {
     if (!isTranslating) return
+    // Path-gated rules (:matches-path) may activate or deactivate on navigation,
+    // so refetch selectors for the new URL before re-walking.
+    try {
+      const matched = await messager.sendMessage('getRulesForUrl', { url })
+      if (!isTranslating) return
+      extractOpts = {
+        ...extractOpts,
+        skipSelectors: matched.skipSelectors,
+        includeSelectors: matched.includeSelectors,
+      }
+    } catch {
+      // Background unreachable; reuse the existing selectors.
+    }
     pendingBlocks = extractBlocks(document.body, extractOpts)
     translateVisible()
     setTimeout(rescanBlocks, 1000)
@@ -337,7 +346,6 @@ export default defineUnlistedScript(() => {
     if (debugMode) injectDebugStyles()
     await waitForDOMReady()
     if (!isTranslating) return
-    lastUrl = location.href
     if (showToast) maybeShowToast()
     pendingBlocks = extractBlocks(document.body, extractOpts)
     document.addEventListener('scroll', onScroll, { passive: true, capture: true })
@@ -361,10 +369,6 @@ export default defineUnlistedScript(() => {
     if (scrollTimer) {
       clearTimeout(scrollTimer)
       scrollTimer = null
-    }
-    if (urlCheckTimer) {
-      clearInterval(urlCheckTimer)
-      urlCheckTimer = null
     }
     if (recheckTimer) {
       clearTimeout(recheckTimer)

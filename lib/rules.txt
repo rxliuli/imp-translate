@@ -6,6 +6,11 @@
 !   domain##selector   — skip (do not translate)
 !   domain#+#selector  — include (only translate inside)
 !   entity.* — match any TLD (e.g. google.* matches google.com, google.com.hk, google.co.uk)
+!   :matches-path(/regex/) selector — path-gated rule (uBO syntax). Slash-delimited
+!     value is a JS regex tested against location.pathname; bare value is a
+!     substring match. The pseudo must lead the selector. Examples:
+!       chatgpt.com#+#:matches-path(/^\/c\//) [data-message-author-role]
+!       web.telegram.org#+#:matches-path(/k/) .bubble .message
 !
 ! Each rule (or rule group) is preceded by a `!` URL comment listing the
 ! page(s) it was verified against. This lets future maintainers re-visit

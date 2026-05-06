@@ -4,21 +4,22 @@ import { translate } from '@/lib/translator'
 import { getCached, setCached, evictOldEntries } from '@/lib/cache'
 import { createTranslateService, type TranslateService } from '@/lib/translate-service'
 import { eldDetectLanguage } from '@/lib/eld-detect'
-import { parseRules, matchRulesForDomain } from '@/lib/rules'
+import { parseRules, matchRulesForUrl } from '@/lib/rules'
 import builtinRulesRaw from '@/lib/rules.txt?raw'
 import { PublicPath } from 'wxt/browser'
 
 const builtinRules = parseRules(builtinRulesRaw)
 
-async function getMatchedRulesForHostname(hostname: string) {
-  const builtin = matchRulesForDomain(builtinRules, hostname)
+async function getMatchedRulesForUrl(url: string | undefined) {
+  const { hostname, pathname } = parseUrl(url)
+  const builtin = matchRulesForUrl(builtinRules, hostname, pathname)
   let skipSelectors = builtin.skipSelectors
   let includeSelectors = builtin.includeSelectors
   try {
     const result = await browser.storage.sync.get('settings')
     const settings = result.settings as Record<string, unknown> | undefined
     if (settings?.developerMode && typeof settings.customRules === 'string') {
-      const custom = matchRulesForDomain(parseRules(settings.customRules), hostname)
+      const custom = matchRulesForUrl(parseRules(settings.customRules), hostname, pathname)
       skipSelectors = [...skipSelectors, ...custom.skipSelectors]
       includeSelectors = [...includeSelectors, ...custom.includeSelectors]
     }
@@ -26,12 +27,13 @@ async function getMatchedRulesForHostname(hostname: string) {
   return { skipSelectors, includeSelectors }
 }
 
-function hostnameFromUrl(url: string | undefined): string {
-  if (!url) return ''
+function parseUrl(url: string | undefined): { hostname: string; pathname: string } {
+  if (!url) return { hostname: '', pathname: '/' }
   try {
-    return new URL(url).hostname
+    const u = new URL(url)
+    return { hostname: u.hostname, pathname: u.pathname }
   } catch {
-    return ''
+    return { hostname: '', pathname: '/' }
   }
 }
 
@@ -82,9 +84,7 @@ async function startTranslationForTab(
   await browser.action.setIcon({ tabId, path: activeIcon })
   await injectContentScript(tabId)
   const tab = await browser.tabs.get(tabId)
-  const { skipSelectors, includeSelectors } = await getMatchedRulesForHostname(
-    hostnameFromUrl(tab.url),
-  )
+  const { skipSelectors, includeSelectors } = await getMatchedRulesForUrl(tab.url)
   await sendToTab(tabId, {
     action: 'startTranslation',
     targetLang,
@@ -225,6 +225,10 @@ export default defineBackground(() => {
     return eldDetectLanguage(data.text)
   })
 
+  messager.onMessage('getRulesForUrl', async ({ data }) => {
+    return await getMatchedRulesForUrl(data.url)
+  })
+
   // Per WebExtension spec, per-tab action icons reset on navigation (Chrome +
   // Firefox follow this; Safari preserves them). Reapply on commit — the
   // earliest event we can hook — so the icon doesn't blink to default during
@@ -259,9 +263,7 @@ export default defineBackground(() => {
     }
 
     await injectContentScript(details.tabId)
-    const { skipSelectors, includeSelectors } = await getMatchedRulesForHostname(
-      hostnameFromUrl(details.url),
-    )
+    const { skipSelectors, includeSelectors } = await getMatchedRulesForUrl(details.url)
     await sendToTab(details.tabId, {
       action: 'startTranslation',
       targetLang: lang,

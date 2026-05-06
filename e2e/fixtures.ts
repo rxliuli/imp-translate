@@ -14,6 +14,13 @@ export const test = base.extend<{
       headless: false,
       args: [
         '--headless=new',
+        // Aliases imp.test → 127.0.0.1 so site-rule tests can use a real
+        // hostname (tldts can't match rules against IPs — they have no TLD).
+        '--host-resolver-rules=MAP imp.test 127.0.0.1',
+        // Bypass the system HTTP proxy: a dev-machine proxy without imp.test
+        // in its exclusion list would otherwise intercept the alias and 502.
+        '--proxy-server=direct://',
+        '--proxy-bypass-list=*',
         `--disable-extensions-except=${pathToExtension}`,
         `--load-extension=${pathToExtension}`,
       ],

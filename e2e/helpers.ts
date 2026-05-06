@@ -1,4 +1,40 @@
 import type { Page, BrowserContext } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { parseRules, matchRulesForUrl, type SiteRule } from '../lib/rules'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const builtinRulesRaw = readFileSync(resolve(__dirname, '../lib/rules.txt'), 'utf-8')
+const builtinRules = parseRules(builtinRulesRaw)
+
+async function computeSelectorsForPage(page: Page) {
+  const url = new URL(page.url())
+  const sw = await getServiceWorker(page.context())
+  const settings = (await sw.evaluate(async () => {
+    const r = await chrome.storage.sync.get('settings')
+    return r.settings as { developerMode?: boolean; customRules?: string } | undefined
+  })) ?? {}
+
+  const allRules: SiteRule[] = [...builtinRules]
+  if (settings.developerMode && typeof settings.customRules === 'string') {
+    allRules.push(...parseRules(settings.customRules))
+  }
+  return matchRulesForUrl(allRules, url.hostname, url.pathname)
+}
+
+export async function setCustomRules(context: BrowserContext, rules: string) {
+  const sw = await getServiceWorker(context)
+  await sw.evaluate(async (customRules) => {
+    const existing = ((await chrome.storage.sync.get('settings')).settings ?? {}) as Record<
+      string,
+      unknown
+    >
+    await chrome.storage.sync.set({
+      settings: { ...existing, developerMode: true, customRules },
+    })
+  }, rules)
+}
 
 export async function getServiceWorker(context: BrowserContext) {
   let [sw] = context.serviceWorkers()
@@ -38,8 +74,9 @@ export async function configureMockProvider(page: Page, baseURL: string) {
 export async function startTranslation(page: Page, targetLang = 'zh') {
   const tabId = await getTabId(page)
   const sw = await getServiceWorker(page.context())
+  const { skipSelectors, includeSelectors } = await computeSelectorsForPage(page)
   await sw.evaluate(
-    async ([tabId, lang]) => {
+    async ([tabId, lang, skip, include]) => {
       const key = `tab_translating_${tabId}`
       await chrome.storage.session.set({ [key]: lang })
       await chrome.scripting.executeScript({
@@ -49,9 +86,11 @@ export async function startTranslation(page: Page, targetLang = 'zh') {
       chrome.tabs.sendMessage(tabId, {
         action: 'startTranslation',
         targetLang: lang,
+        skipSelectors: skip,
+        includeSelectors: include,
       })
     },
-    [tabId, targetLang] as const,
+    [tabId, targetLang, skipSelectors, includeSelectors] as const,
   )
 }
 

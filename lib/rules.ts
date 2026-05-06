@@ -4,11 +4,57 @@ export interface SiteRule {
   domain: string
   selector: string
   type: 'exclude' | 'include'
+  pathPattern: string | null
 }
 
 export interface MatchedRules {
   skipSelectors: string[]
   includeSelectors: string[]
+}
+
+const MATCHES_PATH_PREFIX = ':matches-path('
+
+function extractMatchesPath(rawSelector: string): {
+  pathPattern: string | null
+  selector: string
+} {
+  if (!rawSelector.startsWith(MATCHES_PATH_PREFIX)) {
+    return { pathPattern: null, selector: rawSelector }
+  }
+  let depth = 1
+  let i = MATCHES_PATH_PREFIX.length
+  while (i < rawSelector.length) {
+    const c = rawSelector[i]
+    if (c === '\\' && i + 1 < rawSelector.length) {
+      i += 2
+      continue
+    }
+    if (c === '(') depth++
+    else if (c === ')') {
+      depth--
+      if (depth === 0) break
+    }
+    i++
+  }
+  if (depth !== 0) return { pathPattern: null, selector: rawSelector }
+  const inner = rawSelector.slice(MATCHES_PATH_PREFIX.length, i)
+  const rest = rawSelector.slice(i + 1).trim()
+  return { pathPattern: inner, selector: rest === '' ? '*' : rest }
+}
+
+function pathMatches(pattern: string, pathname: string): boolean {
+  if (
+    pattern.length >= 2 &&
+    pattern.startsWith('/') &&
+    pattern.endsWith('/')
+  ) {
+    try {
+      return new RegExp(pattern.slice(1, -1)).test(pathname)
+    } catch {
+      return false
+    }
+  }
+  return pathname.includes(pattern)
 }
 
 export function parseRules(raw: string): SiteRule[] {
@@ -19,13 +65,25 @@ export function parseRules(raw: string): SiteRule[] {
 
     const includeMatch = trimmed.match(/^(.+?)#\+#(.+)$/)
     if (includeMatch) {
-      rules.push({ domain: includeMatch[1], selector: includeMatch[2].trim(), type: 'include' })
+      const { pathPattern, selector } = extractMatchesPath(includeMatch[2].trim())
+      rules.push({
+        domain: includeMatch[1],
+        selector,
+        type: 'include',
+        pathPattern,
+      })
       continue
     }
 
     const excludeMatch = trimmed.match(/^(.+?)##(.+)$/)
     if (excludeMatch) {
-      rules.push({ domain: excludeMatch[1], selector: excludeMatch[2].trim(), type: 'exclude' })
+      const { pathPattern, selector } = extractMatchesPath(excludeMatch[2].trim())
+      rules.push({
+        domain: excludeMatch[1],
+        selector,
+        type: 'exclude',
+        pathPattern,
+      })
     }
   }
   return rules
@@ -66,8 +124,16 @@ function matchesDomain(pattern: string, hostname: string): boolean {
   return hSub === p.subdomain || hSub.endsWith('.' + p.subdomain)
 }
 
-export function matchRulesForDomain(rules: SiteRule[], hostname: string): MatchedRules {
-  const matched = rules.filter((r) => matchesDomain(r.domain, hostname))
+export function matchRulesForUrl(
+  rules: SiteRule[],
+  hostname: string,
+  pathname: string = '/',
+): MatchedRules {
+  const matched = rules.filter(
+    (r) =>
+      matchesDomain(r.domain, hostname) &&
+      (r.pathPattern === null || pathMatches(r.pathPattern, pathname)),
+  )
   return {
     skipSelectors: matched.filter((r) => r.type === 'exclude').map((r) => r.selector),
     includeSelectors: matched.filter((r) => r.type === 'include').map((r) => r.selector),
