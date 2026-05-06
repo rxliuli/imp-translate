@@ -121,6 +121,12 @@ web.telegram.org##:matches-path(/a/) .message-content .message-title
 
 ! YouTube — include UGC containers; skip already-localized fields inside them
 
+! Cross-extension cooperation — skip the subtitle overlay rendered by
+! bilingual-tube (same author); already-bilingual subtitles don't need a
+! second translation pass.
+! https://chromewebstore.google.com/detail/bilingualtube/ombapcolopdeailifakdgaijhoncgpgn
+youtube.com###bilingual-tube-subtitle-overlay
+
 ! https://www.youtube.com/, https://www.youtube.com/results?search_query=javascript  (modern lockup: homepage cards + search secondary results)
 youtube.com#+#yt-lockup-view-model
 youtube.com##yt-content-metadata-view-model
