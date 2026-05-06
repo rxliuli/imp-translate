@@ -103,10 +103,21 @@ github.com##.react-directory-row
 ! https://chatgpt.com/c/<id>  (any conversation)
 chatgpt.com#+#[data-message-author-role]
 
-! Telegram Web (K client) — chat platform; include text-message containers, skip time/read-receipt span. Service bubbles (date dividers, "user joined") and media-only bubbles fall outside the include set automatically.
-! https://web.telegram.org/k/  (any chat)
-web.telegram.org#+#.bubble .message
-web.telegram.org##.message .time
+! Telegram Web — separate K (/k/) and A (/a/) SPAs with incompatible DOMs.
+! Each rule is path-gated so an active include selector on the wrong client
+! (whose DOM has no matching elements) doesn't suppress the entire page.
+! Include text-message containers, skip the time/read-receipt span; on A
+! also skip the sender-name title row that lives inside .message-content
+! (K's include scope is narrower and doesn't pull the title in).
+! Service bubbles (date dividers, "user joined") and media-only bubbles fall
+! outside the include set automatically on both clients.
+! https://web.telegram.org/k/  (any chat — Web K client)
+! https://web.telegram.org/a/  (any chat — Web A client)
+web.telegram.org#+#:matches-path(/k/) .bubble .message
+web.telegram.org##:matches-path(/k/) .message .time
+web.telegram.org#+#:matches-path(/a/) .message-content
+web.telegram.org##:matches-path(/a/) .message-content .MessageMeta
+web.telegram.org##:matches-path(/a/) .message-content .message-title
 
 ! YouTube — include UGC containers; skip already-localized fields inside them
 
