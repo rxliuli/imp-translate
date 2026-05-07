@@ -12,7 +12,7 @@ async function computeRulesForPage(page: Page): Promise<SiteRule[]> {
   const hostname = new URL(page.url()).hostname
   const sw = await getServiceWorker(page.context())
   const settings = (await sw.evaluate(async () => {
-    const r = await chrome.storage.sync.get('settings')
+    const r = await chrome.storage.local.get('settings')
     return r.settings as { developerMode?: boolean; customRules?: string } | undefined
   })) ?? {}
 
@@ -26,11 +26,11 @@ async function computeRulesForPage(page: Page): Promise<SiteRule[]> {
 export async function setCustomRules(context: BrowserContext, rules: string) {
   const sw = await getServiceWorker(context)
   await sw.evaluate(async (customRules) => {
-    const existing = ((await chrome.storage.sync.get('settings')).settings ?? {}) as Record<
+    const existing = ((await chrome.storage.local.get('settings')).settings ?? {}) as Record<
       string,
       unknown
     >
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       settings: { ...existing, developerMode: true, customRules },
     })
   }, rules)
@@ -56,7 +56,7 @@ export async function getTabId(page: Page): Promise<number> {
 export async function configureMockProvider(page: Page, baseURL: string) {
   const sw = await getServiceWorker(page.context())
   await sw.evaluate(async (endpoint) => {
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       settings: {
         provider: 'openai',
         targetLang: 'zh',
