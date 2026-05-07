@@ -77,6 +77,8 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 reddit.com#+#[slot="title"]
 reddit.com#+#[slot="text-body"]
 reddit.com#+#[slot="comment"]
+! https://www.reddit.com/user/rxliuli/  (user profile: overview + comments tabs)
+reddit.com#+#shreddit-profile-comment .md
 ! Notifications inbox — each item is a <notification-item> Web Component. Skips:
 !   - data-testid="title": Reddit's templated header ("X replied to your comment in Y", "Achievement unlocked!", "Your post just hit N views!") — structural chrome with variable user/subreddit/count slots, same role as YouTube comment #author-text. Reddit will localize this server-side.
 !   - data-testid="sent-at": "4h ago" timestamp
