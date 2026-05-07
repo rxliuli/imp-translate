@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const syncStore = new Map<string, unknown>()
+const localStore = new Map<string, unknown>()
 
 vi.stubGlobal('browser', {
   storage: {
-    sync: {
+    local: {
       get: async (key: string) => {
-        const val = syncStore.get(key)
+        const val = localStore.get(key)
         return val !== undefined ? { [key]: val } : {}
       },
       set: async (items: Record<string, unknown>) => {
         for (const [k, v] of Object.entries(items)) {
-          syncStore.set(k, v)
+          localStore.set(k, v)
         }
       },
     },
@@ -20,7 +20,7 @@ vi.stubGlobal('browser', {
 
 describe('storage', () => {
   beforeEach(() => {
-    syncStore.clear()
+    localStore.clear()
     vi.resetModules()
   })
 
@@ -35,7 +35,7 @@ describe('storage', () => {
   it('saveSettings only persists provided fields', async () => {
     const { saveSettings } = await import('./storage')
     await saveSettings({ targetLang: 'ja' })
-    const raw = syncStore.get('settings') as Record<string, unknown>
+    const raw = localStore.get('settings') as Record<string, unknown>
     expect(raw).toEqual({ targetLang: 'ja' })
   })
 
@@ -52,7 +52,7 @@ describe('storage', () => {
     const { saveSettings, getSettings } = await import('./storage')
     await saveSettings({ targetLang: 'ja' })
     await saveSettings({ provider: 'google' })
-    const raw = syncStore.get('settings') as Record<string, unknown>
+    const raw = localStore.get('settings') as Record<string, unknown>
     expect(raw).toEqual({ targetLang: 'ja', provider: 'google' })
     const settings = await getSettings()
     expect(settings.targetLang).toBe('ja')

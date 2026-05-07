@@ -13,7 +13,7 @@ const builtinRules = parseRules(builtinRulesRaw)
 async function getMatchedRulesForHostname(hostname: string): Promise<SiteRule[]> {
   const rules: SiteRule[] = matchRulesForHostname(builtinRules, hostname)
   try {
-    const result = await browser.storage.sync.get('settings')
+    const result = await browser.storage.local.get('settings')
     const settings = result.settings as Record<string, unknown> | undefined
     if (settings?.developerMode && typeof settings.customRules === 'string') {
       rules.push(...matchRulesForHostname(parseRules(settings.customRules), hostname))

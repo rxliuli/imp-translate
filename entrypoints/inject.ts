@@ -333,7 +333,7 @@ export default defineUnlistedScript(() => {
 
   async function loadDeveloperSettings() {
     try {
-      const result = await browser.storage.sync.get('settings')
+      const result = await browser.storage.local.get('settings')
       const settings = result.settings as Record<string, unknown> | undefined
       debugMode = settings?.debugMode === true
     } catch {}
