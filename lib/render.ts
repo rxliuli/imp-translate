@@ -1,4 +1,4 @@
-import { RESULT_CLASS, type TranslatableBlock } from './dom'
+import { RESULT_CLASS, PROCESSED_ATTR, type TranslatableBlock } from './dom'
 
 function hasVisibleText(node: Node): boolean {
   if (node.nodeType === Node.TEXT_NODE) return !!node.textContent?.trim()
@@ -164,6 +164,7 @@ export function injectLoading(blocks: TranslatableBlock[]) {
   ensureStyles()
   for (const { element, text } of blocks) {
     if (element.querySelector(`.${RESULT_CLASS}`)) continue
+    if (element.parentElement?.closest(`[${PROCESSED_ATTR}]`)) continue
 
     const target = findInjectionPoint(element)
     clearLineClamp(element)

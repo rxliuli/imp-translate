@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { injectLoading, replaceWithError, replaceWithTranslation, repositionTranslation } from './render'
-import type { TranslatableBlock } from './dom'
+import { extractBlocks, markTranslated, type TranslatableBlock } from './dom'
 
 describe('render', () => {
   it('should inject inside innermost inline element', () => {
@@ -318,5 +318,36 @@ describe('render', () => {
     expect(block.querySelector('br.imp-translate-br')).toBeNull()
     expect(font.previousSibling?.nodeType).toBe(Node.TEXT_NODE)
     expect(font.previousSibling?.textContent).toBe(' ')
+  })
+
+  it('should not produce duplicate translations when parent and child are both extracted', () => {
+    // Simulates: parent <span> and child <strong> both added in the same
+    // mutation batch (e.g. Google search re-render), causing extractBlocks
+    // to return both as separate blocks before markTranslated runs.
+    document.body.innerHTML = `
+      <div>
+        <span class="desc"><strong>Enable Popup Persistence</strong>:</span>
+      </div>
+    `
+    const span = document.querySelector('span.desc')! as HTMLElement
+    const strong = span.querySelector('strong')! as HTMLElement
+
+    const blocks: TranslatableBlock[] = [
+      { element: span, text: 'Enable Popup Persistence:' },
+      { element: strong, text: 'Enable Popup Persistence' },
+    ]
+
+    // translateBlocks marks all blocks before calling injectLoading
+    for (const b of blocks) {
+      markTranslated(b.element)
+      b.element.setAttribute('data-imp-text', b.text)
+    }
+
+    injectLoading(blocks)
+
+    // Only the parent should get a loading indicator, not the nested child
+    const results = span.querySelectorAll('font.imp-translate-result')
+    expect(results).toHaveLength(1)
+    expect(results[0].parentElement).toBe(span)
   })
 })
