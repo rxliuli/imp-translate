@@ -141,6 +141,8 @@ export default defineBackground(() => {
 
   browser.action.onClicked.addListener(() => toggleTranslationForActiveTab())
 
+  // browser.commands is unavailable on Firefox Android
+  // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/commands#browser_compatibility
   if (import.meta.env.BROWSER !== 'firefox') {
     browser.commands.onCommand.addListener(async (command) => {
       if (command !== 'toggle-translate') return
