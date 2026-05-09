@@ -19,6 +19,7 @@ export const messager = defineExtensionMessaging<{
   isMobile(): boolean
   openOptionsPage(): void
   detectLanguage(data: { text: string }): string
+  refreshRemoteRules(): void
 }>()
 
 // Background/Popup → Content (via browser.tabs.sendMessage). The content

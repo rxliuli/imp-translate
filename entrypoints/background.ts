@@ -5,13 +5,12 @@ import { getCached, setCached, evictOldEntries } from '@/lib/cache'
 import { createTranslateService, type TranslateService } from '@/lib/translate-service'
 import { eldDetectLanguage } from '@/lib/eld-detect'
 import { parseRules, matchRulesForHostname, type SiteRule } from '@/lib/rules'
-import builtinRulesRaw from '@/lib/rules.txt?raw'
+import { getEffectiveRules, setupRemoteRulesAlarm, fetchRemoteRulesIfNeeded } from '@/lib/remote-rules'
 import { PublicPath } from 'wxt/browser'
 
-const builtinRules = parseRules(builtinRulesRaw)
-
 async function getMatchedRulesForHostname(hostname: string): Promise<SiteRule[]> {
-  const rules: SiteRule[] = matchRulesForHostname(builtinRules, hostname)
+  const effectiveRules = await getEffectiveRules()
+  const rules: SiteRule[] = matchRulesForHostname(effectiveRules, hostname)
   try {
     const result = await browser.storage.local.get('settings')
     const settings = result.settings as Record<string, unknown> | undefined
@@ -131,6 +130,8 @@ async function setupMobileAction() {
 }
 
 export default defineBackground(() => {
+  setupRemoteRulesAlarm()
+
   browser.runtime.onInstalled.addListener(() => setupMobileAction())
   browser.runtime.onStartup.addListener(() => setupMobileAction())
 
@@ -216,6 +217,10 @@ export default defineBackground(() => {
 
   messager.onMessage('detectLanguage', ({ data }) => {
     return eldDetectLanguage(data.text)
+  })
+
+  messager.onMessage('refreshRemoteRules', async () => {
+    await fetchRemoteRulesIfNeeded(true)
   })
 
   // Per WebExtension spec, per-tab action icons reset on navigation (Chrome +

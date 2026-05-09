@@ -6,6 +6,7 @@ import {
   type TranslationProvider,
 } from '@/lib/storage'
 import { translate } from '@/lib/translator'
+import { messager } from '@/lib/message'
 import { LANGUAGES_SORTED } from '@/lib/languages'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -282,6 +283,13 @@ export function App() {
                 </p>
               </div>
             </div>
+
+            <Button
+              variant="outline"
+              onClick={() => messager.sendMessage('refreshRemoteRules', undefined)}
+            >
+              Refresh Remote Rules
+            </Button>
           </>
         )}
       </section>
