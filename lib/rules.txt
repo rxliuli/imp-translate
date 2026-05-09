@@ -146,6 +146,11 @@ youtube.com##ytd-watch-metadata #actions
 youtube.com##ytd-watch-metadata #expand
 youtube.com##ytd-watch-metadata #social-links
 youtube.com##ytd-watch-info-text
+! https://www.youtube.com/watch?v=2wkvg_uWOc4  ("In this video" transcript panel)
+youtube.com#+#transcript-segment-view-model
+youtube.com##.ytwTranscriptSegmentViewModelTimestamp
+youtube.com##.ytwTranscriptSegmentViewModelTimestampA11yLabel
+
 ! Comment chrome: usernames, timestamps, comments header, like/dislike/reply bar, expander toggles, and reply-thread show/hide buttons.
 youtube.com##ytd-comment-view-model #author-text
 youtube.com##ytd-comment-view-model #published-time-text
