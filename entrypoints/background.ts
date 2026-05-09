@@ -124,7 +124,7 @@ async function toggleTranslationForActiveTab() {
 
 async function isMobile(): Promise<boolean> {
   const info = await browser.runtime.getPlatformInfo()
-  return info.os === 'android' || info.os === 'ios' || import.meta.env.DEV
+  return info.os === 'android' || info.os === 'ios'
 }
 
 async function setupMobileAction() {
@@ -141,10 +141,12 @@ export default defineBackground(() => {
 
   browser.action.onClicked.addListener(() => toggleTranslationForActiveTab())
 
-  browser.commands.onCommand.addListener(async (command) => {
-    if (command !== 'toggle-translate') return
-    await toggleTranslationForActiveTab()
-  })
+  if (import.meta.env.BROWSER !== 'firefox') {
+    browser.commands.onCommand.addListener(async (command) => {
+      if (command !== 'toggle-translate') return
+      await toggleTranslationForActiveTab()
+    })
+  }
 
   messager.onMessage('getSettings', async () => {
     return await getSettings()
