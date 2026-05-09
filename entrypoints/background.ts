@@ -31,6 +31,10 @@ function hostnameFromUrl(url: string | undefined): string {
 }
 
 async function injectContentScript(tabId: number) {
+  try {
+    const resp = await sendToTab(tabId, { action: 'getState' })
+    if (resp !== undefined) return
+  } catch {}
   await browser.scripting.executeScript({
     target: { tabId },
     files: ['/inject.js'],
@@ -120,7 +124,7 @@ async function toggleTranslationForActiveTab() {
 
 async function isMobile(): Promise<boolean> {
   const info = await browser.runtime.getPlatformInfo()
-  return info.os === 'android' || info.os === 'ios'
+  return info.os === 'android' || info.os === 'ios' || import.meta.env.DEV
 }
 
 async function setupMobileAction() {
@@ -205,6 +209,12 @@ export default defineBackground(() => {
     if (!tabId) return
     await setTabTranslatingLang(tabId, null)
     await browser.action.setIcon({ tabId, path: defaultIcon })
+  })
+
+  messager.onMessage('startSelfTab', async ({ sender, data }) => {
+    const tabId = sender.tab?.id
+    if (!tabId) return
+    await setTabTranslatingLang(tabId, data.targetLang)
   })
 
   messager.onMessage('isMobile', async () => {

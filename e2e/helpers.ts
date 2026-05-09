@@ -71,12 +71,12 @@ export async function configureMockProvider(page: Page, baseURL: string) {
   }, `${baseURL}/v1/chat/completions`)
 }
 
-export async function startTranslation(page: Page, targetLang = 'zh') {
+export async function startTranslation(page: Page, targetLang = 'zh', showToast = false) {
   const tabId = await getTabId(page)
   const sw = await getServiceWorker(page.context())
   const rules = await computeRulesForPage(page)
   await sw.evaluate(
-    async ([tabId, lang, rules]) => {
+    async ([tabId, lang, showToast, rules]) => {
       const key = `tab_translating_${tabId}`
       await chrome.storage.session.set({ [key]: lang })
       await chrome.scripting.executeScript({
@@ -86,11 +86,20 @@ export async function startTranslation(page: Page, targetLang = 'zh') {
       chrome.tabs.sendMessage(tabId, {
         action: 'startTranslation',
         targetLang: lang,
+        showToast,
         rules,
       })
     },
-    [tabId, targetLang, rules] as const,
+    [tabId, targetLang, showToast, rules] as const,
   )
+}
+
+export async function enableMobileMode(context: BrowserContext) {
+  const sw = await getServiceWorker(context)
+  await sw.evaluate(() => {
+    chrome.runtime.getPlatformInfo = (() =>
+      Promise.resolve({ os: 'android', arch: 'x86-64', nacl_arch: 'x86-64' })) as any
+  })
 }
 
 export async function stopTranslation(page: Page) {

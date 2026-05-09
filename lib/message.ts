@@ -16,6 +16,7 @@ export const messager = defineExtensionMessaging<{
   getTabState(data: { tabId: number }): string | null
   getSelfTabState(): string | null
   stopSelfTab(): void
+  startSelfTab(data: { targetLang: string }): void
   isMobile(): boolean
   openOptionsPage(): void
   detectLanguage(data: { text: string }): string

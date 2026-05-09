@@ -1,4 +1,5 @@
 import { RESULT_CLASS, PROCESSED_ATTR, type TranslatableBlock } from './dom'
+import { LANGUAGES_SORTED } from './languages'
 
 function hasVisibleText(node: Node): boolean {
   if (node.nodeType === Node.TEXT_NODE) return !!node.textContent?.trim()
@@ -381,11 +382,42 @@ function ensureToastStyles() {
     #${TOAST_ID} button:active { opacity: 0.7; }
     #${TOAST_ID} .imp-toast-restore { color: #2563eb; }
     #${TOAST_ID} .imp-toast-settings { color: #666; font-size: 16px; }
+    #${TOAST_ID} .imp-toast-lang {
+      appearance: none;
+      -webkit-appearance: none;
+      background: rgba(0, 0, 0, 0.06);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 4px;
+      padding: 4px 20px 4px 8px;
+      font: inherit;
+      font-size: 13px;
+      color: inherit;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 6px center;
+      flex-shrink: 0;
+    }
+    @media (prefers-color-scheme: dark) {
+      #${TOAST_ID} .imp-toast-lang {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.15);
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23aaa'/%3E%3C/svg%3E");
+      }
+    }
   `
   document.head.appendChild(style)
 }
 
-export function showToastBar(onRestore: () => void, onSettings: () => void) {
+export interface ToastBarOptions {
+  currentLang: string
+  onRestore: () => void
+  onSettings: () => void
+  onLangChange: (lang: string) => void
+  onResetTimer?: (delayMs: number) => void
+}
+
+export function showToastBar(options: ToastBarOptions) {
   if (document.getElementById(TOAST_ID)) return
   ensureToastStyles()
 
@@ -393,21 +425,41 @@ export function showToastBar(onRestore: () => void, onSettings: () => void) {
   bar.id = TOAST_ID
   bar.setAttribute('translate', 'no')
 
-  const text = document.createElement('span')
-  text.className = 'imp-toast-text'
-  text.textContent = 'Page translated'
+  const langSelect = document.createElement('select')
+  langSelect.className = 'imp-toast-lang'
+  for (const [code, name] of LANGUAGES_SORTED) {
+    const opt = document.createElement('option')
+    opt.value = code
+    opt.textContent = name
+    if (code === options.currentLang) opt.selected = true
+    langSelect.appendChild(opt)
+  }
+  let justChanged = false
+  langSelect.addEventListener('change', () => {
+    justChanged = true
+    setTimeout(() => { justChanged = false }, 100)
+    options.onLangChange(langSelect.value)
+    options.onResetTimer?.(5000)
+  })
+  langSelect.addEventListener('focus', () => options.onResetTimer?.(15000))
+  langSelect.addEventListener('click', () => {
+    if (!justChanged) options.onResetTimer?.(15000)
+  })
+
+  const spacer = document.createElement('span')
+  spacer.className = 'imp-toast-text'
 
   const restoreBtn = document.createElement('button')
   restoreBtn.className = 'imp-toast-restore'
   restoreBtn.textContent = 'Show original'
-  restoreBtn.addEventListener('click', onRestore)
+  restoreBtn.addEventListener('click', options.onRestore)
 
   const settingsBtn = document.createElement('button')
   settingsBtn.className = 'imp-toast-settings'
   settingsBtn.textContent = '⚙'
-  settingsBtn.addEventListener('click', onSettings)
+  settingsBtn.addEventListener('click', options.onSettings)
 
-  bar.append(text, restoreBtn, settingsBtn)
+  bar.append(langSelect, spacer, restoreBtn, settingsBtn)
   document.body.appendChild(bar)
 }
 

@@ -26,6 +26,7 @@ import {
   ensureShadowStyles,
 } from '@/lib/render'
 import { detectLanguage } from '@/lib/language-detect'
+import { saveSettings } from '@/lib/storage'
 import { isUrlOnly } from '@/lib/utils'
 
 export default defineUnlistedScript(() => {
@@ -308,17 +309,31 @@ export default defineUnlistedScript(() => {
   async function maybeShowToast() {
     const mobile = await messager.sendMessage('isMobile')
     if (!mobile) return
-    showToastBar(
-      () => {
+    showToastBar({
+      currentLang: targetLang,
+      onRestore: () => {
         dismissToast()
         stopTranslation()
         messager.sendMessage('stopSelfTab')
       },
-      () => {
+      onSettings: () => {
         dismissToast()
         messager.sendMessage('openOptionsPage')
       },
-    )
+      onLangChange: async (lang) => {
+        const rules = hostRules
+        stopTranslation(true)
+        await saveSettings({ targetLang: lang })
+        messager.sendMessage('startSelfTab', { targetLang: lang })
+        await startTranslation(lang, false, rules)
+      },
+      onResetTimer: (delayMs) => {
+        if (toastTimer) {
+          clearTimeout(toastTimer)
+        }
+        toastTimer = setTimeout(dismissToast, delayMs)
+      },
+    })
     toastTimer = setTimeout(dismissToast, 5000)
   }
 
@@ -363,7 +378,7 @@ export default defineUnlistedScript(() => {
     await translateVisible()
   }
 
-  function stopTranslation() {
+  function stopTranslation(keepToast = false) {
     isTranslating = false
     if (observer) {
       observer.disconnect()
@@ -397,7 +412,7 @@ export default defineUnlistedScript(() => {
     removeStyles()
     removeDebugStyles()
     debugMode = false
-    dismissToast()
+    if (!keepToast) dismissToast()
     pendingBlocks = []
   }
 
