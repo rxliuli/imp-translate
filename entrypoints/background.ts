@@ -40,12 +40,8 @@ function hostnameFromUrl(url: string | undefined): string {
 }
 
 async function injectContentScript(tabId: number) {
-  try {
-    const resp = await sendToTab(tabId, { action: 'getState' })
-    if (resp !== undefined) return
-  } catch {}
   await browser.scripting.executeScript({
-    target: { tabId },
+    target: { tabId, allFrames: true },
     files: ['/inject.js'],
   })
 }
@@ -265,29 +261,31 @@ export default defineBackground(() => {
   })
 
   browser.webNavigation.onDOMContentLoaded.addListener(async (details) => {
-    if (details.frameId !== 0) return
     if (isPdfUrl(details.url)) return
     const lang = await getTabTranslatingLang(details.tabId)
     if (!lang) return
 
-    try {
-      const [result] = await browser.scripting.executeScript({
-        target: { tabId: details.tabId },
-        func: () =>
-          (performance.getEntriesByType('navigation') as PerformanceNavigationTiming[])[0]
-            ?.type,
-      })
-      if (result?.result === 'reload') {
-        await setTabTranslatingLang(details.tabId, null)
-        await browser.action.setIcon({ tabId: details.tabId, path: defaultIcon })
-        return
+    if (details.frameId === 0) {
+      try {
+        const [result] = await browser.scripting.executeScript({
+          target: { tabId: details.tabId },
+          func: () =>
+            (performance.getEntriesByType('navigation') as PerformanceNavigationTiming[])[0]
+              ?.type,
+        })
+        if (result?.result === 'reload') {
+          await setTabTranslatingLang(details.tabId, null)
+          await browser.action.setIcon({ tabId: details.tabId, path: defaultIcon })
+          return
+        }
+      } catch {
+        // scripting may fail on restricted pages; skip reload check
       }
-    } catch {
-      // scripting may fail on restricted pages; skip reload check
     }
 
     await injectContentScript(details.tabId)
-    const rules = await getMatchedRulesForHostname(hostnameFromUrl(details.url))
+    const tab = await browser.tabs.get(details.tabId)
+    const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
     await sendToTab(details.tabId, {
       action: 'startTranslation',
       targetLang: lang,

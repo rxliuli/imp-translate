@@ -80,7 +80,7 @@ export async function startTranslation(page: Page, targetLang = 'zh', showToast 
       const key = `tab_translating_${tabId}`
       await chrome.storage.session.set({ [key]: lang })
       await chrome.scripting.executeScript({
-        target: { tabId },
+        target: { tabId, allFrames: true },
         files: ['/inject.js'],
       })
       chrome.tabs.sendMessage(tabId, {

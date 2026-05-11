@@ -154,6 +154,33 @@ ${appleRejectionBrFixture}
   <p>Plain paragraph rendered before SPA navigation occurs.</p>
 </body>
 </html>`,
+  '/iframe-content': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Iframe Content</title></head>
+<body>
+  <p>This paragraph lives inside an iframe and should be translated.</p>
+</body>
+</html>`,
+  '/with-iframes': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Page With Iframes</title></head>
+<body>
+  <h1>Main page content for translation testing.</h1>
+  <iframe id="large-iframe" src="/iframe-content" width="400" height="200"></iframe>
+  <iframe id="tiny-iframe" src="/iframe-content" width="1" height="1"></iframe>
+  <button id="add-iframe">Add iframe</button>
+  <script>
+    document.getElementById('add-iframe').addEventListener('click', function() {
+      var iframe = document.createElement('iframe');
+      iframe.id = 'dynamic-iframe';
+      iframe.src = '/iframe-content';
+      iframe.width = '400';
+      iframe.height = '200';
+      document.body.appendChild(iframe);
+    });
+  </script>
+</body>
+</html>`,
   '/delayed-render': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Delayed Render</title></head>

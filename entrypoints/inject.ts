@@ -30,6 +30,12 @@ import { saveSettings } from '@/lib/storage'
 import { isUrlOnly } from '@/lib/utils'
 
 export default defineUnlistedScript(() => {
+  const w = window as unknown as Record<string, unknown>
+  if (w.__imp_injected) return
+  w.__imp_injected = true
+
+  if (window.self !== window.top && (window.innerWidth < 100 || window.innerHeight < 40)) return
+
   const ctx = new ContentScriptContext('inject')
 
   // Host-matched rules (each carries its own pathPattern). Path filtering
