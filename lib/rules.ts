@@ -96,6 +96,23 @@ interface ParsedPattern {
 }
 
 function parsePattern(pattern: string): ParsedPattern | null {
+  if (pattern.startsWith('*.')) {
+    const rest = pattern.slice(2)
+    if (rest.endsWith('.*')) {
+      const head = rest.slice(0, -2)
+      const parts = head.split('.')
+      const entity = parts.pop()
+      if (!entity) return null
+      return { entity, subdomain: '*', publicSuffix: null }
+    }
+    const parsed = parse(rest)
+    if (!parsed.domainWithoutSuffix || !parsed.publicSuffix) return null
+    return {
+      entity: parsed.domainWithoutSuffix,
+      subdomain: '*',
+      publicSuffix: parsed.publicSuffix,
+    }
+  }
   if (pattern.endsWith('.*')) {
     const head = pattern.slice(0, -2)
     const parts = head.split('.')
@@ -119,8 +136,9 @@ function matchesDomain(pattern: string, hostname: string): boolean {
   if (!h.domainWithoutSuffix) return false
   if (h.domainWithoutSuffix !== p.entity) return false
   if (p.publicSuffix !== null && h.publicSuffix !== p.publicSuffix) return false
-  if (!p.subdomain) return true
+  if (p.subdomain === '*') return true
   const hSub = h.subdomain ?? ''
+  if (!p.subdomain) return hSub === ''
   return hSub === p.subdomain || hSub.endsWith('.' + p.subdomain)
 }
 

@@ -76,10 +76,10 @@ twitter.com##.tweet-btn
     expect(matched.includeSelectors).toEqual(['[slot="text-body"]', '[slot="title"]'])
   })
 
-  it('matches subdomain', () => {
+  it('does not match www subdomain for bare domain rule', () => {
     const matched = matchRulesForUrl(rules, 'www.reddit.com')
-    expect(matched.skipSelectors).toEqual(['.search-btn'])
-    expect(matched.includeSelectors).toEqual(['[slot="text-body"]', '[slot="title"]'])
+    expect(matched.skipSelectors).toHaveLength(0)
+    expect(matched.includeSelectors).toHaveLength(0)
   })
 
   it('returns empty arrays for unmatched domain', () => {
@@ -108,10 +108,10 @@ mail.google.*##.gmail-toolbar
     expect(matchRulesForUrl(rules, 'google.de').skipSelectors).toContain('[role="navigation"]')
   })
 
-  it('matches subdomains of entity-pattern hostnames', () => {
-    expect(matchRulesForUrl(rules, 'www.google.com').skipSelectors).toContain('[role="navigation"]')
-    expect(matchRulesForUrl(rules, 'www.google.com.hk').skipSelectors).toContain('[role="navigation"]')
-    expect(matchRulesForUrl(rules, 'mail.google.de').skipSelectors).toContain('[role="navigation"]')
+  it('entity pattern does not match subdomains', () => {
+    expect(matchRulesForUrl(rules, 'www.google.com').skipSelectors).not.toContain('[role="navigation"]')
+    expect(matchRulesForUrl(rules, 'www.google.com.hk').skipSelectors).not.toContain('[role="navigation"]')
+    expect(matchRulesForUrl(rules, 'mail.google.de').skipSelectors).not.toContain('[role="navigation"]')
   })
 
   it('does not match unrelated entity that contains the same name', () => {
@@ -143,6 +143,43 @@ mail.google.*##.gmail-toolbar
     expect(matchRulesForUrl(searchRules, 'mail.google.com').includeSelectors).toHaveLength(0)
     expect(matchRulesForUrl(searchRules, 'drive.google.com').includeSelectors).toHaveLength(0)
     expect(matchRulesForUrl(searchRules, 'docs.google.com').includeSelectors).toHaveLength(0)
+  })
+})
+
+describe('bare domain only matches bare + www', () => {
+  const rules = parseRules(`
+x.com#+#[data-testid="tweetText"]
+`)
+
+  it('matches bare domain', () => {
+    expect(matchRulesForUrl(rules, 'x.com').includeSelectors).toHaveLength(1)
+  })
+
+  it('does not match any subdomain', () => {
+    expect(matchRulesForUrl(rules, 'www.x.com').includeSelectors).toHaveLength(0)
+    expect(matchRulesForUrl(rules, 'devcommunity.x.com').includeSelectors).toHaveLength(0)
+    expect(matchRulesForUrl(rules, 'developer.x.com').includeSelectors).toHaveLength(0)
+  })
+})
+
+describe('wildcard subdomain *.domain', () => {
+  const rules = parseRules(`
+*.wikipedia.org##.mw-editsection
+`)
+
+  it('matches any subdomain', () => {
+    expect(matchRulesForUrl(rules, 'en.wikipedia.org').skipSelectors).toContain('.mw-editsection')
+    expect(matchRulesForUrl(rules, 'fr.wikipedia.org').skipSelectors).toContain('.mw-editsection')
+    expect(matchRulesForUrl(rules, 'zh.wikipedia.org').skipSelectors).toContain('.mw-editsection')
+  })
+
+  it('matches bare and www too', () => {
+    expect(matchRulesForUrl(rules, 'wikipedia.org').skipSelectors).toContain('.mw-editsection')
+    expect(matchRulesForUrl(rules, 'www.wikipedia.org').skipSelectors).toContain('.mw-editsection')
+  })
+
+  it('does not match different domain', () => {
+    expect(matchRulesForUrl(rules, 'en.wikimedia.org').skipSelectors).toHaveLength(0)
   })
 })
 

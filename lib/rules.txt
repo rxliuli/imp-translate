@@ -6,6 +6,8 @@
 !   domain##selector   — skip (do not translate)
 !   domain#+#selector  — include (only translate inside)
 !   entity.* — match any TLD (e.g. google.* matches google.com, google.com.hk, google.co.uk)
+!   *.domain — match any subdomain (e.g. *.wikipedia.org matches en.wikipedia.org, fr.wikipedia.org)
+!   Bare domains match exactly (e.g. x.com matches only x.com, NOT www.x.com or devcommunity.x.com)
 !   :matches-path(/regex/) selector — path-gated rule (uBO syntax). Slash-delimited
 !     value is a JS regex tested against location.pathname; bare value is a
 !     substring match. The pseudo must lead the selector. Examples:
@@ -74,36 +76,36 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 ! Reddit — component-based platform; include the post/comment text slots only. Author names, vote counts, action rows, and chrome (header, sidebar) sit outside the include set automatically.
 ! https://www.reddit.com/r/programming/  (subreddit feed: titles + text-body for text posts)
 ! https://www.reddit.com/r/programming/comments/<id>/  (post detail: title + body + comments)
-reddit.com#+#[slot="title"]
-reddit.com#+#[slot="text-body"]
-reddit.com#+#[slot="comment"]
+*.reddit.com#+#[slot="title"]
+*.reddit.com#+#[slot="text-body"]
+*.reddit.com#+#[slot="comment"]
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=all&t=week  (search: post titles, community descriptions)
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=comment&t=week  (search comments: comment text + parent post title)
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=media&t=week  (search media: post titles below thumbnails)
-reddit.com#+#[data-testid="post-title-text"]
-reddit.com#+#[data-testid="search-subreddit-desc-text"]
-reddit.com#+#.i18n-search-comment-content
-reddit.com#+#[data-testid="search-sdui-comment-unit"] h2
-reddit.com#+#search-media-feed a.line-clamp-2
+*.reddit.com#+#[data-testid="post-title-text"]
+*.reddit.com#+#[data-testid="search-subreddit-desc-text"]
+*.reddit.com#+#.i18n-search-comment-content
+*.reddit.com#+#[data-testid="search-sdui-comment-unit"] h2
+*.reddit.com#+#search-media-feed a.line-clamp-2
 ! https://www.reddit.com/user/rxliuli/  (user profile: overview + comments tabs)
-reddit.com#+#shreddit-profile-comment .md
+*.reddit.com#+#shreddit-profile-comment .md
 ! Notifications inbox — each item is a <notification-item> Web Component. Skips:
 !   - data-testid="title": Reddit's templated header ("X replied to your comment in Y", "Achievement unlocked!", "Your post just hit N views!") — structural chrome with variable user/subreddit/count slots, same role as YouTube comment #author-text. Reddit will localize this server-side.
 !   - data-testid="sent-at": "4h ago" timestamp
 !   - notification-context-menu: kebab menu items (slotted into hover-actions)
 ! https://www.reddit.com/notifications
-reddit.com#+#notification-item
-reddit.com##notification-item [data-testid="title"]
-reddit.com##notification-item [data-testid="sent-at"]
-reddit.com##notification-item notification-context-menu
+*.reddit.com#+#notification-item
+*.reddit.com##notification-item [data-testid="title"]
+*.reddit.com##notification-item [data-testid="sent-at"]
+*.reddit.com##notification-item notification-context-menu
 ! Reddit Chat — message bodies + link-preview cards live inside nested Shadow DOM (rs-timeline-event > shadow > rs-external-link-preview > shadow). The walker pierces open shadow roots, and include matching crosses shadow boundaries via closestThroughShadow.
 ! https://chat.reddit.com/  (any chat room — actual room URLs are private)
-reddit.com#+#.room-message-text
-reddit.com#+#rs-external-link-preview
+*.reddit.com#+#.room-message-text
+*.reddit.com#+#rs-external-link-preview
 
 ! Wikipedia — document-style site; default walker handles main content. Only one nuisance: section-heading [edit] links bleed into the heading translation.
 ! https://en.wikipedia.org/wiki/Public_Suffix_List
-wikipedia.org##.mw-editsection
+*.wikipedia.org##.mw-editsection
 
 ! GitHub — document-style site; default walker handles README / issue / PR body via .markdown-body. Skip the repo home file tree where filenames merge with commit messages.
 ! https://github.com/microsoft/vscode  (repo home: file tree)
@@ -135,40 +137,40 @@ web.telegram.org##:matches-path(/a/) .message-content .message-title
 ! bilingual-tube (same author); already-bilingual subtitles don't need a
 ! second translation pass.
 ! https://chromewebstore.google.com/detail/bilingualtube/ombapcolopdeailifakdgaijhoncgpgn
-youtube.com###bilingual-tube-subtitle-overlay
+*.youtube.com###bilingual-tube-subtitle-overlay
 
 ! https://www.youtube.com/, https://www.youtube.com/results?search_query=javascript  (modern lockup: homepage cards + search secondary results)
-youtube.com#+#yt-lockup-view-model
-youtube.com##yt-content-metadata-view-model
+*.youtube.com#+#yt-lockup-view-model
+*.youtube.com##yt-content-metadata-view-model
 
 ! https://www.youtube.com/results?search_query=javascript  (older lockup: primary search results)
-youtube.com#+#ytd-video-renderer
-youtube.com###metadata-line
-youtube.com##ytd-channel-name
+*.youtube.com#+#ytd-video-renderer
+*.youtube.com###metadata-line
+*.youtube.com##ytd-channel-name
 
 ! https://www.youtube.com/watch?v=V6kJKxvbgZ0  (title + description block, comments below)
-youtube.com#+#ytd-watch-metadata
-youtube.com#+#ytd-comments
-youtube.com##ytd-watch-metadata #owner
-youtube.com##ytd-watch-metadata #actions
-youtube.com##ytd-watch-metadata #expand
-youtube.com##ytd-watch-metadata #social-links
-youtube.com##ytd-watch-info-text
+*.youtube.com#+#ytd-watch-metadata
+*.youtube.com#+#ytd-comments
+*.youtube.com##ytd-watch-metadata #owner
+*.youtube.com##ytd-watch-metadata #actions
+*.youtube.com##ytd-watch-metadata #expand
+*.youtube.com##ytd-watch-metadata #social-links
+*.youtube.com##ytd-watch-info-text
 ! https://www.youtube.com/watch?v=2wkvg_uWOc4  ("In this video" transcript panel)
-youtube.com#+#transcript-segment-view-model
-youtube.com##.ytwTranscriptSegmentViewModelTimestamp
-youtube.com##.ytwTranscriptSegmentViewModelTimestampA11yLabel
+*.youtube.com#+#transcript-segment-view-model
+*.youtube.com##.ytwTranscriptSegmentViewModelTimestamp
+*.youtube.com##.ytwTranscriptSegmentViewModelTimestampA11yLabel
 
 ! Comment chrome: usernames, timestamps, comments header, like/dislike/reply bar, expander toggles, and reply-thread show/hide buttons.
-youtube.com##ytd-comment-view-model #author-text
-youtube.com##ytd-comment-view-model #published-time-text
-youtube.com##ytd-comments-header-renderer
-youtube.com##ytd-comment-engagement-bar
-youtube.com##ytd-comment-view-model #more
-youtube.com##ytd-comment-view-model #less
-youtube.com##ytd-comment-replies-renderer #more-replies-sub-thread
-youtube.com##ytd-comment-replies-renderer #less-replies-sub-thread
-youtube.com##ytd-comment-replies-renderer ytd-continuation-item-renderer:has(yt-touch-feedback-shape)
+*.youtube.com##ytd-comment-view-model #author-text
+*.youtube.com##ytd-comment-view-model #published-time-text
+*.youtube.com##ytd-comments-header-renderer
+*.youtube.com##ytd-comment-engagement-bar
+*.youtube.com##ytd-comment-view-model #more
+*.youtube.com##ytd-comment-view-model #less
+*.youtube.com##ytd-comment-replies-renderer #more-replies-sub-thread
+*.youtube.com##ytd-comment-replies-renderer #less-replies-sub-thread
+*.youtube.com##ytd-comment-replies-renderer ytd-continuation-item-renderer:has(yt-touch-feedback-shape)
 
 ! Discord — chat platform; include message text and accessories. Reply-context preview is covered automatically because Discord renders the quoted text as another [id^="message-content-"] inside the reply block. Channel sidebar, member list, and the message composer fall outside the include set.
 ! https://discord.com/channels/<server>/<channel>  (private servers — verify against any text channel)
