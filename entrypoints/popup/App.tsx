@@ -5,20 +5,34 @@ import { getSettings, saveSettings, type Settings } from '@/lib/storage'
 import { LANGUAGES_SORTED } from '@/lib/languages'
 import { LanguagesIcon, SettingsIcon } from 'lucide-react'
 
-async function getActiveTabId(): Promise<number | undefined> {
+async function getActiveTab(): Promise<{ id?: number; url?: string }> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
-  return tab?.id
+  return { id: tab?.id, url: tab?.url }
+}
+
+function isPdfUrl(url: string | undefined): boolean {
+  if (!url) return false
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith('.pdf')
+  } catch {
+    return false
+  }
 }
 
 export function App() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [isTranslated, setIsTranslated] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [isPdf, setIsPdf] = useState(false)
 
   useEffect(() => {
     getSettings().then(setSettings)
-    getActiveTabId().then(async (tabId) => {
+    getActiveTab().then(async ({ id: tabId, url }) => {
       if (!tabId) return
+      if (isPdfUrl(url)) {
+        setIsPdf(true)
+        return
+      }
       const lang = await messager.sendMessage('getTabState', { tabId })
       if (lang) setIsTranslated(true)
     })
@@ -26,7 +40,7 @@ export function App() {
 
   async function handleTranslate() {
     if (!settings) return
-    const tabId = await getActiveTabId()
+    const { id: tabId } = await getActiveTab()
     if (!tabId) return
     setLoading(true)
     try {
@@ -47,7 +61,7 @@ export function App() {
     const updated = await saveSettings({ targetLang })
     setSettings(updated)
     if (isTranslated) {
-      const tabId = await getActiveTabId()
+      const { id: tabId } = await getActiveTab()
       if (!tabId) return
       await messager.sendMessage('stopTab', { tabId })
       await messager.sendMessage('startTab', { tabId, targetLang })
@@ -87,9 +101,15 @@ export function App() {
         </select>
       </div>
 
-      <Button className="w-full" onClick={handleTranslate} disabled={loading}>
-        {loading ? 'Translating...' : isTranslated ? 'Restore Original' : 'Translate Page'}
-      </Button>
+      {isPdf ? (
+        <p className="text-sm text-muted-foreground text-center py-1">
+          PDF pages cannot be translated
+        </p>
+      ) : (
+        <Button className="w-full" onClick={handleTranslate} disabled={loading}>
+          {loading ? 'Translating...' : isTranslated ? 'Restore Original' : 'Translate Page'}
+        </Button>
+      )}
     </div>
   )
 }

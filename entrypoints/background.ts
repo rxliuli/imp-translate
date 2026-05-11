@@ -21,6 +21,15 @@ async function getMatchedRulesForHostname(hostname: string): Promise<SiteRule[]>
   return rules
 }
 
+function isPdfUrl(url: string | undefined): boolean {
+  if (!url) return false
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith('.pdf')
+  } catch {
+    return false
+  }
+}
+
 function hostnameFromUrl(url: string | undefined): string {
   if (!url) return ''
   try {
@@ -114,6 +123,7 @@ async function isPageTranslating(tabId: number): Promise<boolean> {
 async function toggleTranslationForActiveTab() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id) return
+  if (isPdfUrl(tab.url)) return
   if (await isPageTranslating(tab.id)) {
     await stopTranslationForTab(tab.id)
   } else {
@@ -246,11 +256,17 @@ export default defineBackground(() => {
     if (details.frameId !== 0) return
     const lang = await getTabTranslatingLang(details.tabId)
     if (!lang) return
+    if (isPdfUrl(details.url)) {
+      await setTabTranslatingLang(details.tabId, null)
+      await browser.action.setIcon({ tabId: details.tabId, path: defaultIcon })
+      return
+    }
     await browser.action.setIcon({ tabId: details.tabId, path: activeIcon })
   })
 
   browser.webNavigation.onDOMContentLoaded.addListener(async (details) => {
     if (details.frameId !== 0) return
+    if (isPdfUrl(details.url)) return
     const lang = await getTabTranslatingLang(details.tabId)
     if (!lang) return
 

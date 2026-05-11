@@ -19,6 +19,7 @@ const pages: Record<string, string> = {
   <h1>Home Page</h1>
   <p>This is the home page for testing translation.</p>
   <a href="/page2" id="link-page2">Go to Page 2</a>
+  <a href="/sample.pdf" id="link-pdf">Open PDF</a>
 </body>
 </html>`,
   '/page2': `<!DOCTYPE html>
@@ -193,6 +194,14 @@ app.post('/v1/chat/completions', async (c) => {
       message: { role: 'assistant', content: translated.trim() },
     }],
   })
+})
+
+app.get('/sample.pdf', (c) => {
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head><title>Fake PDF</title></head>
+<body><p>This page has a .pdf URL but serves HTML for testing.</p></body>
+</html>`)
 })
 
 app.get('/:path{.*}', (c) => {

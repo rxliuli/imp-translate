@@ -197,6 +197,54 @@ test('icon resets to default on reload', async ({ context, baseURL }) => {
   expect(await getLastIcon(context, tabId)).toBe('default')
 })
 
+test('navigating to PDF clears translation state and icon', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await instrumentSetIcon(context)
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  const tabId = await getTabId(page)
+  const sw = await getServiceWorker(context)
+
+  await page.locator('#link-pdf').click()
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForTimeout(500)
+
+  const lang = await sw.evaluate(async (tabId) => {
+    const key = `tab_translating_${tabId}`
+    const result = await chrome.storage.session.get(key)
+    return result[key] ?? null
+  }, tabId)
+  expect(lang).toBeNull()
+  expect(await getLastIcon(context, tabId)).toBe('default')
+})
+
+test('back from PDF does not auto-restore translation', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  await page.locator('#link-pdf').click()
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForTimeout(500)
+
+  await page.goBack({ waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(3000)
+  await expect(page.locator('.imp-translate-result')).toHaveCount(0)
+})
+
 test('bfcache restore cleans up after stop', async ({ context, baseURL }) => {
   const page = await context.newPage()
   await page.goto(baseURL)
