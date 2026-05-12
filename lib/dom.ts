@@ -51,7 +51,7 @@ function isInlineish(node: Node): boolean {
   const tag = el.tagName.toLowerCase()
   if (SKIP_TAGS.has(tag)) return false
   if (hasBlockChild(el)) return false
-  if (INLINE_TAGS.has(tag)) return true
+  if (INLINE_TAGS.has(tag)) return isDisplayInline(el)
   if (isDisplayInline(el)) return true
   return false
 }

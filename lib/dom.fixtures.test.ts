@@ -111,14 +111,12 @@ describe('npm.com /package/vista', () => {
   })
 
   it('getComputedStyle calls stay within budget', () => {
-    // Baseline at the time of writing: 786 elements, 195 gcs calls. The bound
-    // is set ~30% above that. A regression that adds gcs to the walker hot
-    // path (e.g. one call per walk()) would push this well past 700 calls,
-    // failing immediately. Update only when an intentional perf change moves
-    // the baseline.
+    // Baseline after isInlineish display check: 786 elements, ~240 gcs calls.
+    // The inline-tag display check adds ~1 gcs per span/a/em/… visited by
+    // walkMixed; cost is negligible (cached style reads). Bound set ~30% above.
     document.body.innerHTML = npmOuterStructure
     const { calls } = withGcsCounter(() => extractBlocks(document.body))
-    expect(calls).toBeLessThan(260)
+    expect(calls).toBeLessThan(320)
   })
 })
 
@@ -184,19 +182,19 @@ describe('App Store Connect rejection emails', () => {
   })
 
   it('br-paragraph form: getComputedStyle calls stay within budget', () => {
-    // Baseline: 31 elements, 19 gcs calls. Bound set with ~30% headroom.
+    // Baseline after isInlineish display check: 31 elements, ~48 gcs calls.
+    // Extra calls from inline-tag display checks in walkMixed (br-segmented
+    // runs have many text/b/a nodes). Bound set ~30% above.
     document.body.innerHTML = appleRejectionBr
     const { calls } = withGcsCounter(() => extractBlocks(document.body))
-    expect(calls).toBeLessThan(25)
+    expect(calls).toBeLessThan(65)
   })
 
   it('newline-paragraph form: getComputedStyle calls stay within budget', () => {
-    // Baseline: 12 elements, 16 gcs calls. The high ratio (~1.3) is normal
-    // for this shape — the outer div with no block children triggers
-    // hasBlockChild's grandchild peek across most descendants.
+    // Baseline after isInlineish display check: 12 elements, ~26 gcs calls.
     document.body.innerHTML = appleRejectionNewlines
     const { calls } = withGcsCounter(() => extractBlocks(document.body))
-    expect(calls).toBeLessThan(22)
+    expect(calls).toBeLessThan(35)
   })
 })
 

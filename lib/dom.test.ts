@@ -635,6 +635,24 @@ describe('extractBlocks', () => {
     expect(texts).toContain('shadow span')
   })
 
+  it('should treat span with display:block as a block boundary (React Native for Web)', () => {
+    document.body.innerHTML = `
+      <div>
+        <span style="display:block">First paragraph.</span>
+        <span style="display:block">Second paragraph.</span>
+        <ul><li>List item</li></ul>
+        <span style="display:block">Third paragraph.</span>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks.map((b) => b.text)).toEqual([
+      'First paragraph.',
+      'Second paragraph.',
+      'List item',
+      'Third paragraph.',
+    ])
+  })
+
   it('should skip time elements', () => {
     document.body.innerHTML = `
       <div>
