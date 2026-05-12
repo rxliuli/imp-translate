@@ -61,12 +61,16 @@ x.com##[data-testid="trend"] span[dir="ltr"]
 !   - User-Name: embedded quoted tweet's handle/timestamp
 !   - button: Thoughts collapsible, "N web pages" pill, "Fast" model selector, "See new posts" pill
 !   - :has(+ [data-testid="tweetText"]): the embedded tweet's "Replying to @user" reply-context line — it sits as the immediately-preceding sibling of tweetText
+!   - div:has(> div > div > div > svg clipPath[id^="__lottie_element_"]): live-thinking status — "Thinking about your request". Lottie Web generates clipPath elements with __lottie_element_ ID prefix inside its SVGs; ordinary icon SVGs have no clipPath children.
+!   - …same… + div: live-thinking search section — search queries, "Searching on X". The search section is the immediate next sibling of the Lottie-bearing container; it uses a non-Lottie Twitter bird SVG so the + div combinator catches it via adjacency. After thinking completes both sections collapse into a button (already skipped above).
 ! https://x.com/i/grok?conversation=2049842901010755900  (standalone)
 ! https://x.com/home  (drawer — click the bottom-right Grok pill, then open any history conversation)
 x.com#+#div[aria-label="Grok"], [data-testid="GrokDrawer"]
 x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) [data-testid="User-Name"]
 x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) button
 x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) :has(+ [data-testid="tweetText"])
+x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) div:has(> div > div > div > svg clipPath[id^="__lottie_element_"])
+x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) div:has(> div > div > div > svg clipPath[id^="__lottie_element_"]) + div
 ! Citation drawer ("Relevant Web Pages") opens in #layers > [role="dialog"], outside the Grok pane. Each card is an <a role="link"> wrapping title/description; data-testid^="web_result_item_" sits on a small empty tracking div inside, so reverse-anchor via :has(). Skip the domain badge row (its immediately-following sibling is the tracking div) — translating "x.com"/"github.com" is a no-op churn.
 ! https://x.com/i/grok?conversation=2049842901010755900  (click the "N web pages" chip on a Grok answer)
 x.com#+#a[role="link"]:has([data-testid^="web_result_item_"])
