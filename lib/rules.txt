@@ -26,6 +26,9 @@
 www.google.*#+##rcnt
 www.google.*#+##cnt:not(:has(#rcnt))
 www.google.*#+#[data-subtree="mfc"]
+! Google AI Mode (udm=50) renders its answer in data-subtree="aimc" instead of #rcnt.
+! https://www.google.com/search?q=test&udm=50
+www.google.*#+#[data-subtree="aimc"]
 www.google.*##:has(>[hreftranslate])
 www.google.*##[role="navigation"]
 ! AI Overview show more button
