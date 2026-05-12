@@ -3,6 +3,7 @@ import { extractBlocks } from './dom'
 import npmVistaReadme from './__fixtures__/npm-vista-readme.html?raw'
 import appleRejectionBr from './__fixtures__/apple-rejection-br.html?raw'
 import appleRejectionNewlines from './__fixtures__/apple-rejection-newlines.html?raw'
+import grokResponseParagraphs from './__fixtures__/grok-response-paragraphs.html?raw'
 
 // Count net Elements inserted into a subtree by running fn().
 // Catches "extractBlocks created 100x more nodes than blocks" regressions —
@@ -291,5 +292,53 @@ describe('Google carousel with inline-block wrapper', () => {
       (b) => b.text.includes('Reddit') && b.text.includes('Quora'),
     )
     expect(merged).toBe(false)
+  })
+})
+
+// Grok (x.com) response body. React Native for Web renders paragraphs as
+// <span class="r-1adg3ll" style="display:block"> instead of <p> or <div>.
+// Without the isInlineish computed-display check, the walker treated these
+// block-displayed spans as inline, merging multiple paragraphs into one
+// giant translation block.
+// Captured from https://x.com/i/grok?conversation=2054159567563727178
+describe('Grok response with display:block spans', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('extracts each paragraph as its own block, not merged', () => {
+    document.body.innerHTML = grokResponseParagraphs
+    const blocks = extractBlocks(document.body)
+    const texts = blocks.map((b) => b.text)
+
+    expect(texts.some((t) => t.includes('Ah, got it'))).toBe(true)
+    expect(texts.some((t) => t.includes('The actual post from'))).toBe(true)
+    expect(texts.some((t) => t.includes('Why this comes up a lot'))).toBe(true)
+
+    // Paragraphs must NOT be merged — no single block should contain text
+    // from two different paragraphs
+    const merged = texts.some(
+      (t) => t.includes('Ah, got it') && t.includes('The actual post from'),
+    )
+    expect(merged).toBe(false)
+  })
+
+  it('extracts list items as individual blocks', () => {
+    document.body.innerHTML = grokResponseParagraphs
+    const blocks = extractBlocks(document.body)
+    const texts = blocks.map((b) => b.text)
+
+    expect(texts.some((t) => t.includes('"Found family" vs. parental role'))).toBe(true)
+    expect(texts.some((t) => t.includes('recurring debate'))).toBe(true)
+    expect(texts.some((t) => t.includes('gacha/game protagonists'))).toBe(true)
+  })
+
+  it('mutation count is bounded by block count', () => {
+    document.body.innerHTML = grokResponseParagraphs
+    let blockCount = 0
+    const inserted = nodeCountDelta(document.body, () => {
+      blockCount = extractBlocks(document.body).length
+    })
+    expect(inserted).toBeLessThanOrEqual(blockCount)
   })
 })
