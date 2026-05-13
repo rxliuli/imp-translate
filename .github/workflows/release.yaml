@@ -133,16 +133,18 @@ jobs:
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
 
-          echo "${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > /tmp/app.provisionprofile
-          APP_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i /tmp/app.provisionprofile))
-          mv /tmp/app.provisionprofile ~/Library/MobileDevice/Provisioning\ Profiles/$APP_UUID.provisionprofile
+          install_profile() {
+            local secret_b64="$1" local_name="$2" env_var="$3" ext="$4"
+            echo "$secret_b64" | base64 --decode > /tmp/$local_name
+            local uuid=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i /tmp/$local_name))
+            mv /tmp/$local_name ~/Library/MobileDevice/Provisioning\ Profiles/$uuid.$ext
+            echo "$env_var=$uuid" >> $GITHUB_ENV
+          }
 
-          echo "${{ secrets.MACOS_EXTENSION_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > /tmp/ext.provisionprofile
-          EXT_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i /tmp/ext.provisionprofile))
-          mv /tmp/ext.provisionprofile ~/Library/MobileDevice/Provisioning\ Profiles/$EXT_UUID.provisionprofile
-
-          echo "APP_PROFILE_UUID=$APP_UUID" >> $GITHUB_ENV
-          echo "EXT_PROFILE_UUID=$EXT_UUID" >> $GITHUB_ENV
+          install_profile "${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}" app.provisionprofile APP_PROFILE_UUID provisionprofile
+          install_profile "${{ secrets.MACOS_EXTENSION_PROVISIONING_PROFILE_BASE64 }}" ext.provisionprofile EXT_PROFILE_UUID provisionprofile
+          install_profile "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" ios_app.mobileprovision IOS_APP_PROFILE_UUID mobileprovision
+          install_profile "${{ secrets.IOS_EXTENSION_PROVISIONING_PROFILE_BASE64 }}" ios_ext.mobileprovision IOS_EXT_PROFILE_UUID mobileprovision
 
       - name: Create entitlements
         run: |
@@ -229,11 +231,89 @@ jobs:
             --identifier "com.rxliuli.imp-translate" \
             "$RUNNER_TEMP/ImpTranslate.pkg"
 
-      - name: Upload to App Store Connect
+      - name: Upload macOS to App Store Connect
         run: |
           xcrun altool --upload-app \
             --type osx \
             --file "$RUNNER_TEMP/ImpTranslate.pkg" \
+            --apiKey "${{ secrets.APPLE_API_KEY_ID }}" \
+            --apiIssuer "${{ secrets.APPLE_API_ISSUER }}"
+
+      - name: Build iOS archive
+        run: |
+          cd ".output/Imp Translate"
+          xcodebuild -project "Imp Translate.xcodeproj" \
+            -scheme "Imp Translate (iOS)" \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/ImpTranslate-iOS.xcarchive \
+            -sdk iphoneos \
+            archive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Create iOS ExportOptions.plist
+        run: |
+          cat > /tmp/ExportOptions-iOS.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>teamID</key>
+              <string>N2X78TUUFG</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.rxliuli.imp-translate</key>
+                  <string>${IOS_APP_PROFILE_UUID}</string>
+                  <key>com.rxliuli.imp-translate.Extension</key>
+                  <string>${IOS_EXT_PROFILE_UUID}</string>
+              </dict>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Fix iOS bundle identifiers
+        run: |
+          APP_PATH="$RUNNER_TEMP/ImpTranslate-iOS.xcarchive/Products/Applications/Imp Translate.app"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.rxliuli.imp-translate" "$APP_PATH/Info.plist"
+
+          EXT_APP=$(find "$APP_PATH" -path "*/PlugIns/*.appex" -maxdepth 3 | head -1)
+          if [ -n "$EXT_APP" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.rxliuli.imp-translate.Extension" "$EXT_APP/Info.plist"
+          fi
+
+      - name: Sign and export iOS IPA
+        run: |
+          APP_PATH="$RUNNER_TEMP/ImpTranslate-iOS.xcarchive/Products/Applications/Imp Translate.app"
+          SIGN_APP="Apple Distribution: KAI WANG (N2X78TUUFG)"
+
+          cp ~/Library/MobileDevice/Provisioning\ Profiles/$IOS_APP_PROFILE_UUID.mobileprovision "$APP_PATH/embedded.mobileprovision"
+
+          EXT_APP=$(find "$APP_PATH" -path "*/PlugIns/*.appex" -maxdepth 3 | head -1)
+          if [ -n "$EXT_APP" ]; then
+            cp ~/Library/MobileDevice/Provisioning\ Profiles/$IOS_EXT_PROFILE_UUID.mobileprovision "$EXT_APP/embedded.mobileprovision"
+            codesign --force --timestamp --entitlements /tmp/ext.entitlements --sign "$SIGN_APP" "$EXT_APP"
+          fi
+
+          codesign --force --timestamp --entitlements /tmp/app.entitlements --sign "$SIGN_APP" "$APP_PATH"
+
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/ImpTranslate-iOS.xcarchive \
+            -exportOptionsPlist /tmp/ExportOptions-iOS.plist \
+            -exportPath $RUNNER_TEMP/ios-export
+
+      - name: Upload iOS to App Store Connect
+        run: |
+          IPA_PATH=$(find $RUNNER_TEMP/ios-export -name "*.ipa" | head -1)
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
             --apiKey "${{ secrets.APPLE_API_KEY_ID }}" \
             --apiIssuer "${{ secrets.APPLE_API_ISSUER }}"
 
