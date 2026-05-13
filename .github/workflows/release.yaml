@@ -158,6 +158,16 @@ jobs:
             APP_PROVISIONING_PROFILE="$APP_PROFILE_UUID" \
             EXTENSION_PROVISIONING_PROFILE="$EXT_PROFILE_UUID"
 
+      - name: Fix bundle identifiers
+        run: |
+          APP_PATH="$RUNNER_TEMP/ImpTranslate.xcarchive/Products/Applications/Imp Translate.app"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.rxliuli.imp-translate" "$APP_PATH/Contents/Info.plist"
+
+          EXT_APP=$(find "$APP_PATH" -path "*/PlugIns/*.appex" -maxdepth 3 | head -1)
+          if [ -n "$EXT_APP" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.rxliuli.imp-translate.Extension" "$EXT_APP/Contents/Info.plist"
+          fi
+
       - name: Sign and package
         run: |
           APP_PATH="$RUNNER_TEMP/ImpTranslate.xcarchive/Products/Applications/Imp Translate.app"
@@ -184,12 +194,6 @@ jobs:
 
       - name: Upload to App Store Connect
         run: |
-          APP_PATH="$RUNNER_TEMP/ImpTranslate.xcarchive/Products/Applications/Imp Translate.app"
-          echo "Bundle ID in built app:"
-          /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP_PATH/Contents/Info.plist"
-          echo "---"
-          pkgutil --payload-files "$RUNNER_TEMP/ImpTranslate.pkg" | head -5
-          echo "---"
           xcrun altool --upload-app \
             --type osx \
             --file "$RUNNER_TEMP/ImpTranslate.pkg" \
