@@ -184,6 +184,12 @@ jobs:
 
       - name: Upload to App Store Connect
         run: |
+          APP_PATH="$RUNNER_TEMP/ImpTranslate.xcarchive/Products/Applications/Imp Translate.app"
+          echo "Bundle ID in built app:"
+          /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP_PATH/Contents/Info.plist"
+          echo "---"
+          pkgutil --payload-files "$RUNNER_TEMP/ImpTranslate.pkg" | head -5
+          echo "---"
           xcrun altool --upload-app \
             --type osx \
             --file "$RUNNER_TEMP/ImpTranslate.pkg" \
