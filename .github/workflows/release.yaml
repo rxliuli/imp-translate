@@ -98,7 +98,7 @@ jobs:
   safari:
     needs: version
     if: needs.version.outputs.changed == 'true'
-    runs-on: macos-latest
+    runs-on: macos-26
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
@@ -296,7 +296,6 @@ jobs:
             -exportPath $RUNNER_TEMP/ios-export
 
       - name: Upload iOS to App Store Connect
-        continue-on-error: true
         run: |
           IPA_PATH=$(find $RUNNER_TEMP/ios-export -name "*.ipa" | head -1)
           xcrun altool --upload-app \
