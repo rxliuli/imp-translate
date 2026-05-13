@@ -197,16 +197,6 @@ jobs:
             ARCHS="x86_64 arm64" \
             ONLY_ACTIVE_ARCH=NO
 
-      - name: Fix bundle identifiers
-        run: |
-          APP_PATH="$RUNNER_TEMP/ImpTranslate.xcarchive/Products/Applications/Imp Translate.app"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.rxliuli.imp-translate" "$APP_PATH/Contents/Info.plist"
-
-          EXT_APP=$(find "$APP_PATH" -path "*/PlugIns/*.appex" -maxdepth 3 | head -1)
-          if [ -n "$EXT_APP" ]; then
-            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.rxliuli.imp-translate.Extension" "$EXT_APP/Contents/Info.plist"
-          fi
-
       - name: Sign and package
         run: |
           APP_PATH="$RUNNER_TEMP/ImpTranslate.xcarchive/Products/Applications/Imp Translate.app"
@@ -277,16 +267,6 @@ jobs:
           </dict>
           </plist>
           EOF
-
-      - name: Fix iOS bundle identifiers
-        run: |
-          APP_PATH="$RUNNER_TEMP/ImpTranslate-iOS.xcarchive/Products/Applications/Imp Translate.app"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.rxliuli.imp-translate" "$APP_PATH/Info.plist"
-
-          EXT_APP=$(find "$APP_PATH" -path "*/PlugIns/*.appex" -maxdepth 3 | head -1)
-          if [ -n "$EXT_APP" ]; then
-            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.rxliuli.imp-translate.Extension" "$EXT_APP/Info.plist"
-          fi
 
       - name: Export iOS IPA
         run: |
