@@ -2,7 +2,7 @@
   "name": "imp-translate",
   "description": "manifest.json description",
   "private": true,
-  "version": "0.0.34",
+  "version": "0.0.35",
   "type": "module",
   "scripts": {
     "dev": "mkdir -p .tmp/chrome-profile && wxt",
@@ -56,7 +56,7 @@
     "vitest": "^4.1.5",
     "vitest-browser-react": "^2.2.0",
     "wxt": "^0.20.25",
-    "wxt-module-safari-xcode": "^0.1.0",
+    "wxt-module-safari-xcode": "^0.2.2",
     "zx": "^8.8.5"
   },
   "packageManager": "pnpm@10.5.2+sha512.da9dc28cd3ff40d0592188235ab25d3202add8a207afbedc682220e4a0029ffbff4562102b9e6e46b4e3f9e8bd53e6d05de48544b0c57d4b0179e22c76d1199b",
