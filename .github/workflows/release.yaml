@@ -158,43 +158,34 @@ jobs:
             APP_PROVISIONING_PROFILE="$APP_PROFILE_UUID" \
             EXTENSION_PROVISIONING_PROFILE="$EXT_PROFILE_UUID"
 
-      - name: Create ExportOptions.plist
+      - name: Sign and package
         run: |
-          cat > /tmp/ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>app-store-connect</string>
-              <key>teamID</key>
-              <string>N2X78TUUFG</string>
-              <key>signingStyle</key>
-              <string>manual</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                  <key>com.rxliuli.imp-translate</key>
-                  <string>${APP_PROFILE_UUID}</string>
-                  <key>com.rxliuli.imp-translate.Extension</key>
-                  <string>${EXT_PROFILE_UUID}</string>
-              </dict>
-              <key>signingCertificate</key>
-              <string>Apple Distribution</string>
-          </dict>
-          </plist>
-          EOF
+          APP_PATH="$RUNNER_TEMP/ImpTranslate.xcarchive/Products/Applications/Imp Translate.app"
+          ENTITLEMENTS_DIR=".output/Imp Translate"
+          SIGN_APP="Apple Distribution: KAI WANG (N2X78TUUFG)"
+          SIGN_PKG="3rd Party Mac Developer Installer: KAI WANG (N2X78TUUFG)"
 
-      - name: Export and upload
+          # Embed provisioning profiles
+          cp ~/Library/MobileDevice/Provisioning\ Profiles/$APP_PROFILE_UUID.provisionprofile "$APP_PATH/Contents/embedded.provisionprofile"
+
+          EXT_APP=$(find "$APP_PATH" -path "*/PlugIns/*.appex" -maxdepth 3 | head -1)
+          if [ -n "$EXT_APP" ]; then
+            cp ~/Library/MobileDevice/Provisioning\ Profiles/$EXT_PROFILE_UUID.provisionprofile "$EXT_APP/Contents/embedded.provisionprofile"
+            codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$EXT_APP"
+          fi
+
+          codesign --force --options runtime --timestamp --sign "$SIGN_APP" "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH"
+
+          productbuild --component "$APP_PATH" /Applications \
+            --sign "$SIGN_PKG" \
+            "$RUNNER_TEMP/ImpTranslate.pkg"
+
+      - name: Upload to App Store Connect
         run: |
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/ImpTranslate.xcarchive \
-            -exportOptionsPlist /tmp/ExportOptions.plist \
-            -exportPath $RUNNER_TEMP/export
-
-          PKG_PATH=$(find $RUNNER_TEMP/export -name "*.pkg" -o -name "*.ipa" | head -1)
           xcrun altool --upload-app \
             --type osx \
-            --file "$PKG_PATH" \
+            --file "$RUNNER_TEMP/ImpTranslate.pkg" \
             --apiKey "${{ secrets.APPLE_API_KEY_ID }}" \
             --apiIssuer "${{ secrets.APPLE_API_ISSUER }}"
 
