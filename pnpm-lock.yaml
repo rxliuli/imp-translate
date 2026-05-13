@@ -126,8 +126,8 @@ importers:
         specifier: ^0.20.25
         version: 0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
       wxt-module-safari-xcode:
-        specifier: ^0.1.0
-        version: 0.1.0(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
+        specifier: ^0.2.2
+        version: 0.2.2(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
       zx:
         specifier: ^8.8.5
         version: 8.8.5
@@ -3115,8 +3115,8 @@ packages:
     resolution: {integrity: sha512-g/eziiSUNBSsdDJtCLB8bdYEUMj4jR7AGeUo96p/3dTafgjHhpF4RiCFPiRILwjQoDXx5MqkBr4fwWtR3Ky4Wg==}
     engines: {node: '>=20'}
 
-  wxt-module-safari-xcode@0.1.0:
-    resolution: {integrity: sha512-Fp9t2U4EbSiK2YXn1wxuxm+FJHnUUWVJfd+n0k10OPgX09beXKNdaOkSpjkng4j4HktPmpRtzlalQzyclwgaSQ==}
+  wxt-module-safari-xcode@0.2.2:
+    resolution: {integrity: sha512-NRywJk/RSv5IO8zql1+mh3Hu6bsRq4ZCfXxE1L5FB376axG+4xW63dVJ+LuGFMVOf4hOJcRc9vQs5ZnWGSDwzA==}
 
   wxt@0.20.25:
     resolution: {integrity: sha512-ca+8Yt0Auzn9tX0ZW2Kzocb9yM8F/RoOjcYQ0fHkwcSc7/IUkqV2+1JUNn1SMSNAS4Gr3YQHAn/pi3q+jIGRqw==}
@@ -6030,7 +6030,7 @@ snapshots:
       is-wsl: 3.1.1
       powershell-utils: 0.1.0
 
-  wxt-module-safari-xcode@0.1.0(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1):
+  wxt-module-safari-xcode@0.2.2(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1):
     dependencies:
       zx: 8.8.5
     optionalDependencies:
