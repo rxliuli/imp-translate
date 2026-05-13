@@ -154,7 +154,7 @@ jobs:
             archive \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM=N2X78TUUFG \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_IDENTITY="3rd Party Mac Developer Application" \
             APP_PROVISIONING_PROFILE="$APP_PROFILE_UUID" \
             EXTENSION_PROVISIONING_PROFILE="$EXT_PROFILE_UUID"
 
@@ -162,7 +162,7 @@ jobs:
         run: |
           APP_PATH="$RUNNER_TEMP/ImpTranslate.xcarchive/Products/Applications/Imp Translate.app"
           ENTITLEMENTS_DIR=".output/Imp Translate"
-          SIGN_APP="Apple Distribution: KAI WANG (N2X78TUUFG)"
+          SIGN_APP="3rd Party Mac Developer Application: KAI WANG (N2X78TUUFG)"
           SIGN_PKG="3rd Party Mac Developer Installer: KAI WANG (N2X78TUUFG)"
 
           # Embed provisioning profiles
