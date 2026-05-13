@@ -296,6 +296,7 @@ jobs:
             -exportPath $RUNNER_TEMP/ios-export
 
       - name: Upload iOS to App Store Connect
+        continue-on-error: true
         run: |
           IPA_PATH=$(find $RUNNER_TEMP/ios-export -name "*.ipa" | head -1)
           xcrun altool --upload-app \
