@@ -179,6 +179,7 @@ jobs:
 
           productbuild --component "$APP_PATH" /Applications \
             --sign "$SIGN_PKG" \
+            --identifier "com.rxliuli.imp-translate" \
             "$RUNNER_TEMP/ImpTranslate.pkg"
 
       - name: Upload to App Store Connect
