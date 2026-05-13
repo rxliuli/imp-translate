@@ -188,13 +188,12 @@ jobs:
             -configuration Release \
             -archivePath $RUNNER_TEMP/ImpTranslate.xcarchive \
             archive \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM=N2X78TUUFG \
-            CODE_SIGN_IDENTITY="3rd Party Mac Developer Application" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
             MACOSX_DEPLOYMENT_TARGET=12.0 \
             ARCHS="x86_64 arm64" \
-            ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_ENTITLEMENTS=/tmp/app.entitlements
+            ONLY_ACTIVE_ARCH=NO
 
       - name: Fix bundle identifiers
         run: |
