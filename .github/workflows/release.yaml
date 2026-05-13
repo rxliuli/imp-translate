@@ -141,10 +141,10 @@ jobs:
             echo "$env_var=$uuid" >> $GITHUB_ENV
           }
 
-          install_profile "${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}" app.provisionprofile APP_PROFILE_UUID provisionprofile
-          install_profile "${{ secrets.MACOS_EXTENSION_PROVISIONING_PROFILE_BASE64 }}" ext.provisionprofile EXT_PROFILE_UUID provisionprofile
-          install_profile "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" ios_app.mobileprovision IOS_APP_PROFILE_UUID mobileprovision
-          install_profile "${{ secrets.IOS_EXTENSION_PROVISIONING_PROFILE_BASE64 }}" ios_ext.mobileprovision IOS_EXT_PROFILE_UUID mobileprovision
+          install_profile "${{ secrets.APPLE_MACOS_PROVISIONING_PROFILE_BASE64 }}" app.provisionprofile APP_PROFILE_UUID provisionprofile
+          install_profile "${{ secrets.APPLE_MACOS_EXTENSION_PROVISIONING_PROFILE_BASE64 }}" ext.provisionprofile EXT_PROFILE_UUID provisionprofile
+          install_profile "${{ secrets.APPLE_IOS_PROVISIONING_PROFILE_BASE64 }}" ios_app.mobileprovision IOS_APP_PROFILE_UUID mobileprovision
+          install_profile "${{ secrets.APPLE_IOS_EXTENSION_PROVISIONING_PROFILE_BASE64 }}" ios_ext.mobileprovision IOS_EXT_PROFILE_UUID mobileprovision
 
       - name: Create entitlements
         run: |
