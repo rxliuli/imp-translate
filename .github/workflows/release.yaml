@@ -61,6 +61,7 @@ jobs:
             ${{ env.DIRECTORY }}/.output/${{ env.PROJECT_NAME }}-${{ needs.version.outputs.version }}-sources.zip
 
       - name: Submit to Chrome Web Store
+        continue-on-error: true
         run: |
           cd ${{ env.DIRECTORY }}
           pnpm wxt submit \
