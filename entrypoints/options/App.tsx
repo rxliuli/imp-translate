@@ -65,6 +65,11 @@ export function App() {
     ok: boolean
     msg: string
   } | null>(null)
+  const [refreshingRules, setRefreshingRules] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<{
+    ok: boolean
+    msg: string
+  } | null>(null)
 
   useEffect(() => {
     getSettings().then(setSettings)
@@ -284,12 +289,35 @@ export function App() {
               </div>
             </div>
 
-            <Button
-              variant="outline"
-              onClick={() => messager.sendMessage('refreshRemoteRules', undefined)}
-            >
-              Refresh Remote Rules
-            </Button>
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  setRefreshingRules(true)
+                  try {
+                    await messager.sendMessage('refreshRemoteRules', undefined)
+                    setRefreshResult({ ok: true, msg: 'Remote rules refreshed.' })
+                  } catch (err) {
+                    const message = err instanceof Error ? err.message : String(err)
+                    setRefreshResult({ ok: false, msg: `Failed to refresh: ${message}` })
+                  } finally {
+                    setRefreshingRules(false)
+                  }
+                }}
+                disabled={refreshingRules}
+              >
+                {refreshingRules ? 'Refreshing...' : 'Refresh Remote Rules'}
+              </Button>
+              {refreshResult && (
+                <p
+                  className={`text-sm ${
+                    refreshResult.ok ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
+                  {refreshResult.msg}
+                </p>
+              )}
+            </div>
           </>
         )}
       </section>

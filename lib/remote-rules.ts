@@ -22,7 +22,7 @@ async function getLastFetchTime(): Promise<number> {
 export async function fetchRemoteRulesIfNeeded(
   force = false,
 ): Promise<void> {
-  try {
+  const doFetch = async () => {
     if (!force) {
       const last = await getLastFetchTime()
       if (Date.now() - last < FETCH_INTERVAL_MS) return
@@ -31,14 +31,19 @@ export async function fetchRemoteRulesIfNeeded(
     const timer = setTimeout(() => controller.abort(), 10_000)
     const resp = await fetch(RULES_URL, { signal: controller.signal })
     clearTimeout(timer)
-    if (!resp.ok) return
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const text = await resp.text()
-    if (parseRules(text).length === 0) return
+    if (parseRules(text).length === 0) throw new Error('No valid rules in response')
     await browser.storage.local.set({
       remoteRules: text,
       lastRulesFetchTime: new Date().toISOString(),
     })
-  } catch {}
+  }
+  if (force) {
+    await doFetch()
+  } else {
+    try { await doFetch() } catch {}
+  }
 }
 
 export async function getEffectiveRules(): Promise<SiteRule[]> {
