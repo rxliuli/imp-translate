@@ -94,3 +94,112 @@ jobs:
           EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
           EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
           EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+
+  safari:
+    needs: version
+    if: needs.version.outputs.changed == 'true'
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Safari extension
+        run: pnpm build:safari
+
+      - name: Setup certificates
+        run: |
+          security create-keychain -p actions $RUNNER_TEMP/app-signing.keychain-db
+          security set-keychain-settings -lut 21600 $RUNNER_TEMP/app-signing.keychain-db
+          security unlock-keychain -p actions $RUNNER_TEMP/app-signing.keychain-db
+          security default-keychain -s $RUNNER_TEMP/app-signing.keychain-db
+
+          echo "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" | base64 --decode > cert.p12
+          security import cert.p12 -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -A -t cert -f pkcs12 -k $RUNNER_TEMP/app-signing.keychain-db
+          rm cert.p12
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions $RUNNER_TEMP/app-signing.keychain-db
+
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > ~/private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8
+
+      - name: Install provisioning profiles
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+
+          echo "${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > /tmp/app.provisionprofile
+          APP_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i /tmp/app.provisionprofile))
+          mv /tmp/app.provisionprofile ~/Library/MobileDevice/Provisioning\ Profiles/$APP_UUID.provisionprofile
+
+          echo "${{ secrets.MACOS_EXTENSION_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > /tmp/ext.provisionprofile
+          EXT_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i /tmp/ext.provisionprofile))
+          mv /tmp/ext.provisionprofile ~/Library/MobileDevice/Provisioning\ Profiles/$EXT_UUID.provisionprofile
+
+          echo "APP_PROFILE_UUID=$APP_UUID" >> $GITHUB_ENV
+          echo "EXT_PROFILE_UUID=$EXT_UUID" >> $GITHUB_ENV
+
+      - name: Build and archive
+        run: |
+          cd ".output/Imp Translate"
+          xcodebuild -project "Imp Translate.xcodeproj" \
+            -scheme "Imp Translate (macOS)" \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/ImpTranslate.xcarchive \
+            archive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=N2X78TUUFG \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            APP_PROVISIONING_PROFILE="$APP_PROFILE_UUID" \
+            EXTENSION_PROVISIONING_PROFILE="$EXT_PROFILE_UUID"
+
+      - name: Create ExportOptions.plist
+        run: |
+          cat > /tmp/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>teamID</key>
+              <string>N2X78TUUFG</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.rxliuli.imp-translate</key>
+                  <string>${APP_PROFILE_UUID}</string>
+                  <key>com.rxliuli.imp-translate.Extension</key>
+                  <string>${EXT_PROFILE_UUID}</string>
+              </dict>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Export and upload
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/ImpTranslate.xcarchive \
+            -exportOptionsPlist /tmp/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/export
+
+          PKG_PATH=$(find $RUNNER_TEMP/export -name "*.pkg" -o -name "*.ipa" | head -1)
+          xcrun altool --upload-app \
+            --type osx \
+            --file "$PKG_PATH" \
+            --apiKey "${{ secrets.APPLE_API_KEY_ID }}" \
+            --apiIssuer "${{ secrets.APPLE_API_ISSUER }}"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+          rm -rf ~/private_keys ~/Library/MobileDevice/Provisioning\ Profiles || true
