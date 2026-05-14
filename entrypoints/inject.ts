@@ -72,6 +72,7 @@ export default defineUnlistedScript(() => {
   let observer: MutationObserver | null = null
   const shadowObservers = new Map<ShadowRoot, MutationObserver>()
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
+  let scrollThrottled = false
   let clickRescanTimer: ReturnType<typeof setTimeout> | null = null
 
   function translateBatch(batch: TranslatableBlock[]) {
@@ -127,10 +128,15 @@ export default defineUnlistedScript(() => {
   }
 
   function onScroll() {
+    if (!scrollThrottled) {
+      scrollThrottled = true
+      setTimeout(() => {
+        scrollThrottled = false
+        translateVisible()
+      }, 300)
+    }
     if (scrollTimer) clearTimeout(scrollTimer)
-    scrollTimer = setTimeout(() => {
-      translateVisible()
-    }, 300)
+    scrollTimer = setTimeout(() => translateVisible(), 300)
   }
 
   function onToggle(e: Event) {
