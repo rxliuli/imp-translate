@@ -4,7 +4,6 @@ import { ContentScriptContext } from 'wxt/utils/content-script-context'
 import { selectorsForPath, type SiteRule } from '@/lib/rules'
 import {
   extractBlocks,
-  getVisibleBlocks,
   clearTranslations,
   markTranslated,
   type TranslatableBlock,
@@ -68,12 +67,18 @@ export default defineUnlistedScript(() => {
 
   let isTranslating = false
   let targetLang = ''
-  let pendingBlocks: TranslatableBlock[] = []
   let observer: MutationObserver | null = null
   const shadowObservers = new Map<ShadowRoot, MutationObserver>()
-  let scrollTimer: ReturnType<typeof setTimeout> | null = null
-  let scrollThrottled = false
   let clickRescanTimer: ReturnType<typeof setTimeout> | null = null
+  let visibilityObserver: IntersectionObserver | null = null
+  const blockMap = new Map<Element, TranslatableBlock>()
+  let visibleBatch: TranslatableBlock[] = []
+  let batchTimer: ReturnType<typeof setTimeout> | null = null
+
+  function discardSelfMutations() {
+    observer?.takeRecords()
+    for (const obs of shadowObservers.values()) obs.takeRecords()
+  }
 
   function translateBatch(batch: TranslatableBlock[]) {
     for (const block of batch) {
@@ -82,6 +87,7 @@ export default defineUnlistedScript(() => {
         .then((translated) => {
           if (!isTranslating) return
           replaceWithTranslation([block], [translated])
+          discardSelfMutations()
         })
         .catch((err) => {
           console.error('[imp-translate] translation error:', err)
@@ -89,6 +95,7 @@ export default defineUnlistedScript(() => {
           replaceWithError([block], (retryBlocks) => {
             translateBatch(retryBlocks)
           })
+          discardSelfMutations()
         })
     }
   }
@@ -115,28 +122,48 @@ export default defineUnlistedScript(() => {
     if (blocks.length === 0) return
 
     injectLoading(blocks)
+    discardSelfMutations()
     translateBatch(blocks)
   }
 
-  async function translateVisible() {
-    if (!isTranslating) return
-    const visible = getVisibleBlocks(pendingBlocks)
-    const untranslated = visible.filter(
-      (b) => !b.element.hasAttribute(PROCESSED_ATTR),
-    )
-    await translateBlocks(untranslated)
+  function flushVisibleBatch() {
+    batchTimer = null
+    if (!isTranslating || visibleBatch.length === 0) return
+    const batch = visibleBatch.filter((b) => !b.element.hasAttribute(PROCESSED_ATTR))
+    visibleBatch = []
+    if (batch.length > 0) translateBlocks(batch)
   }
 
-  function onScroll() {
-    if (!scrollThrottled) {
-      scrollThrottled = true
-      setTimeout(() => {
-        scrollThrottled = false
-        translateVisible()
-      }, 300)
+  function onIntersection(entries: IntersectionObserverEntry[]) {
+    if (!isTranslating) return
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue
+      const el = entry.target
+      if (el.hasAttribute(PROCESSED_ATTR)) {
+        visibilityObserver?.unobserve(el)
+        blockMap.delete(el)
+        continue
+      }
+      const block = blockMap.get(el)
+      if (block) {
+        visibleBatch.push(block)
+        visibilityObserver?.unobserve(el)
+        blockMap.delete(el)
+      }
     }
-    if (scrollTimer) clearTimeout(scrollTimer)
-    scrollTimer = setTimeout(() => translateVisible(), 300)
+    if (visibleBatch.length > 0 && !batchTimer) {
+      batchTimer = setTimeout(flushVisibleBatch, 50)
+    }
+  }
+
+  function observeBlocks(blocks: TranslatableBlock[]) {
+    if (!visibilityObserver) return
+    for (const block of blocks) {
+      if (block.element.hasAttribute(PROCESSED_ATTR)) continue
+      if (blockMap.has(block.element)) continue
+      blockMap.set(block.element, block)
+      visibilityObserver.observe(block.element)
+    }
   }
 
   function onToggle(e: Event) {
@@ -146,12 +173,8 @@ export default defineUnlistedScript(() => {
     setTimeout(() => {
       if (!isTranslating) return
       const newBlocks = extractBlocks(details, extractOpts)
-      for (const block of newBlocks) {
-        if (!block.element.hasAttribute(PROCESSED_ATTR)) {
-          pendingBlocks.push(block)
-        }
-      }
-      translateVisible()
+      discardSelfMutations()
+      observeBlocks(newBlocks)
     }, 100)
   }
 
@@ -178,14 +201,13 @@ export default defineUnlistedScript(() => {
       el.removeAttribute(PROCESSED_ATTR)
       el.removeAttribute('data-imp-text')
       const newBlocks = extractBlocks(el, extractOpts)
-      if (newBlocks.length > 0) {
-        pendingBlocks.push(...newBlocks)
-        translateVisible()
-      }
+      discardSelfMutations()
+      observeBlocks(newBlocks)
       return
     }
     repositionTranslation(el as HTMLElement, newText)
     el.setAttribute('data-imp-text', newText)
+    discardSelfMutations()
     const block: TranslatableBlock = { element: el as HTMLElement, text: newText }
     const filtered = await filterByLanguage([block])
     if (filtered.length === 0) return
@@ -197,6 +219,7 @@ export default defineUnlistedScript(() => {
       if (!isTranslating) return
       if (wrapper.parentElement) {
         wrapper.textContent = translated
+        discardSelfMutations()
       }
     } catch {
       // keep old translation on error
@@ -221,8 +244,8 @@ export default defineUnlistedScript(() => {
 
   function handleMutations(mutations: MutationRecord[]) {
     if (!isTranslating) return
-    let hasNew = false
     let needsDelayedRescan = false
+    const newBlocks: TranslatableBlock[] = []
     for (const mutation of mutations) {
       const target = mutation.target
       if (target instanceof Element && target.closest(`.${RESULT_CLASS}`)) continue
@@ -235,12 +258,13 @@ export default defineUnlistedScript(() => {
         if (node.nodeType !== Node.ELEMENT_NODE) continue
         const addedEl = node as Element
         if (addedEl.classList?.contains(RESULT_CLASS)) continue
+        if (addedEl.classList?.contains('imp-translate-br')) continue
+        if (addedEl.hasAttribute('data-imp-wrap')) continue
         if (addedEl.hasAttribute(PROCESSED_ATTR)) continue
         if (addedEl.closest(`[${PROCESSED_ATTR}]`)) continue
-        const newBlocks = extractBlocks(addedEl, extractOpts)
-        if (newBlocks.length > 0) {
-          pendingBlocks.push(...newBlocks)
-          hasNew = true
+        const extracted = extractBlocks(addedEl, extractOpts)
+        if (extracted.length > 0) {
+          newBlocks.push(...extracted)
         } else {
           const tag = addedEl.tagName.toLowerCase()
           if (!tag.includes('loader') && tag !== 'script' && tag !== 'style') {
@@ -260,7 +284,8 @@ export default defineUnlistedScript(() => {
       if (delayedRescanTimer) clearTimeout(delayedRescanTimer)
       delayedRescanTimer = setTimeout(rescanBlocks, 500)
     }
-    if (hasNew) translateVisible()
+    discardSelfMutations()
+    if (newBlocks.length > 0) observeBlocks(newBlocks)
   }
 
   function attachShadowObserver(root: ShadowRoot) {
@@ -291,20 +316,17 @@ export default defineUnlistedScript(() => {
   function rescanBlocks() {
     if (!isTranslating) return
     const newBlocks = extractBlocks(document.body, extractOpts)
-    let hasNew = false
-    for (const block of newBlocks) {
-      if (!block.element.hasAttribute(PROCESSED_ATTR)) {
-        pendingBlocks.push(block)
-        hasNew = true
-      }
-    }
-    if (hasNew) translateVisible()
+    discardSelfMutations()
+    observeBlocks(newBlocks)
   }
 
   function onUrlChange() {
     if (!isTranslating) return
-    pendingBlocks = extractBlocks(document.body, extractOpts)
-    translateVisible()
+    visibilityObserver?.disconnect()
+    blockMap.clear()
+    const blocks = extractBlocks(document.body, extractOpts)
+    discardSelfMutations()
+    observeBlocks(blocks)
     setTimeout(rescanBlocks, 1000)
   }
 
@@ -381,13 +403,15 @@ export default defineUnlistedScript(() => {
     await waitForDOMReady()
     if (!isTranslating) return
     if (showToast) maybeShowToast()
-    pendingBlocks = extractBlocks(document.body, extractOpts)
-    document.addEventListener('scroll', onScroll, { passive: true, capture: true })
+    visibilityObserver = new IntersectionObserver(onIntersection, {
+      rootMargin: '0px 0px 100% 0px',
+    })
+    const blocks = extractBlocks(document.body, extractOpts)
     document.addEventListener('toggle', onToggle, { capture: true })
     document.addEventListener('click', onClick, { passive: true, capture: true })
     startObserver()
     startUrlWatcher()
-    await translateVisible()
+    observeBlocks(blocks)
   }
 
   function stopTranslation(keepToast = false) {
@@ -400,9 +424,15 @@ export default defineUnlistedScript(() => {
       obs.disconnect()
     }
     shadowObservers.clear()
-    if (scrollTimer) {
-      clearTimeout(scrollTimer)
-      scrollTimer = null
+    if (visibilityObserver) {
+      visibilityObserver.disconnect()
+      visibilityObserver = null
+    }
+    blockMap.clear()
+    visibleBatch = []
+    if (batchTimer) {
+      clearTimeout(batchTimer)
+      batchTimer = null
     }
     if (recheckTimer) {
       clearTimeout(recheckTimer)
@@ -417,7 +447,6 @@ export default defineUnlistedScript(() => {
       clickRescanTimer = null
     }
     pendingRecheck.clear()
-    document.removeEventListener('scroll', onScroll, { capture: true })
     document.removeEventListener('toggle', onToggle, { capture: true })
     document.removeEventListener('click', onClick, { capture: true })
     clearTranslations(document.body)
@@ -425,7 +454,6 @@ export default defineUnlistedScript(() => {
     removeDebugStyles()
     debugMode = false
     if (!keepToast) dismissToast()
-    pendingBlocks = []
   }
 
   browser.runtime.onMessage.addListener(

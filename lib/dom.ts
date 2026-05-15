@@ -167,6 +167,7 @@ function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
 }
 
 function isHidden(el: HTMLElement): boolean {
+  if (el.checkVisibility) return !el.checkVisibility()
   if (el.offsetWidth <= 1 || el.offsetHeight <= 1) return true
   return getComputedStyle(el).visibility === 'hidden'
 }
@@ -196,8 +197,14 @@ function isBlockTag(tag: string): boolean {
 }
 
 function isDisplayInline(el: Element): boolean {
-  const display = getComputedStyle(el).display
-  return display.startsWith('inline')
+  const inlineDisplay = (el as HTMLElement).style?.display
+  if (inlineDisplay) return inlineDisplay.startsWith('inline')
+  const tag = el.tagName.toLowerCase()
+  if (tag.includes('-')) {
+    const display = getComputedStyle(el).display
+    return display.startsWith('inline')
+  }
+  return INLINE_TAGS.has(tag)
 }
 
 // Detect "fake paragraph" markup: 2+ <br>s in a row (possibly with whitespace
