@@ -70,7 +70,7 @@ export default defineConfig({
     return manifest
   },
   webExt: {
-    disabled: true,
+    // disabled: true,
     chromiumProfile: '.tmp/chrome-profile',
     keepProfileChanges: true,
     chromiumArgs: ['--remote-debugging-port=9222'],
