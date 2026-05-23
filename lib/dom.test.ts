@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { extractBlocks, clearTranslations } from './dom'
+import { extractBlocks, clearTranslations, getVisibleBlocks, markTranslated, PROCESSED_ATTR } from './dom'
 
 describe('extractBlocks', () => {
   beforeEach(() => {
@@ -663,5 +663,43 @@ describe('extractBlocks', () => {
     const blocks = extractBlocks(document.body)
     expect(blocks).toHaveLength(1)
     expect(blocks[0].text).toBe('Some text')
+  })
+
+  it('extracts and marks blocks from large DOM without errors', () => {
+    const blockCount = 500
+    const blocks: string[] = []
+    for (let i = 0; i < blockCount; i++) {
+      blocks.push(`<p>This is paragraph number ${i} with some unique content for testing purposes.</p>`)
+    }
+    document.body.innerHTML = `
+      <h1>Large Page</h1>
+      <div id="content">
+        ${blocks.join('\n')}
+      </div>
+    `
+
+    // Full extraction
+    const extracted = extractBlocks(document.body)
+    expect(extracted.length).toBe(blockCount + 1) // 500 p + 1 h1
+
+    // Each block has text and element
+    for (const block of extracted) {
+      expect(block.text).toBeTruthy()
+      expect(block.element).toBeInstanceOf(HTMLElement)
+    }
+
+    // Mark visible blocks and verify PROCESSED_ATTR
+    const firstBlock = extracted[0]
+    markTranslated(firstBlock.element)
+    expect(firstBlock.element.hasAttribute(PROCESSED_ATTR)).toBe(true)
+
+    // Subsequent extraction skips processed elements
+    const extractedAfter = extractBlocks(document.body)
+    expect(extractedAfter.length).toBe(blockCount) // h1 and first p skipped
+
+    // Clear and verify re-extraction
+    clearTranslations(document.body)
+    const extractedAfterClear = extractBlocks(document.body)
+    expect(extractedAfterClear.length).toBe(blockCount + 1)
   })
 })
