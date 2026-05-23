@@ -95,9 +95,26 @@ async function startTranslationForTab(
   t('setIcon done')
   await injectContentScript(tabId)
   t('injectContentScript done')
-  // Content script auto-inits via getSelfTabState when injected,
-  // so we don't send startTranslation here. onDOMContentLoaded
-  // handles the primary init path for navigation.
+
+  // Also send startTranslation directly. The content script's auto-init
+  // only fires on FIRST injection; if inject.js was already loaded (e.g.
+  // after stop + start for language switching), the second injection is a
+  // no-op (__imp_injected guard) and auto-init never re-runs. sendToTab
+  // is the reliable way to wake the content script back up.
+  //
+  // This is safe w.r.t. onDOMContentLoaded races: non-main frames no
+  // longer send startTranslation (they only inject), and the main frame's
+  // duplicate is handled by the content script's isTranslating guard.
+  const tab = await browser.tabs.get(tabId)
+  const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
+  t('rules fetched')
+  await sendToTab(tabId, {
+    action: 'startTranslation',
+    targetLang,
+    showToast,
+    rules,
+  })
+  t('sendToTab (startTranslation) done')
 }
 
 async function stopTranslationForTab(tabId: number) {
