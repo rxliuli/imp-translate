@@ -7,6 +7,7 @@ import { eldDetectLanguage } from '@/lib/eld-detect'
 import { parseRules, matchRulesForHostname, type SiteRule } from '@/lib/rules'
 import { getEffectiveRules, setupRemoteRulesAlarm, fetchRemoteRulesIfNeeded } from '@/lib/remote-rules'
 import { PublicPath } from 'wxt/browser'
+import { debugTime } from '@/lib/utils'
 
 async function getMatchedRulesForHostname(hostname: string): Promise<SiteRule[]> {
   const effectiveRules = await getEffectiveRules()
@@ -40,10 +41,12 @@ function hostnameFromUrl(url: string | undefined): string {
 }
 
 async function injectContentScript(tabId: number) {
+  const t = debugTime(`injectContentScript(tabId=${tabId})`)
   await browser.scripting.executeScript({
     target: { tabId, allFrames: true },
     files: ['/inject.js'],
   })
+  t('executeScript(allFrames=true) resolved')
 }
 
 async function getTabTranslatingLang(tabId: number): Promise<string | null> {
@@ -82,17 +85,16 @@ async function startTranslationForTab(
   targetLang: string,
   showToast = false,
 ) {
+  const t = debugTime(`startTranslationForTab(tabId=${tabId})`)
   await setTabTranslatingLang(tabId, targetLang)
+  t('setTabTranslatingLang done')
   await browser.action.setIcon({ tabId, path: activeIcon })
+  t('setIcon done')
   await injectContentScript(tabId)
-  const tab = await browser.tabs.get(tabId)
-  const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
-  await sendToTab(tabId, {
-    action: 'startTranslation',
-    targetLang,
-    showToast,
-    rules,
-  })
+  t('injectContentScript done')
+  // Content script auto-inits via getSelfTabState when injected,
+  // so we don't send startTranslation here. onDOMContentLoaded
+  // handles the primary init path for navigation.
 }
 
 async function stopTranslationForTab(tabId: number) {
@@ -160,6 +162,10 @@ export default defineBackground(() => {
     return await getSettings()
   })
 
+  messager.onMessage('getMatchedRulesForHostname', async ({ data }) => {
+    return await getMatchedRulesForHostname(data.hostname)
+  })
+
   const BATCH_PARAMS: Record<
     TranslationProvider,
     { batchWindowMs: number; maxBatchSize: number; maxBatchChars?: number }
@@ -174,6 +180,7 @@ export default defineBackground(() => {
   function getService(provider: TranslationProvider): TranslateService {
     let service = services.get(provider)
     if (!service) {
+      const t = debugTime(`bg:createService(${provider})`)
       service = createTranslateService({
         ...BATCH_PARAMS[provider],
         getCached,
@@ -186,13 +193,18 @@ export default defineBackground(() => {
         onAfterFlush: () => evictOldEntries(),
       })
       services.set(provider, service)
+      t('created')
     }
     return service
   }
 
   messager.onMessage('translate', async ({ data }) => {
+    const t = debugTime(`bg:translate(lang=${data.targetLang}, text="${data.text.slice(0, 40)}")`)
     const settings = await getSettings()
-    return getService(settings.provider).translate(data.text, data.targetLang)
+    t('getSettings done')
+    const result = await getService(settings.provider).translate(data.text, data.targetLang)
+    t('translate done')
+    return result
   })
 
   messager.onMessage('startTab', async ({ data }) => {
@@ -261,36 +273,47 @@ export default defineBackground(() => {
   })
 
   browser.webNavigation.onDOMContentLoaded.addListener(async (details) => {
+    // Only the main frame (frame 0) handles translation init.
+    // Non-main frames skip the reload check and would always inject +
+    // sendToTab, causing duplicate startTranslation messages even on
+    // refresh (the reload check for frame 0 is async via executeScript,
+    // so other frames' handlers race ahead before it resolves).
+    if (details.frameId !== 0) return
+
     if (isPdfUrl(details.url)) return
     const lang = await getTabTranslatingLang(details.tabId)
     if (!lang) return
+    const t = debugTime(`onDOMContentLoaded(tabId=${details.tabId})`)
 
-    if (details.frameId === 0) {
-      try {
-        const [result] = await browser.scripting.executeScript({
-          target: { tabId: details.tabId },
-          func: () =>
-            (performance.getEntriesByType('navigation') as PerformanceNavigationTiming[])[0]
-              ?.type,
-        })
-        if (result?.result === 'reload') {
-          await setTabTranslatingLang(details.tabId, null)
-          await browser.action.setIcon({ tabId: details.tabId, path: defaultIcon })
-          return
-        }
-      } catch {
-        // scripting may fail on restricted pages; skip reload check
+    try {
+      const [result] = await browser.scripting.executeScript({
+        target: { tabId: details.tabId },
+        func: () =>
+          (performance.getEntriesByType('navigation') as PerformanceNavigationTiming[])[0]
+            ?.type,
+      })
+      if (result?.result === 'reload') {
+        await setTabTranslatingLang(details.tabId, null)
+        await browser.action.setIcon({ tabId: details.tabId, path: defaultIcon })
+        t('reload detected, stopped')
+        return
       }
+    } catch {
+      // scripting may fail on restricted pages; skip reload check
     }
+    t('reload check done')
 
     await injectContentScript(details.tabId)
+    t('injectContentScript done')
     const tab = await browser.tabs.get(details.tabId)
     const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
+    t('rules fetched')
     await sendToTab(details.tabId, {
       action: 'startTranslation',
       targetLang: lang,
       rules,
     })
+    t('sendToTab done')
   })
 
   browser.tabs.onRemoved.addListener(async (tabId) => {

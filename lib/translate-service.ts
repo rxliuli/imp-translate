@@ -24,6 +24,20 @@ interface BatchQueue {
   timer: ReturnType<typeof setTimeout> | null
 }
 
+function svcDebugTime(label: string): (msg: string) => void {
+  const start = performance.now()
+  let prev = start
+  const log = (msg: string) => {
+    const now = performance.now()
+    console.debug(
+      `[imp-time] ${label} | ${msg} — Δ${(now - prev).toFixed(1)}ms | total ${(now - start).toFixed(1)}ms`,
+    )
+    prev = now
+  }
+  log('start')
+  return log
+}
+
 export function createTranslateService(config: TranslateServiceConfig): TranslateService {
   const queues = new Map<string, BatchQueue>()
 
@@ -50,18 +64,30 @@ export function createTranslateService(config: TranslateServiceConfig): Translat
 
     const uniqueTexts = [...textToItems.keys()]
 
+    const t = svcDebugTime(`svc:flush(${lang}, n=${uniqueTexts.length})`)
     try {
       const translated = await config.translator(uniqueTexts, lang)
+      if (translated.length < uniqueTexts.length) {
+        throw new Error(
+          `Translator returned ${translated.length} results for ${uniqueTexts.length} inputs`,
+        )
+      }
+      t('translator returned')
       for (let i = 0; i < uniqueTexts.length; i++) {
         const text = uniqueTexts[i]
         const out = translated[i]
+        if (out === undefined || out === null) {
+          throw new Error(`Translator returned null/undefined for index ${i}: "${text.slice(0, 50)}"`)
+        }
         config.setCached(text, lang, out)
         for (const item of textToItems.get(text)!) item.resolve(out)
       }
       config.onAfterFlush?.()
+      t('done')
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err))
       for (const item of batch) item.reject(e)
+      t(`error: ${e.message}`)
     }
   }
 

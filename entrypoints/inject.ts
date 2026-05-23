@@ -6,6 +6,7 @@ import {
   extractBlocks,
   clearTranslations,
   markTranslated,
+  getVisibleBlocks,
   type TranslatableBlock,
   type ExtractOptions,
   PROCESSED_ATTR,
@@ -26,7 +27,7 @@ import {
 } from '@/lib/render'
 import { detectLanguage } from '@/lib/language-detect'
 import { saveSettings } from '@/lib/storage'
-import { isUrlOnly } from '@/lib/utils'
+import { isUrlOnly, debugTime } from '@/lib/utils'
 
 export default defineUnlistedScript(() => {
   const w = window as unknown as Record<string, unknown>
@@ -81,6 +82,7 @@ export default defineUnlistedScript(() => {
   }
 
   function translateBatch(batch: TranslatableBlock[]) {
+    const t = debugTime(`translateBatch(n=${batch.length})`)
     for (const block of batch) {
       messager
         .sendMessage('translate', { text: block.text, targetLang })
@@ -98,6 +100,7 @@ export default defineUnlistedScript(() => {
           discardSelfMutations()
         })
     }
+    t(`sent ${batch.length} translate messages`)
   }
 
   async function filterByLanguage(
@@ -152,7 +155,11 @@ export default defineUnlistedScript(() => {
       }
     }
     if (visibleBatch.length > 0 && !batchTimer) {
-      batchTimer = setTimeout(flushVisibleBatch, 50)
+      batchTimer = setTimeout(() => {
+        const t = debugTime('content:flushVisibleBatch')
+        flushVisibleBatch()
+        t('done')
+      }, 50)
     }
   }
 
@@ -393,25 +400,41 @@ export default defineUnlistedScript(() => {
     showToast = false,
     rules: SiteRule[] = [],
   ) {
-    if (isTranslating) return
+    const t = debugTime('content:startTranslation')
+    if (isTranslating) { t('skipped — already translating'); return }
     isTranslating = true
     targetLang = lang
     hostRules = rules
     cachedPathname = null
+    t('state set')
     await loadDeveloperSettings()
+    t('loadDeveloperSettings done')
     if (debugMode) injectDebugStyles()
     await waitForDOMReady()
-    if (!isTranslating) return
-    if (showToast) maybeShowToast()
+    t('waitForDOMReady done')
+    if (!isTranslating) { t('stopped mid-init'); return }
+    if (showToast) { maybeShowToast(); t('maybeShowToast called') }
     visibilityObserver = new IntersectionObserver(onIntersection, {
       rootMargin: '0px 0px 100% 0px',
     })
+    t('observer created')
     const blocks = extractBlocks(document.body, extractOpts)
+    t(`extractBlocks done — ${blocks.length} blocks`)
     document.addEventListener('toggle', onToggle, { capture: true })
     document.addEventListener('click', onClick, { passive: true, capture: true })
     startObserver()
     startUrlWatcher()
     observeBlocks(blocks)
+    t('observeBlocks done — waiting for IntersectionObserver')
+
+    // Immediately translate visible blocks instead of waiting for
+    // IntersectionObserver + 50ms batch timer. The observer callback
+    // correctly skips already-processed elements via PROCESSED_ATTR.
+    const visibleBlocks = getVisibleBlocks(blocks)
+    if (visibleBlocks.length > 0) {
+      t(`translating ${visibleBlocks.length} visible blocks immediately`)
+      translateBlocks(visibleBlocks)
+    }
   }
 
   function stopTranslation(keepToast = false) {
@@ -475,6 +498,34 @@ export default defineUnlistedScript(() => {
     const lang = await messager.sendMessage('getSelfTabState')
     if (!lang && isTranslating) {
       stopTranslation()
+      return
+    }
+    // BFCache restore race: on a refresh (F5), Chrome may fire pageshow
+    // on the preserved page BEFORE onDOMContentLoaded clears the session
+    // key. Wait a frame and re-check so the reload-triggered key clear
+    // has time to propagate. True back/forward navigation keeps the key
+    // set, so the re-check is a no-op.
+    if (lang && isTranslating) {
+      await new Promise((r) => setTimeout(r, 100))
+      const lang2 = await messager.sendMessage('getSelfTabState')
+      if (!lang2 && isTranslating) {
+        stopTranslation()
+      }
     }
   })
+
+  // Auto-init: when inject.js is loaded (via injectContentScript from
+  // startTranslationForTab), check if this tab should be translating.
+  // This avoids the race where sendToTab(startTranslation) arrives before
+  // the content script's message listener is registered in some frames.
+  ;(async () => {
+    await waitForDOMReady()
+    const lang = await messager.sendMessage('getSelfTabState')
+    if (!lang) return
+    if (isTranslating) return
+    const rules = await messager.sendMessage('getMatchedRulesForHostname', {
+      hostname: location.hostname,
+    })
+    startTranslation(lang, false, rules)
+  })()
 })

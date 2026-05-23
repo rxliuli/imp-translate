@@ -1,14 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { messager } from '@/lib/message'
-import { getSettings, saveSettings, type Settings } from '@/lib/storage'
+import { getSettings, saveSettings } from '@/lib/storage'
 import { LANGUAGES_SORTED } from '@/lib/languages'
 import { LanguagesIcon, SettingsIcon } from 'lucide-react'
-
-async function getActiveTab(): Promise<{ id?: number; url?: string }> {
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
-  return { id: tab?.id, url: tab?.url }
-}
 
 function isPdfUrl(url: string | undefined): boolean {
   if (!url) return false
@@ -19,60 +15,89 @@ function isPdfUrl(url: string | undefined): boolean {
   }
 }
 
-export function App() {
-  const [settings, setSettings] = useState<Settings | null>(null)
-  const [isTranslated, setIsTranslated] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [isPdf, setIsPdf] = useState(false)
+const settingsQuery = {
+  queryKey: ['settings'] as const,
+  queryFn: getSettings,
+}
 
+function tabStateQuery(tabId: number) {
+  return {
+    queryKey: ['tabState', tabId] as const,
+    queryFn: () => messager.sendMessage('getTabState', { tabId }),
+  }
+}
+
+export function App() {
+  const queryClient = useQueryClient()
+  const [tabMeta, setTabMeta] = useState<{ id: number; isPdf: boolean } | null>(null)
+
+  // Capture the active tab once when popup opens (it's tied to this tab)
   useEffect(() => {
-    getSettings().then(setSettings)
-    getActiveTab().then(async ({ id: tabId, url }) => {
-      if (!tabId) return
-      if (isPdfUrl(url)) {
-        setIsPdf(true)
-        return
-      }
-      const lang = await messager.sendMessage('getTabState', { tabId })
-      if (lang) setIsTranslated(true)
+    browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+      if (!tab?.id) return
+      setTabMeta({ id: tab.id, isPdf: isPdfUrl(tab.url) })
     })
   }, [])
 
-  async function handleTranslate() {
-    if (!settings) return
-    const { id: tabId } = await getActiveTab()
-    if (!tabId) return
-    setLoading(true)
-    try {
-      if (isTranslated) {
-        await messager.sendMessage('stopTab', { tabId })
-        setIsTranslated(false)
-      } else {
-        await messager.sendMessage('startTab', { tabId, targetLang: settings.targetLang })
-        setIsTranslated(true)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Settings — always fresh, no stale closure issues
+  const { data: settings } = useQuery(settingsQuery)
 
-  async function handleLangChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const targetLang = e.target.value
-    const updated = await saveSettings({ targetLang })
-    setSettings(updated)
-    if (isTranslated) {
-      const { id: tabId } = await getActiveTab()
-      if (!tabId) return
-      await messager.sendMessage('stopTab', { tabId })
-      await messager.sendMessage('startTab', { tabId, targetLang })
-    }
-  }
+  // Tab translation state — disabled until tabMeta is resolved
+  // queryKey includes tabMeta?.id (undefined → null at mount) so the key is
+  // stable across renders; enabled guard prevents actual execution.
+  const { data: tabLang } = useQuery({
+    queryKey: ['tabState', tabMeta?.id],
+    queryFn: () => messager.sendMessage('getTabState', { tabId: tabMeta!.id }),
+    enabled: tabMeta !== null && !tabMeta.isPdf,
+  })
+
+  const isTranslated = tabLang !== null
+
+  // Toggle translate / restore — reads latest state via queryClient, not closure
+  const toggleMutation = useMutation({
+    mutationFn: async () => {
+      const tabId = tabMeta!.id
+      const currentLang = await queryClient.fetchQuery(tabStateQuery(tabId))
+      if (currentLang) {
+        await messager.sendMessage('stopTab', { tabId })
+      } else {
+        const lang = (await queryClient.fetchQuery(settingsQuery)).targetLang
+        await messager.sendMessage('startTab', { tabId, targetLang: lang })
+      }
+    },
+    onSuccess: () => {
+      if (tabMeta) {
+        queryClient.invalidateQueries({ queryKey: ['tabState', tabMeta.id] })
+      }
+    },
+  })
+
+  // Language change — always reads fresh state before deciding what to do
+  const langChangeMutation = useMutation({
+    mutationFn: async (newLang: string) => {
+      const updated = await saveSettings({ targetLang: newLang })
+      if (tabMeta && !tabMeta.isPdf) {
+        const currentLang = await queryClient.fetchQuery(tabStateQuery(tabMeta.id))
+        if (currentLang) {
+          await messager.sendMessage('stopTab', { tabId: tabMeta.id })
+          await messager.sendMessage('startTab', { tabId: tabMeta.id, targetLang: newLang })
+        }
+      }
+      return updated
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['settings'], updated)
+      if (tabMeta) {
+        queryClient.invalidateQueries({ queryKey: ['tabState', tabMeta.id] })
+      }
+    },
+  })
 
   function openOptions() {
     browser.runtime.openOptionsPage()
   }
 
-  if (!settings) return null
+  if (!settings || !tabMeta) return null
 
   return (
     <div className="min-w-72 p-4 space-y-3">
@@ -91,7 +116,7 @@ export function App() {
         <select
           className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
           value={settings.targetLang}
-          onChange={handleLangChange}
+          onChange={(e) => langChangeMutation.mutate(e.target.value)}
         >
           {LANGUAGES_SORTED.map(([code, name]) => (
             <option key={code} value={code}>
@@ -101,13 +126,21 @@ export function App() {
         </select>
       </div>
 
-      {isPdf ? (
+      {tabMeta.isPdf ? (
         <p className="text-sm text-muted-foreground text-center py-1">
           PDF pages cannot be translated
         </p>
       ) : (
-        <Button className="w-full" onClick={handleTranslate} disabled={loading}>
-          {loading ? 'Translating...' : isTranslated ? 'Restore Original' : 'Translate Page'}
+        <Button
+          className="w-full"
+          onClick={() => toggleMutation.mutate()}
+          disabled={toggleMutation.isPending || langChangeMutation.isPending}
+        >
+          {toggleMutation.isPending
+            ? 'Translating...'
+            : isTranslated
+              ? 'Restore Original'
+              : 'Translate Page'}
         </Button>
       )}
     </div>

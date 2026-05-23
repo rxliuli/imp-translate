@@ -11,6 +11,7 @@ export interface TranslateRequest {
 export const messager = defineExtensionMessaging<{
   translate(req: TranslateRequest): string
   getSettings(): Settings
+  getMatchedRulesForHostname(data: { hostname: string }): SiteRule[]
   startTab(data: { tabId: number; targetLang: string }): void
   stopTab(data: { tabId: number }): void
   getTabState(data: { tabId: number }): string | null
