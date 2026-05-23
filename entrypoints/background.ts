@@ -40,13 +40,16 @@ function hostnameFromUrl(url: string | undefined): string {
   }
 }
 
-async function injectContentScript(tabId: number) {
-  const t = debugTime(`injectContentScript(tabId=${tabId})`)
+async function injectContentScript(tabId: number, frameId?: number) {
+  const t = debugTime(`injectContentScript(tabId=${tabId}${frameId !== undefined ? `, frameId=${frameId}` : ''})`)
+  const target = frameId !== undefined
+    ? { tabId, frameIds: [frameId] }
+    : { tabId, allFrames: true }
   await browser.scripting.executeScript({
-    target: { tabId, allFrames: true },
+    target,
     files: ['/inject.js'],
   })
-  t('executeScript(allFrames=true) resolved')
+  t('executeScript resolved')
 }
 
 async function getTabTranslatingLang(tabId: number): Promise<string | null> {
@@ -273,12 +276,18 @@ export default defineBackground(() => {
   })
 
   browser.webNavigation.onDOMContentLoaded.addListener(async (details) => {
-    // Only the main frame (frame 0) handles translation init.
-    // Non-main frames skip the reload check and would always inject +
-    // sendToTab, causing duplicate startTranslation messages even on
-    // refresh (the reload check for frame 0 is async via executeScript,
-    // so other frames' handlers race ahead before it resolves).
-    if (details.frameId !== 0) return
+    // Non-main frames (dynamically added iframes, sub-frames): inject
+    // the content script so the auto-init in inject.js can pick up the
+    // translation state. Don't send startTranslation — that's handled by
+    // frame 0 below (and would be a duplicate for non-main frames since
+    // frame 0's inject already covers all frames via allFrames: true).
+    if (details.frameId !== 0) {
+      // Inject only into this specific frame; allFrames:true would
+      // re-inject into every frame including the main one (harmless
+      // thanks to __imp_injected guard, but wasteful).
+      await injectContentScript(details.tabId, details.frameId)
+      return
+    }
 
     if (isPdfUrl(details.url)) return
     const lang = await getTabTranslatingLang(details.tabId)
