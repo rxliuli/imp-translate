@@ -284,7 +284,13 @@ export default defineBackground(() => {
     if (details.frameId !== 0) return
     const lang = await getTabTranslatingLang(details.tabId)
     if (!lang) return
-    if (isPdfUrl(details.url)) {
+    // A reload (or navigating to a PDF) stops translation. Detect the reload
+    // here at commit — the earliest available event — and clear the
+    // translating state now, so that sub-frame onDOMContentLoaded handlers
+    // below don't read a stale "translating" key and re-translate an iframe
+    // on a page that was just reloaded. The performance.navigation check in
+    // onDOMContentLoaded remains as a backstop for cases transitionType misses.
+    if (details.transitionType === 'reload' || isPdfUrl(details.url)) {
       await setTabTranslatingLang(details.tabId, null)
       await browser.action.setIcon({ tabId: details.tabId, path: defaultIcon })
       return
@@ -293,16 +299,30 @@ export default defineBackground(() => {
   })
 
   browser.webNavigation.onDOMContentLoaded.addListener(async (details) => {
-    // Non-main frames (dynamically added iframes, sub-frames): inject
-    // the content script so the auto-init in inject.js can pick up the
-    // translation state. Don't send startTranslation — that's handled by
-    // frame 0 below (and would be a duplicate for non-main frames since
-    // frame 0's inject already covers all frames via allFrames: true).
+    // Non-main frames (dynamically added iframes, sub-frames): drive them
+    // explicitly from the background rather than letting inject.js self-start.
+    // Sub-frame auto-init is disabled (it would read the session key on its
+    // own and could win a race against frame 0's reload check, translating an
+    // iframe on a page that was just reloaded). Here we read the key *after*
+    // onCommitted has already cleared it for reloads, so the decision is
+    // correct: only inject + start this specific frame when the tab is
+    // genuinely translating.
     if (details.frameId !== 0) {
-      // Inject only into this specific frame; allFrames:true would
-      // re-inject into every frame including the main one (harmless
-      // thanks to __imp_injected guard, but wasteful).
+      const lang = await getTabTranslatingLang(details.tabId)
+      if (!lang) return
+      // Inject only into this specific frame; allFrames:true would re-inject
+      // into every frame including the main one (harmless thanks to the
+      // __imp_injected guard, but wasteful).
       await injectContentScript(details.tabId, details.frameId)
+      const tab = await browser.tabs.get(details.tabId)
+      const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
+      // Target this frame only — broadcasting would needlessly re-wake every
+      // already-translating frame in the tab.
+      await sendToTab(
+        details.tabId,
+        { action: 'startTranslation', targetLang: lang, rules },
+        details.frameId,
+      )
       return
     }
 

@@ -348,6 +348,10 @@ export default defineUnlistedScript(() => {
   }
 
   async function maybeShowToast() {
+    // Only the top frame shows the toast bar. startTranslation is broadcast
+    // to every frame (so iframe content gets translated too); without this
+    // guard each large iframe would render its own toast inside itself.
+    if (window.self !== window.top) return
     const mobile = await messager.sendMessage('isMobile')
     if (!mobile) return
     showToastBar({
@@ -518,7 +522,14 @@ export default defineUnlistedScript(() => {
   // startTranslationForTab), check if this tab should be translating.
   // This avoids the race where sendToTab(startTranslation) arrives before
   // the content script's message listener is registered in some frames.
+  //
+  // Only the top frame auto-inits. Sub-frames are driven explicitly by the
+  // background's webNavigation handlers (which send a per-frame
+  // startTranslation), so they never self-start from a session key that may
+  // still be stale during a reload. The listener above is registered
+  // synchronously, so the background's post-inject sendToTab can't outrace it.
   ;(async () => {
+    if (window.self !== window.top) return
     await waitForDOMReady()
     const lang = await messager.sendMessage('getSelfTabState')
     if (!lang) return

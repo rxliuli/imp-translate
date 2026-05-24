@@ -38,6 +38,35 @@ test('translates content inside a dynamically added iframe', async ({ context, b
   })
 })
 
+test('reload stops translation in iframes too (no stale re-translate)', async ({
+  context,
+  baseURL,
+}) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/with-iframes`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  const largeFrame = page.frameLocator('#large-iframe')
+  await expect(largeFrame.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  // Reload: this stops translation (the reload-stop behavior). The iframe's
+  // sub-frame onDOMContentLoaded handler must NOT read a stale session key
+  // and re-translate. Regression guard for the cross-frame reload race.
+  await page.reload()
+  await page.waitForLoadState('domcontentloaded')
+
+  // Give any erroneous (stale) translation a chance to appear, then assert
+  // neither the main page nor the iframe got translated.
+  await page.waitForTimeout(2000)
+  await expect(page.locator(TRANSLATED_SELECTOR)).toHaveCount(0)
+  await expect(largeFrame.locator(TRANSLATED_SELECTOR)).toHaveCount(0)
+})
+
 test('skips translation inside a tiny iframe', async ({ context, baseURL }) => {
   const page = await context.newPage()
   await page.goto(`${baseURL}/with-iframes`)

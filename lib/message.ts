@@ -42,6 +42,16 @@ export type ContentResponse =
   | { isTranslating: boolean }
   | void
 
-export function sendToTab(tabId: number, message: ContentAction): Promise<ContentResponse> {
+export function sendToTab(
+  tabId: number,
+  message: ContentAction,
+  frameId?: number,
+): Promise<ContentResponse> {
+  // Omitting frameId broadcasts to every frame in the tab; passing it
+  // targets a single frame (used to drive dynamically added iframes without
+  // re-waking already-translating frames).
+  if (frameId !== undefined) {
+    return browser.tabs.sendMessage(tabId, message, { frameId })
+  }
   return browser.tabs.sendMessage(tabId, message)
 }
