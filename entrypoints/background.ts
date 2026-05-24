@@ -310,19 +310,28 @@ export default defineBackground(() => {
     if (details.frameId !== 0) {
       const lang = await getTabTranslatingLang(details.tabId)
       if (!lang) return
-      // Inject only into this specific frame; allFrames:true would re-inject
-      // into every frame including the main one (harmless thanks to the
-      // __imp_injected guard, but wasteful).
-      await injectContentScript(details.tabId, details.frameId)
-      const tab = await browser.tabs.get(details.tabId)
-      const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
-      // Target this frame only — broadcasting would needlessly re-wake every
-      // already-translating frame in the tab.
-      await sendToTab(
-        details.tabId,
-        { action: 'startTranslation', targetLang: lang, rules },
-        details.frameId,
-      )
+      // Transient sub-frames (ad/embed iframes, especially common on Reddit)
+      // often vanish between onDOMContentLoaded and the time these async calls
+      // run, so executeScript / sendToTab reject with "No frame with id N".
+      // That's expected, not an error — swallow it instead of letting it
+      // surface as an uncaught promise rejection.
+      try {
+        // Inject only into this specific frame; allFrames:true would re-inject
+        // into every frame including the main one (harmless thanks to the
+        // __imp_injected guard, but wasteful).
+        await injectContentScript(details.tabId, details.frameId)
+        const tab = await browser.tabs.get(details.tabId)
+        const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
+        // Target this frame only — broadcasting would needlessly re-wake every
+        // already-translating frame in the tab.
+        await sendToTab(
+          details.tabId,
+          { action: 'startTranslation', targetLang: lang, rules },
+          details.frameId,
+        )
+      } catch {
+        // Frame gone (or otherwise un-injectable) — nothing to translate.
+      }
       return
     }
 
