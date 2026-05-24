@@ -702,4 +702,105 @@ describe('extractBlocks', () => {
     const extractedAfterClear = extractBlocks(document.body)
     expect(extractedAfterClear.length).toBe(blockCount + 1)
   })
+
+  it('never reads layout after mutating the DOM (layout-thrash regression guard)', () => {
+    // The 1-2s startup stall on Reddit came from extractBlocks interleaving DOM
+    // writes (wrapper insertion, onShadowRoot style injection) with layout reads
+    // (getComputedStyle / checkVisibility) during the walk — each read after a
+    // write forces a full synchronous reflow, ~quadratic on big DOMs.
+    //
+    // Rather than assert wall-clock time (flaky across machines/CI), we assert
+    // the structural invariant that fixes it: the walk is a pure read phase and
+    // ALL writes happen afterward. So once any DOM mutation occurs inside an
+    // extractBlocks call, no layout read may follow. The old interleaved code
+    // trips this on the very first wrapper it inserts; the two-phase code
+    // keeps the counter at zero.
+
+    // Fixture that forces both write kinds:
+    //  - mixed text+inline runs in plain <div>s -> <font> wrappers (walkMixed)
+    //  - custom elements (hyphen tags) -> getComputedStyle in isDisplayInline
+    //  - shadow hosts -> onShadowRoot callback (which we make perform a write)
+    const root = document.createElement('div')
+    for (let i = 0; i < 100; i++) {
+      // Mixed block + inline content forces walkMixed to wrap the inline runs
+      // (before and after the <p>) into <font> elements — the core write path.
+      // (A parent with only inline children is extracted wholesale and never
+      // wrapped, so it would not exercise the regression.)
+      const section = document.createElement('section')
+      section.appendChild(document.createTextNode(`Intro inline ${i} `))
+      const span = document.createElement('span')
+      span.textContent = 'span bit'
+      section.appendChild(span)
+      const p = document.createElement('p')
+      p.textContent = `Block child paragraph ${i}.`
+      section.appendChild(p)
+      section.appendChild(document.createTextNode(' Tail inline '))
+      const em = document.createElement('em')
+      em.textContent = 'emphasis'
+      section.appendChild(em)
+      section.appendChild(document.createTextNode(' text.'))
+      root.appendChild(section)
+      if (i % 20 === 0) {
+        const widget = document.createElement('my-widget')
+        widget.textContent = `Widget body ${i}`
+        root.appendChild(widget)
+        const hostDiv = document.createElement('div')
+        root.appendChild(hostDiv)
+        hostDiv.attachShadow({ mode: 'open' }).innerHTML = `<p>Shadow para ${i}</p>`
+      }
+    }
+    document.body.appendChild(root)
+
+    let mutated = false
+    let readsAfterMutation = 0
+    const realGetComputedStyle = window.getComputedStyle
+    const realCheckVisibility = Element.prototype.checkVisibility
+    const realGetBoundingClientRect = Element.prototype.getBoundingClientRect
+    // insertBefore/appendChild live on Node.prototype, not Element.prototype —
+    // patching Node also catches ShadowRoot writes (e.g. onShadowRoot styles).
+    const realInsertBefore = Node.prototype.insertBefore
+    const realAppendChild = Node.prototype.appendChild
+
+    window.getComputedStyle = function (this: Window, ...args: unknown[]) {
+      if (mutated) readsAfterMutation++
+      return (realGetComputedStyle as Function).apply(window, args)
+    } as typeof window.getComputedStyle
+    Element.prototype.checkVisibility = function (this: Element, ...args: unknown[]) {
+      if (mutated) readsAfterMutation++
+      return (realCheckVisibility as Function).apply(this, args)
+    } as typeof Element.prototype.checkVisibility
+    Element.prototype.getBoundingClientRect = function (this: Element, ...args: unknown[]) {
+      if (mutated) readsAfterMutation++
+      return (realGetBoundingClientRect as Function).apply(this, args)
+    } as typeof Element.prototype.getBoundingClientRect
+    Node.prototype.insertBefore = function (this: Node, ...args: unknown[]) {
+      mutated = true
+      return (realInsertBefore as Function).apply(this, args)
+    } as typeof Node.prototype.insertBefore
+    Node.prototype.appendChild = function (this: Node, ...args: unknown[]) {
+      mutated = true
+      return (realAppendChild as Function).apply(this, args)
+    } as typeof Node.prototype.appendChild
+
+    let blockCount = 0
+    try {
+      const blocks = extractBlocks(root, {
+        // A representative write in the shadow path (mirrors ensureShadowStyles).
+        onShadowRoot: (r) => r.appendChild(document.createElement('style')),
+      })
+      blockCount = blocks.length
+    } finally {
+      window.getComputedStyle = realGetComputedStyle
+      Element.prototype.checkVisibility = realCheckVisibility
+      Element.prototype.getBoundingClientRect = realGetBoundingClientRect
+      Node.prototype.insertBefore = realInsertBefore
+      Node.prototype.appendChild = realAppendChild
+      root.remove()
+    }
+
+    // Sanity: the fixture really exercised the wrapper + read paths.
+    expect(blockCount).toBeGreaterThan(100)
+    // The invariant: zero layout reads after the first write.
+    expect(readsAfterMutation).toBe(0)
+  })
 })
