@@ -172,23 +172,32 @@ function isHidden(el: HTMLElement): boolean {
   return getComputedStyle(el).visibility === 'hidden'
 }
 
+function visibleTextOfChild(child: Node, skipSelectors?: string[]): string {
+  if (child.nodeType === Node.TEXT_NODE) return child.textContent ?? ''
+  if (child.nodeType !== Node.ELEMENT_NODE) return ''
+  const childEl = child as HTMLElement
+  if (SKIP_TAGS.has(childEl.tagName.toLowerCase())) return ''
+  if (childEl.classList.contains(RESULT_CLASS)) return ''
+  if (childEl.classList.contains('notranslate')) return ''
+  if (childEl.getAttribute('translate') === 'no') return ''
+  if (childEl.isContentEditable) return ''
+  if (isHidden(childEl)) return ''
+  if (skipSelectors && skipSelectors.some((s) => childEl.matches(s))) return ''
+  return getVisibleText(childEl, skipSelectors)
+}
+
 function getVisibleText(el: Element, skipSelectors?: string[]): string {
   let text = ''
-  for (const child of el.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      text += child.textContent
-    } else if (child.nodeType === Node.ELEMENT_NODE) {
-      const childEl = child as HTMLElement
-      if (SKIP_TAGS.has(childEl.tagName.toLowerCase())) continue
-      if (childEl.classList.contains(RESULT_CLASS)) continue
-      if (childEl.classList.contains('notranslate')) continue
-      if (childEl.getAttribute('translate') === 'no') continue
-      if (childEl.isContentEditable) continue
-      if (isHidden(childEl)) continue
-      if (skipSelectors && skipSelectors.some((s) => childEl.matches(s))) continue
-      text += getVisibleText(childEl, skipSelectors)
-    }
-  }
+  for (const child of el.childNodes) text += visibleTextOfChild(child, skipSelectors)
+  return text
+}
+
+// Same as getVisibleText but over an arbitrary node list rather than an
+// element's childNodes — lets us compute a wrapper's text from its prospective
+// children before the wrapper is actually created/inserted (deferred write).
+function visibleTextOfNodes(nodes: Node[], skipSelectors?: string[]): string {
+  let text = ''
+  for (const child of nodes) text += visibleTextOfChild(child, skipSelectors)
   return text
 }
 
@@ -268,6 +277,19 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     }
   }
   const blocks: TranslatableBlock[] = []
+  // Deferred writes. The walk is a pure read phase — every DOM mutation
+  // (wrapper insertion, shadow-root style/observer setup) is collected here and
+  // flushed in one write phase after the walk. Interleaving writes with the
+  // walk's layout reads (getComputedStyle/checkVisibility/getBoundingClientRect)
+  // would force a synchronous reflow per write — quadratic on large DOMs like
+  // Reddit (~2s). Batching keeps reads cheap and coalesces reflow into one.
+  const pendingWraps: {
+    parent: Element
+    wrapper: HTMLElement
+    refNode: Node
+    seg: Node[]
+  }[] = []
+  const pendingShadowRoots: ShadowRoot[] = []
 
   function tryExtract(node: Element): boolean {
     if (isHidden(node as HTMLElement)) return false
@@ -287,6 +309,31 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       return true
     }
     return false
+  }
+
+  // Read-only counterpart of tryExtract for the multi-node wrapper case: decide
+  // eligibility and compute the block text from the segment nodes *in place*,
+  // create the <font> wrapper detached (cheap, no layout impact), and record the
+  // actual insertion/child-move for the write phase. The include gate is checked
+  // on `parent` rather than the wrapper — equivalent, since the wrapper is a
+  // plain <font> directly under `parent` that never matches an include selector.
+  function deferWrap(parent: Element, seg: Node[]) {
+    if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
+      const inside = opts.includeSelectors.some((s) => closestThroughShadow(parent, s))
+      if (!inside) return
+    }
+    const text = visibleTextOfNodes(seg, opts?.skipSelectors).trim()
+    if (!text || NO_LETTER_RE.test(text)) return
+    if (import.meta.env.DEV && text.length > OVERSIZED_BLOCK_THRESHOLD) {
+      console.warn(
+        `[imp-translate] oversized block (${text.length} chars) — likely a walker bug. Parent:`,
+        parent,
+      )
+    }
+    const wrapper = parent.ownerDocument!.createElement('font')
+    wrapper.setAttribute(WRAP_ATTR, 'true')
+    blocks.push({ element: wrapper, text })
+    pendingWraps.push({ parent, wrapper, refNode: seg[0], seg })
   }
 
   function walkMixed(parent: Element) {
@@ -337,14 +384,9 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
       // <font> over <span>: site CSS/JS targets `span` far more often than the
       // near-deprecated `<font>`, so a font wrapper is more transparent to the
-      // host page. Same tag as our translation result element.
-      const wrapper = parent.ownerDocument!.createElement('font')
-      wrapper.setAttribute(WRAP_ATTR, 'true')
-      parent.insertBefore(wrapper, seg[0])
-      for (const n of seg) {
-        wrapper.appendChild(n)
-      }
-      tryExtract(wrapper)
+      // host page. Same tag as our translation result element. Insertion is
+      // deferred to the write phase (see deferWrap) to avoid layout thrash.
+      deferWrap(parent, seg)
     }
 
     const flush = () => {
@@ -400,7 +442,9 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
   function walkShadow(node: Element) {
     const root = node.shadowRoot
     if (!root) return
-    opts?.onShadowRoot?.(root)
+    // Defer the onShadowRoot callback (style injection + observer attach) — it
+    // mutates the shadow root and would dirty layout mid-walk.
+    pendingShadowRoots.push(root)
     for (const child of root.children) {
       walk(child)
     }
@@ -408,6 +452,15 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
   walk(root)
   if (root instanceof Element) walkShadow(root)
+
+  // WRITE PHASE — every DOM mutation happens here, after all layout reads, so
+  // the browser coalesces the work into a single reflow instead of one per node.
+  for (const { parent, wrapper, refNode, seg } of pendingWraps) {
+    parent.insertBefore(wrapper, refNode)
+    for (const n of seg) wrapper.appendChild(n)
+  }
+  for (const root of pendingShadowRoots) opts?.onShadowRoot?.(root)
+
   return blocks
 }
 
