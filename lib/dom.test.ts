@@ -155,6 +155,30 @@ describe('extractBlocks', () => {
     expect(blocks[0].text).toContain('this works great')
   })
 
+  // Live X sets the mention wrapper's display:inline-flex via a CSS *class*
+  // (css-175oi2r r-xoduu5), not an inline style attribute. isDisplayInline must
+  // consult computed style — tag/inline-style checks alone read the <div> as a
+  // block, break the inline run, and fragment the tweet into per-span blocks.
+  // Repro: https://x.com/itsstock/status/2048817860261425541
+  it('should extract tweet with class-styled inline-flex mention div as one block', () => {
+    const style = document.createElement('style')
+    style.textContent = '.imp-test-inline-flex { display: inline-flex; }'
+    document.head.appendChild(style)
+    document.body.innerHTML = `
+      <div data-testid="tweetText">
+        <span>Just migrated to </span>
+        <div class="imp-test-inline-flex"><span><a>@heliumbrowser</a></span></div>
+        <span> and this works great.</span>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    style.remove()
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toContain('Just migrated to')
+    expect(blocks[0].text).toContain('@heliumbrowser')
+    expect(blocks[0].text).toContain('this works great')
+  })
+
   // Discord wraps message paragraphs in <span> siblings of <ol> list blocks.
   // The walker must extract inline siblings when their parent has block children.
   // Example: https://discord.com/channels/1371251680787824650/1470342586031145040/1478845063504068638

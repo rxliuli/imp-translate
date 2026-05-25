@@ -209,11 +209,17 @@ function isDisplayInline(el: Element): boolean {
   const inlineDisplay = (el as HTMLElement).style?.display
   if (inlineDisplay) return inlineDisplay.startsWith('inline')
   const tag = el.tagName.toLowerCase()
-  if (tag.includes('-')) {
-    const display = getComputedStyle(el).display
-    return display.startsWith('inline')
-  }
-  return INLINE_TAGS.has(tag)
+  if (INLINE_TAGS.has(tag)) return true
+  // A block-default tag (div, etc.) or custom element can still be rendered
+  // inline via a CSS class rather than an inline style attribute — e.g. X wraps
+  // each @mention in <div class="… r-xoduu5"> whose class sets
+  // display:inline-flex (no inline style). Tag/inline-style checks alone read
+  // that wrapper as a block, so it breaks the surrounding inline run and the
+  // tweet gets fragmented into per-span blocks (one bad out-of-context
+  // translation each). Consult computed style to catch it. Safe for the
+  // read/write split: this runs in the walk's read phase, before any deferred
+  // write, so it never forces a post-mutation reflow.
+  return getComputedStyle(el).display.startsWith('inline')
 }
 
 // Detect "fake paragraph" markup: 2+ <br>s in a row (possibly with whitespace
