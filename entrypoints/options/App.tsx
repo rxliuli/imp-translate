@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
+import { FaDiscord } from 'react-icons/fa'
+import { ExternalLink } from 'lucide-react'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import {
@@ -109,7 +111,30 @@ export function App() {
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Imp Translate</h1>
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">Imp Translate</h1>
+          <a
+            href="https://store.rxliuli.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Explore our other extensions
+          </a>
+        </div>
+        <a
+          href="https://discord.gg/gFhKUthc88"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Button variant="secondary" className="px-2 sm:px-4">
+            <FaDiscord className="text-indigo-500 h-4 w-4" />
+            <span className="hidden sm:inline">Join Discord</span>
+          </Button>
+        </a>
+      </div>
 
       <section className="space-y-4">
         <div className="space-y-1.5">
