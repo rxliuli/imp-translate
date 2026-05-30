@@ -89,7 +89,9 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=all&t=week  (search: post titles, community descriptions)
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=comment&t=week  (search comments: comment text + parent post title)
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=media&t=week  (search media: post titles below thumbnails)
+! https://www.reddit.com/search/?q=pixiv+export&type=posts&t=month  (posts search SDUI: title via post-title-text, body excerpt is a line-clamp-2 anchor with no testid)
 *.reddit.com#+#[data-testid="post-title-text"]
+*.reddit.com#+#[data-testid="search-post-with-content-preview"] a.line-clamp-2
 *.reddit.com#+#[data-testid="search-subreddit-desc-text"]
 *.reddit.com#+#.i18n-search-comment-content
 *.reddit.com#+#[data-testid="search-sdui-comment-unit"] h2
