@@ -727,6 +727,32 @@ describe('extractBlocks', () => {
     expect(extractedAfterClear.length).toBe(blockCount + 1)
   })
 
+  it('should extract block containing an inline include-matching child (tryExtract)', () => {
+    document.body.innerHTML = `
+      <div>
+        <p>Other content</p>
+        <h3><a data-testid="title-link">Issue title</a></h3>
+      </div>
+    `
+    const blocks = extractBlocks(document.body, { includeSelectors: ['[data-testid="title-link"]'] })
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('Issue title')
+  })
+
+  it('should extract inline run containing an include-matching child (deferWrap)', () => {
+    document.body.innerHTML = `
+      <div>
+        <p>Block child</p>
+        Some text <a class="target">linked text</a> more text
+      </div>
+    `
+    const blocks = extractBlocks(document.body, { includeSelectors: ['.target'] })
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toContain('Some text')
+    expect(blocks[0].text).toContain('linked text')
+    expect(blocks[0].text).toContain('more text')
+  })
+
   it('never reads layout after mutating the DOM (layout-thrash regression guard)', () => {
     // The 1-2s startup stall on Reddit came from extractBlocks interleaving DOM
     // writes (wrapper insertion, onShadowRoot style injection) with layout reads

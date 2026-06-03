@@ -301,7 +301,10 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     if (isHidden(node as HTMLElement)) return false
     if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
       const inside = opts.includeSelectors.some((s) => closestThroughShadow(node, s))
-      if (!inside) return false
+      if (!inside) {
+        const contains = opts.includeSelectors.some((s) => node.querySelector(s))
+        if (!contains) return false
+      }
     }
     const text = getVisibleText(node, opts?.skipSelectors).trim()
     if (text && !NO_LETTER_RE.test(text)) {
@@ -326,7 +329,10 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
   function deferWrap(parent: Element, seg: Node[]) {
     if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
       const inside = opts.includeSelectors.some((s) => closestThroughShadow(parent, s))
-      if (!inside) return
+      if (!inside) {
+        const contains = seg.some((n) => n.nodeType === Node.ELEMENT_NODE && opts.includeSelectors!.some((s) => (n as Element).matches(s) || (n as Element).querySelector(s)))
+        if (!contains) return
+      }
     }
     const text = visibleTextOfNodes(seg, opts?.skipSelectors).trim()
     if (!text || NO_LETTER_RE.test(text)) return

@@ -116,9 +116,19 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 ! https://en.wikipedia.org/wiki/Public_Suffix_List
 *.wikipedia.org##.mw-editsection
 
-! GitHub — document-style site; default walker handles README / issue / PR body via .markdown-body. Skip the repo home file tree where filenames merge with commit messages.
-! https://github.com/microsoft/vscode  (repo home: file tree)
-github.com##.react-directory-row
+! GitHub — component-based platform; include user-generated content containers only.
+! https://github.com/rxliuli/imp-translate  (repo home: README + About description)
+! https://github.com/nicepkg/gpt-runner/issues/39  (issue detail: title + body)
+! https://github.com/nicepkg/gpt-runner/issues  (issue list: titles)
+github.com#+#.markdown-body
+github.com#+#.markdown-title
+github.com#+#[data-testid="issue-pr-title-link"]
+github.com#+#.f4.tmp-my-3
+! https://github.com  (homepage: feed items, skip sidebar repo names + card UI)
+github.com#+#feed-container section
+github.com##.dashboard-sidebar
+github.com##feed-container .Link--primary
+github.com##feed-container button
 
 ! ChatGPT — chat platform; include user prompts and assistant responses only. Code blocks (<pre>) are already skipped by the default walker.
 ! https://chatgpt.com/c/<id>  (any conversation)

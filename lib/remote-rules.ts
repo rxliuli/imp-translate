@@ -47,6 +47,7 @@ export async function fetchRemoteRulesIfNeeded(
 }
 
 export async function getEffectiveRules(): Promise<SiteRule[]> {
+  if (import.meta.env.DEV) return builtinRules
   try {
     const raw = await getRemoteRulesRaw()
     if (raw) {
