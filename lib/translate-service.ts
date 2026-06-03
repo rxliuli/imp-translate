@@ -79,7 +79,9 @@ export function createTranslateService(config: TranslateServiceConfig): Translat
         if (out === undefined || out === null) {
           throw new Error(`Translator returned null/undefined for index ${i}: "${text.slice(0, 50)}"`)
         }
-        config.setCached(text, lang, out)
+        if (out.toLowerCase() !== text.toLowerCase()) {
+          config.setCached(text, lang, out)
+        }
         for (const item of textToItems.get(text)!) item.resolve(out)
       }
       config.onAfterFlush?.()
