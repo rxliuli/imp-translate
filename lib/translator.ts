@@ -1,4 +1,5 @@
 import type { Settings } from './storage'
+import { applyRequestInterceptors, type OpenAIRequest } from './interceptors'
 
 const NAMED_ENTITIES: Record<string, string> = {
   amp: '&',
@@ -137,20 +138,27 @@ async function translateOpenAI(
     .map((t, i) => `<t id="${i}">${t}</t>`)
     .join('\n')
 
-  const resp = await fetch(endpoint, {
-    method: 'POST',
+  const req: OpenAIRequest = {
+    endpoint,
+    model,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
+    body: {
       model,
-      temperature: 0.3,
       messages: [
         { role: 'system', content: prompt + '\nThe input contains multiple texts wrapped in <t id="N"> tags. Return translations in the same format with matching ids. Keep the XML tags intact.' },
         { role: 'user', content: userContent },
       ],
-    }),
+    },
+  }
+  applyRequestInterceptors(req)
+
+  const resp = await fetch(req.endpoint, {
+    method: 'POST',
+    headers: req.headers,
+    body: JSON.stringify(req.body),
   })
 
   if (!resp.ok) {
