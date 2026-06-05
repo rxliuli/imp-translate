@@ -107,6 +107,9 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 *.reddit.com##notification-item [data-testid="title"]
 *.reddit.com##notification-item [data-testid="sent-at"]
 *.reddit.com##notification-item notification-context-menu
+! https://www.reddit.com/r/amphibia/  (subreddit sidebar: community description, rules, custom widgets)
+*.reddit.com#+##description
+*.reddit.com#+#faceplate-expandable-section-helper h2.i18n-translatable-text,faceplate-expandable-section-helper .i18n-translatable-text p
 ! Reddit Chat — message bodies + link-preview cards live inside nested Shadow DOM (rs-timeline-event > shadow > rs-external-link-preview > shadow). The walker pierces open shadow roots, and include matching crosses shadow boundaries via closestThroughShadow.
 ! https://chat.reddit.com/  (any chat room — actual room URLs are private)
 *.reddit.com#+#.room-message-text
