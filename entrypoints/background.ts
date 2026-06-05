@@ -161,8 +161,18 @@ async function setupMobileAction() {
   }
 }
 
+function setupCacheCleanupAlarm() {
+  browser.alarms.create('evict-old-cache', { periodInMinutes: 24 * 60 })
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'evict-old-cache') {
+      evictOldEntries()
+    }
+  })
+}
+
 export default defineBackground(() => {
   setupRemoteRulesAlarm()
+  setupCacheCleanupAlarm()
 
   browser.runtime.onInstalled.addListener(() => setupMobileAction())
   browser.runtime.onStartup.addListener(() => setupMobileAction())

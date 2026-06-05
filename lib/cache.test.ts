@@ -1,9 +1,15 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { getCached, setCached, evictOldEntries, clearCache } from './cache'
 
 describe('cache', () => {
   beforeEach(async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2025-01-01'))
     await clearCache()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('should return undefined for uncached text', async () => {
@@ -24,14 +30,25 @@ describe('cache', () => {
 
   it('should return undefined for expired entries', async () => {
     await setCached('hello', 'zh', '你好')
-    vi.spyOn(Date, 'now').mockReturnValue(
-      Date.now() + 8 * 24 * 60 * 60 * 1000,
-    )
+    vi.advanceTimersByTime(31 * 24 * 60 * 60 * 1000)
     expect(await getCached('hello', 'zh')).toBeUndefined()
-    vi.restoreAllMocks()
   })
 
-  it('should not throw when evicting under limit', async () => {
+  it('should evict expired entries by timestamp index', async () => {
+    await setCached('old1', 'zh', '旧1')
+    await setCached('old2', 'zh', '旧2')
+
+    vi.advanceTimersByTime(31 * 24 * 60 * 60 * 1000)
+    await setCached('new1', 'zh', '新1')
+
+    await evictOldEntries()
+
+    expect(await getCached('old1', 'zh')).toBeUndefined()
+    expect(await getCached('old2', 'zh')).toBeUndefined()
+    expect(await getCached('new1', 'zh')).toBe('新1')
+  })
+
+  it('should keep fresh entries when evicting', async () => {
     await setCached('a', 'zh', '甲')
     await setCached('b', 'zh', '乙')
     await evictOldEntries()
