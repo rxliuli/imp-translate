@@ -16,50 +16,62 @@ function makeReq(model: string, endpoint = OPENAI_ENDPOINT): OpenAIRequest {
 }
 
 describe('disableOpenAIReasoning', () => {
-  it('adds reasoning_effort for o3-mini', () => {
+  it('sets reasoning_effort=none for o3-mini', () => {
     const req = makeReq('o3-mini')
     applyRequestInterceptors(req)
-    expect(req.body.reasoning_effort).toBe('low')
+    expect(req.body.reasoning_effort).toBe('none')
   })
 
-  it('adds reasoning_effort for o4-mini', () => {
+  it('sets reasoning_effort=none for o4-mini', () => {
     const req = makeReq('o4-mini')
     applyRequestInterceptors(req)
-    expect(req.body.reasoning_effort).toBe('low')
+    expect(req.body.reasoning_effort).toBe('none')
   })
 
-  it('adds reasoning_effort for prefixed model like openai/o3-mini', () => {
-    const req = makeReq('openai/o3-mini')
+  it('sets reasoning_effort=minimal for gpt-5', () => {
+    const req = makeReq('gpt-5')
     applyRequestInterceptors(req)
-    expect(req.body.reasoning_effort).toBe('low')
+    expect(req.body.reasoning_effort).toBe('minimal')
   })
 
-  it('does NOT add for gpt-4o on OpenAI endpoint', () => {
+  it('sets reasoning_effort=none for gpt-5.1', () => {
+    const req = makeReq('gpt-5.1')
+    applyRequestInterceptors(req)
+    expect(req.body.reasoning_effort).toBe('none')
+  })
+
+  it('sets reasoning_effort=none for gpt-5.5', () => {
+    const req = makeReq('gpt-5.5')
+    applyRequestInterceptors(req)
+    expect(req.body.reasoning_effort).toBe('none')
+  })
+
+  it('does NOT set for gpt-4o', () => {
     const req = makeReq('gpt-4o')
     applyRequestInterceptors(req)
     expect(req.body.reasoning_effort).toBeUndefined()
   })
 
-  it('does NOT add for gpt-4o-mini on OpenAI endpoint', () => {
+  it('does NOT set for gpt-4o-mini', () => {
     const req = makeReq('gpt-4o-mini')
     applyRequestInterceptors(req)
     expect(req.body.reasoning_effort).toBeUndefined()
   })
 
-  it('does NOT add for o3-mini on DeepSeek endpoint', () => {
+  it('does NOT set for gpt-4.1', () => {
+    const req = makeReq('gpt-4.1')
+    applyRequestInterceptors(req)
+    expect(req.body.reasoning_effort).toBeUndefined()
+  })
+
+  it('does NOT set for o3-mini on non-OpenAI endpoint', () => {
     const req = makeReq('o3-mini', DEEPSEEK_ENDPOINT)
     applyRequestInterceptors(req)
     expect(req.body.reasoning_effort).toBeUndefined()
   })
 
-  it('does NOT add for o1 on local endpoint', () => {
-    const req = makeReq('o1', LOCAL_ENDPOINT)
-    applyRequestInterceptors(req)
-    expect(req.body.reasoning_effort).toBeUndefined()
-  })
-
-  it('does NOT add for deepseek-chat on DeepSeek endpoint', () => {
-    const req = makeReq('deepseek-chat', DEEPSEEK_ENDPOINT)
+  it('does NOT set for gpt-5.5 on local endpoint', () => {
+    const req = makeReq('gpt-5.5', LOCAL_ENDPOINT)
     applyRequestInterceptors(req)
     expect(req.body.reasoning_effort).toBeUndefined()
   })
@@ -84,8 +96,8 @@ describe('disableDeepSeekThinking', () => {
     expect(req.body.reasoning_effort).toBeUndefined()
   })
 
-  it('does NOT add for deepseek-v4-flash on OpenAI endpoint', () => {
-    const req = makeReq('deepseek-v4-flash', OPENAI_ENDPOINT)
+  it('does NOT add for deepseek-v4-flash on local endpoint', () => {
+    const req = makeReq('deepseek-v4-flash', LOCAL_ENDPOINT)
     applyRequestInterceptors(req)
     expect(req.body.reasoning_effort).toBeUndefined()
   })
@@ -122,8 +134,8 @@ describe('disableGeminiThinking', () => {
     expect(req.body.reasoning_effort).toBeUndefined()
   })
 
-  it('does NOT add for gemini-2.5-flash on OpenAI endpoint', () => {
-    const req = makeReq('gemini-2.5-flash', OPENAI_ENDPOINT)
+  it('does NOT add for gemini-2.5-flash on DeepSeek endpoint', () => {
+    const req = makeReq('gemini-2.5-flash', DEEPSEEK_ENDPOINT)
     applyRequestInterceptors(req)
     expect(req.body.reasoning_effort).toBeUndefined()
   })
