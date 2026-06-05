@@ -42,7 +42,7 @@ export default defineConfig({
           matches: ['<all_urls>'],
         },
       ],
-      homepage_url: 'https://rxliuli.com/project/imp-translate',
+      homepage_url: 'https://store.rxliuli.com/extensions/imp-translate/',
       commands: {
         'toggle-translate': {
           suggested_key: {
