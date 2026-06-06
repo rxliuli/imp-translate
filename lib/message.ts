@@ -7,9 +7,15 @@ export interface TranslateRequest {
   targetLang: string
 }
 
+export interface TranslateBatchRequest {
+  texts: string[]
+  targetLang: string
+}
+
 // Content/Popup → Background
 export const messager = defineExtensionMessaging<{
   translate(req: TranslateRequest): string
+  translateBatch(req: TranslateBatchRequest): string[]
   getSettings(): Settings
   getMatchedRulesForHostname(data: { hostname: string }): SiteRule[]
   startTab(data: { tabId: number; targetLang: string }): void

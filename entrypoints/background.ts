@@ -237,6 +237,42 @@ export default defineBackground(() => {
     return result
   })
 
+  messager.onMessage('translateBatch', async ({ data }) => {
+    const t = debugTime(`bg:translateBatch(lang=${data.targetLang}, n=${data.texts.length})`)
+    const settings = await getSettings()
+    const lang = data.targetLang
+
+    const results: string[] = new Array(data.texts.length)
+    const uncachedIndices: number[] = []
+    const uncachedTexts: string[] = []
+
+    for (let i = 0; i < data.texts.length; i++) {
+      const cached = await getCached(data.texts[i], lang)
+      if (cached !== undefined) {
+        results[i] = cached
+      } else {
+        uncachedIndices.push(i)
+        uncachedTexts.push(data.texts[i])
+      }
+    }
+    t(`cache: ${data.texts.length - uncachedTexts.length} hit, ${uncachedTexts.length} miss`)
+
+    if (uncachedTexts.length > 0) {
+      const translated = await translate(uncachedTexts, lang, settings)
+      for (let j = 0; j < uncachedIndices.length; j++) {
+        const text = uncachedTexts[j]
+        const out = translated.texts[j]
+        results[uncachedIndices[j]] = out
+        if (out.toLowerCase() !== text.toLowerCase()) {
+          await setCached(text, lang, out)
+        }
+      }
+      evictOldEntries()
+    }
+    t('done')
+    return results
+  })
+
   messager.onMessage('startTab', async ({ data }) => {
     await startTranslationForTab(data.tabId, data.targetLang, true)
   })
