@@ -263,7 +263,7 @@ export default defineBackground(() => {
         const text = uncachedTexts[j]
         const out = translated.texts[j]
         results[uncachedIndices[j]] = out
-        if (out.toLowerCase() !== text.toLowerCase()) {
+        if (out.trim() && out.toLowerCase() !== text.toLowerCase()) {
           await setCached(text, lang, out)
         }
       }

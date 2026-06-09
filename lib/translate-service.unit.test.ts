@@ -239,6 +239,20 @@ describe('translate-service', () => {
     expect(h.cache.has('en::hello')).toBe(false)
   })
 
+  it('does not cache empty or whitespace-only translation results', async () => {
+    const h = createHarness({
+      batchWindowMs: 50,
+      translator: async (texts) => texts.map(() => ''),
+    })
+
+    const p = h.service.translate('hello', 'en')
+    await vi.advanceTimersByTimeAsync(50)
+    await p
+
+    expect(h.setCached).not.toHaveBeenCalled()
+    expect(h.cache.has('en::hello')).toBe(false)
+  })
+
   it('does not cache result when translation differs only in case', async () => {
     const h = createHarness({
       batchWindowMs: 50,
