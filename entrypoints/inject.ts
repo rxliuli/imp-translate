@@ -73,8 +73,10 @@ export default defineUnlistedScript(() => {
   let clickRescanTimer: ReturnType<typeof setTimeout> | null = null
   let visibilityObserver: IntersectionObserver | null = null
   const blockMap = new Map<Element, TranslatableBlock>()
-  let visibleBatch: TranslatableBlock[] = []
-  let batchTimer: ReturnType<typeof setTimeout> | null = null
+  let downBatch: TranslatableBlock[] = []
+  let downTimer: ReturnType<typeof setTimeout> | null = null
+  let upBatch: TranslatableBlock[] = []
+  let upTimer: ReturnType<typeof setTimeout> | null = null
 
   function discardSelfMutations() {
     observer?.takeRecords()
@@ -129,12 +131,59 @@ export default defineUnlistedScript(() => {
     translateBatch(blocks)
   }
 
-  function flushVisibleBatch() {
-    batchTimer = null
-    if (!isTranslating || visibleBatch.length === 0) return
-    const batch = visibleBatch.filter((b) => !b.element.hasAttribute(PROCESSED_ATTR))
-    visibleBatch = []
+  function flushDownBatch() {
+    downTimer = null
+    if (!isTranslating || downBatch.length === 0) return
+    const batch = downBatch.filter((b) => !b.element.hasAttribute(PROCESSED_ATTR))
+    downBatch = []
     if (batch.length > 0) translateBlocks(batch)
+  }
+
+  function flushUpBatch() {
+    upTimer = null
+    if (!isTranslating || upBatch.length === 0) return
+    const batch = upBatch.filter((b) => !b.element.hasAttribute(PROCESSED_ATTR))
+    upBatch = []
+    if (batch.length > 0) translateBlocks(batch)
+  }
+
+  const lastScrollTops = new WeakMap<EventTarget, number>()
+  let scrollDirection: 'up' | 'down' = 'down'
+  let lastUpTime = 0
+  const UP_COOLDOWN = 200
+  function updateScrollDirection(actualDir: 'up' | 'down') {
+    if (actualDir === 'up') {
+      scrollDirection = 'up'
+      lastUpTime = performance.now()
+    } else if (performance.now() - lastUpTime > UP_COOLDOWN) {
+      scrollDirection = 'down'
+    }
+  }
+  function onScroll(e: Event) {
+    const target = e.target
+    if (target === document || target === document.documentElement) {
+      const y = window.scrollY
+      const prev = lastScrollTops.get(document) ?? y
+      if (y < prev) updateScrollDirection('up')
+      else if (y > prev) updateScrollDirection('down')
+      lastScrollTops.set(document, y)
+    } else if (target instanceof Element) {
+      const y = target.scrollTop
+      const prev = lastScrollTops.get(target)
+      if (prev !== undefined) {
+        if (y < prev) updateScrollDirection('up')
+        else if (y > prev) updateScrollDirection('down')
+      }
+      lastScrollTops.set(target, y)
+    }
+    if (scrollDirection === 'up' && upBatch.length > 0 && upTimer) {
+      clearTimeout(upTimer)
+      upTimer = setTimeout(() => {
+        const t = debugTime('content:flushUpBatch')
+        flushUpBatch()
+        t('done')
+      }, 300)
+    }
   }
 
   function onIntersection(entries: IntersectionObserverEntry[]) {
@@ -149,17 +198,29 @@ export default defineUnlistedScript(() => {
       }
       const block = blockMap.get(el)
       if (block) {
-        visibleBatch.push(block)
+        if (scrollDirection === 'up') {
+          upBatch.push(block)
+        } else {
+          downBatch.push(block)
+        }
         visibilityObserver?.unobserve(el)
         blockMap.delete(el)
       }
     }
-    if (visibleBatch.length > 0 && !batchTimer) {
-      batchTimer = setTimeout(() => {
-        const t = debugTime('content:flushVisibleBatch')
-        flushVisibleBatch()
+    if (downBatch.length > 0 && !downTimer) {
+      downTimer = setTimeout(() => {
+        const t = debugTime('content:flushDownBatch')
+        flushDownBatch()
         t('done')
       }, 50)
+    }
+    if (upBatch.length > 0) {
+      if (upTimer) clearTimeout(upTimer)
+      upTimer = setTimeout(() => {
+        const t = debugTime('content:flushUpBatch')
+        flushUpBatch()
+        t('done')
+      }, 300)
     }
   }
 
@@ -426,6 +487,7 @@ export default defineUnlistedScript(() => {
     t(`extractBlocks done — ${blocks.length} blocks`)
     document.addEventListener('toggle', onToggle, { capture: true })
     document.addEventListener('click', onClick, { passive: true, capture: true })
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true })
     startObserver()
     startUrlWatcher()
     observeBlocks(blocks)
@@ -456,10 +518,15 @@ export default defineUnlistedScript(() => {
       visibilityObserver = null
     }
     blockMap.clear()
-    visibleBatch = []
-    if (batchTimer) {
-      clearTimeout(batchTimer)
-      batchTimer = null
+    downBatch = []
+    upBatch = []
+    if (downTimer) {
+      clearTimeout(downTimer)
+      downTimer = null
+    }
+    if (upTimer) {
+      clearTimeout(upTimer)
+      upTimer = null
     }
     if (recheckTimer) {
       clearTimeout(recheckTimer)
@@ -476,6 +543,7 @@ export default defineUnlistedScript(() => {
     pendingRecheck.clear()
     document.removeEventListener('toggle', onToggle, { capture: true })
     document.removeEventListener('click', onClick, { capture: true })
+    document.removeEventListener('scroll', onScroll, { capture: true })
     clearTranslations(document.body)
     removeStyles()
     removeDebugStyles()
