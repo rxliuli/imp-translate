@@ -134,9 +134,13 @@ async function translateOpenAI(
   if (!apiKey) throw new Error('OpenAI API key is not configured')
 
   const prompt = systemPrompt.replace('{{targetLang}}', targetLang)
-  const userContent = texts
-    .map((t, i) => `<t id="${i}">${t}</t>`)
-    .join('\n')
+  const single = texts.length === 1
+  const userContent = single
+    ? texts[0]
+    : texts.map((t, i) => `<t id="${i}">${t}</t>`).join('\n')
+  const sysContent = single
+    ? prompt
+    : prompt + '\nThe input contains multiple texts wrapped in <t id="N"> tags. Return translations in the same format with matching ids. Keep the XML tags intact.'
 
   const req: OpenAIRequest = {
     endpoint,
@@ -148,7 +152,7 @@ async function translateOpenAI(
     body: {
       model,
       messages: [
-        { role: 'system', content: prompt + '\nThe input contains multiple texts wrapped in <t id="N"> tags. Return translations in the same format with matching ids. Keep the XML tags intact.' },
+        { role: 'system', content: sysContent },
         { role: 'user', content: userContent },
       ],
     },
@@ -168,6 +172,10 @@ async function translateOpenAI(
 
   const data = await resp.json()
   const content: string = data.choices[0]?.message?.content || ''
+
+  if (single) {
+    return { texts: [content.trim()] }
+  }
 
   const results = new Array<string>(texts.length).fill('')
   const regex = /<t id="(\d+)">([\s\S]*?)<\/t>/g
