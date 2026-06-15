@@ -216,6 +216,9 @@ app.post('/v1/chat/completions', async (c) => {
   while ((match = tagRegex.exec(userMsg)) !== null) {
     translated += `<t id="${match[1]}">[翻译] ${match[2]}</t>\n`
   }
+  if (!translated) {
+    translated = `[翻译] ${userMsg}`
+  }
   return c.json({
     choices: [{
       message: { role: 'assistant', content: translated.trim() },
