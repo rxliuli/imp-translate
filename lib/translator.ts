@@ -187,6 +187,15 @@ async function translateOpenAI(
     }
   }
 
+  // Capture trailing <t> without closing </t> (LLMs often drop the last tag)
+  const unclosed = /[\s\S]*<t id="(\d+)">([\s\S]+)$/.exec(content)
+  if (unclosed) {
+    const idx = parseInt(unclosed[1])
+    if (idx >= 0 && idx < texts.length && !results[idx]) {
+      results[idx] = unclosed[2].trim()
+    }
+  }
+
   for (let i = 0; i < results.length; i++) {
     if (!results[i]) results[i] = texts[i]
   }

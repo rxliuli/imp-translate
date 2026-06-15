@@ -39,6 +39,98 @@ describe('decodeHTML', () => {
   })
 })
 
+const openaiSettings: Settings = {
+  provider: 'openai',
+  targetLang: 'zh',
+  developerMode: false,
+  debugMode: false,
+  customRules: '',
+  openai: {
+    apiKey: 'test-key',
+    endpoint: 'https://api.example.com/v1/chat/completions',
+    model: 'gpt-4o-mini',
+    systemPrompt: 'You are a translator. Translate the following text to {{targetLang}}. Return only the translation, no explanations.',
+  },
+}
+
+function mockOpenAIResponse(content: string) {
+  return {
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content } }],
+    }),
+  }
+}
+
+describe('OpenAI response parsing', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  it('single text skips XML tags', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(mockOpenAIResponse('你好世界'))
+
+    const { translate } = await import('./translator')
+    const result = await translate(['Hello world'], 'zh', openaiSettings)
+
+    expect(result.texts).toEqual(['你好世界'])
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.messages[1].content).toBe('Hello world')
+    expect(body.messages[0].content).not.toContain('<t id=')
+  })
+
+  it('batch with all tags closed parses correctly', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse('<t id="0">你好</t>\n<t id="1">世界</t>'),
+    )
+
+    const { translate } = await import('./translator')
+    const result = await translate(['Hello', 'World'], 'zh', openaiSettings)
+
+    expect(result.texts).toEqual(['你好', '世界'])
+  })
+
+  it('batch with missing closing tag on last item', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse('<t id="0">你好</t>\n<t id="1">世界'),
+    )
+
+    const { translate } = await import('./translator')
+    const result = await translate(['Hello', 'World'], 'zh', openaiSettings)
+
+    expect(result.texts).toEqual(['你好', '世界'])
+  })
+
+  it('batch with missing closing tag on long translation', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse(
+        '<t id="0">架构与PPA</t>\n<t id="1">麒麟9030属于进化级迭代，并非全新架构设计。',
+      ),
+    )
+
+    const { translate } = await import('./translator')
+    const result = await translate(
+      ['Architecture and PPA', 'The Kirin 9030 is an evolutionary step.'],
+      'zh',
+      openaiSettings,
+    )
+
+    expect(result.texts).toEqual([
+      '架构与PPA',
+      '麒麟9030属于进化级迭代，并非全新架构设计。',
+    ])
+  })
+})
+
 const cacheStore = new Map<string, string>()
 vi.mock('./cache', () => ({
   getCached: async (text: string, lang: string) => cacheStore.get(`${text}:${lang}`),
