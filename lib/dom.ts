@@ -7,6 +7,7 @@ const INLINE_TAGS = new Set([
 ])
 
 const NO_LETTER_RE = /^\P{L}+$/u
+const ASCII_SHORT_RE = /^[a-zA-Z0-9]{1,2}$/
 
 const SKIP_TAGS = new Set([
   'script', 'style', 'textarea', 'svg', 'template', 'noscript',
@@ -307,7 +308,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       }
     }
     const text = getVisibleText(node, opts?.skipSelectors).trim()
-    if (text && !NO_LETTER_RE.test(text)) {
+    if (text && !NO_LETTER_RE.test(text) && !ASCII_SHORT_RE.test(text)) {
       if (import.meta.env.DEV && text.length > OVERSIZED_BLOCK_THRESHOLD) {
         console.warn(
           `[imp-translate] oversized block (${text.length} chars) — likely a walker bug. Element:`,
@@ -335,7 +336,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       }
     }
     const text = visibleTextOfNodes(seg, opts?.skipSelectors).trim()
-    if (!text || NO_LETTER_RE.test(text)) return
+    if (!text || NO_LETTER_RE.test(text) || ASCII_SHORT_RE.test(text)) return
     if (import.meta.env.DEV && text.length > OVERSIZED_BLOCK_THRESHOLD) {
       console.warn(
         `[imp-translate] oversized block (${text.length} chars) — likely a walker bug. Parent:`,

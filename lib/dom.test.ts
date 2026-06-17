@@ -83,6 +83,22 @@ describe('extractBlocks', () => {
     expect(blocks[0].text).toBe('Real text')
   })
 
+  it('should skip short ASCII-only text (1-2 chars)', () => {
+    document.body.innerHTML = `
+      <div>
+        <p>R</p>
+        <p>OK</p>
+        <p>3</p>
+        <p>是</p>
+        <p>Hello world</p>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('是')
+    expect(blocks[1].text).toBe('Hello world')
+  })
+
   it('should exclude notranslate elements from visible text', () => {
     document.body.innerHTML = `
       <div>
