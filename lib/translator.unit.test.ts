@@ -131,6 +131,49 @@ describe('OpenAI response parsing', () => {
   })
 })
 
+describe('LLM explanation detection', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  it('single text: returns original when LLM explains instead of translating', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse('抱歉，您提供的信息 "rxliuli" 似乎是一个用户名或特定标识，无法直接翻译为中文。'),
+    )
+
+    const { translate } = await import('./translator')
+    const result = await translate(['rxliuli'], 'zh', openaiSettings)
+    expect(result.texts).toEqual(['rxliuli'])
+  })
+
+  it('single text: keeps valid translation for short text', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(mockOpenAIResponse('你好'))
+
+    const { translate } = await import('./translator')
+    const result = await translate(['Hello'], 'zh', openaiSettings)
+    expect(result.texts).toEqual(['你好'])
+  })
+
+  it('batch: returns original for explained items', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse(
+        '<t id="0">抱歉，rxliuli 是一个用户名，无法翻译为中文。如果您有其他需要翻译的内容，请告诉我。</t>\n<t id="1">你好世界</t>',
+      ),
+    )
+
+    const { translate } = await import('./translator')
+    const result = await translate(['rxliuli', 'Hello world'], 'zh', openaiSettings)
+    expect(result.texts).toEqual(['rxliuli', '你好世界'])
+  })
+})
+
 const cacheStore = new Map<string, string>()
 vi.mock('./cache', () => ({
   getCached: async (text: string, lang: string) => cacheStore.get(`${text}:${lang}`),

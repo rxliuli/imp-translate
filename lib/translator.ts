@@ -1,6 +1,13 @@
 import type { Settings } from './storage'
 import { applyRequestInterceptors, type OpenAIRequest } from './interceptors'
 
+const SHORT_TEXT_LIMIT = 20
+const EXPANSION_RATIO = 3
+
+function looksLikeExplanation(source: string, translated: string): boolean {
+  return source.length < SHORT_TEXT_LIMIT && translated.length > source.length * EXPANSION_RATIO
+}
+
 const NAMED_ENTITIES: Record<string, string> = {
   amp: '&',
   lt: '<',
@@ -174,7 +181,8 @@ async function translateOpenAI(
   const content: string = data.choices[0]?.message?.content || ''
 
   if (single) {
-    return { texts: [content.trim()] }
+    const trimmed = content.trim()
+    return { texts: [looksLikeExplanation(texts[0], trimmed) ? texts[0] : trimmed] }
   }
 
   const results = new Array<string>(texts.length).fill('')
@@ -197,7 +205,7 @@ async function translateOpenAI(
   }
 
   for (let i = 0; i < results.length; i++) {
-    if (!results[i]) results[i] = texts[i]
+    if (!results[i] || looksLikeExplanation(texts[i], results[i])) results[i] = texts[i]
   }
 
   return { texts: results }

@@ -27,7 +27,7 @@ const DEFAULT_SETTINGS: Settings = {
     endpoint: 'https://api.openai.com/v1/chat/completions',
     model: 'gpt-4o-mini',
     systemPrompt:
-      'You are a translator. Translate the following text to {{targetLang}}. Return only the translation, no explanations.',
+      'You are a translator. Translate the following text to {{targetLang}}. Return only the translation, no explanations. If the text cannot be translated, return it unchanged.',
   },
 }
 
