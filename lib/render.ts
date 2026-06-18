@@ -143,9 +143,16 @@ function clearLineClamp(el: HTMLElement) {
 //     div, etc.)
 // Inline last children (text nodes, <a>, <span> with default display) still
 // need the <br> to push the translation onto its own line.
-function lastVisibleChildIsBlockLike(target: HTMLElement): boolean {
-  for (let i = target.childNodes.length - 1; i >= 0; i--) {
-    const n = target.childNodes[i]
+function lastVisibleChildIsBlockLike(target: HTMLElement, beforeRef?: Node | null): boolean {
+  const children = target.childNodes
+  let startIdx = children.length - 1
+  if (beforeRef) {
+    for (let i = 0; i < children.length; i++) {
+      if (children[i] === beforeRef) { startIdx = i - 1; break }
+    }
+  }
+  for (let i = startIdx; i >= 0; i--) {
+    const n = children[i]
     if (n.nodeType === Node.TEXT_NODE) {
       if (!n.textContent?.trim()) continue
       return false
@@ -159,6 +166,20 @@ function lastVisibleChildIsBlockLike(target: HTMLElement): boolean {
     return !display.startsWith('inline')
   }
   return false
+}
+
+function findTrailingNonTextRef(target: HTMLElement): Node | null {
+  let ref: Node | null = null
+  for (let i = target.childNodes.length - 1; i >= 0; i--) {
+    const n = target.childNodes[i]
+    if (n.nodeType === Node.ELEMENT_NODE) {
+      const el = n as Element
+      if (el.classList.contains(RESULT_CLASS) || el.classList.contains(BR_CLASS)) continue
+    }
+    if (n.textContent?.trim()) break
+    ref = n
+  }
+  return ref
 }
 
 export function injectLoading(blocks: TranslatableBlock[]) {
@@ -176,16 +197,17 @@ export function injectLoading(blocks: TranslatableBlock[]) {
     wrapper.className = `${RESULT_CLASS} ${LOADING_CLASS}`
     wrapper.setAttribute('translate', 'no')
 
+    const ref = findTrailingNonTextRef(target)
     if (isShort) {
-      target.appendChild(document.createTextNode(' '))
-      target.appendChild(wrapper)
-    } else if (lastVisibleChildIsBlockLike(target)) {
-      target.appendChild(wrapper)
+      target.insertBefore(document.createTextNode(' '), ref)
+      target.insertBefore(wrapper, ref)
+    } else if (lastVisibleChildIsBlockLike(target, ref)) {
+      target.insertBefore(wrapper, ref)
     } else {
       const br = document.createElement('br')
       br.className = BR_CLASS
-      target.appendChild(br)
-      target.appendChild(wrapper)
+      target.insertBefore(br, ref)
+      target.insertBefore(wrapper, ref)
     }
   }
 }
@@ -206,14 +228,15 @@ export function repositionTranslation(element: HTMLElement, expectedText: string
   }
 
   const isShort = expectedText.length <= SHORT_TEXT_THRESHOLD
+  const ref = findTrailingNonTextRef(correctTarget)
   if (isShort) {
-    correctTarget.appendChild(document.createTextNode(' '))
-  } else if (!lastVisibleChildIsBlockLike(correctTarget)) {
+    correctTarget.insertBefore(document.createTextNode(' '), ref)
+  } else if (!lastVisibleChildIsBlockLike(correctTarget, ref)) {
     const br = document.createElement('br')
     br.className = BR_CLASS
-    correctTarget.appendChild(br)
+    correctTarget.insertBefore(br, ref)
   }
-  correctTarget.appendChild(wrapper)
+  correctTarget.insertBefore(wrapper, ref)
 }
 
 export function replaceWithTranslation(blocks: TranslatableBlock[], translations: string[]) {

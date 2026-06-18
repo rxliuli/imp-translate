@@ -320,6 +320,56 @@ describe('render', () => {
     expect(font.previousSibling?.textContent).toBe(' ')
   })
 
+  it('should inject translation before trailing image, not after it (short text)', () => {
+    document.body.innerHTML = `<p>there we go<br><a href="#"><img src="test.png" width="368" height="188"></a></p>`
+    const p = document.querySelector('p')!
+    const blocks: TranslatableBlock[] = [
+      { element: p as HTMLElement, text: 'there we go' },
+    ]
+    injectLoading(blocks)
+    replaceWithTranslation(blocks, ['开始吧'])
+
+    const font = p.querySelector('font.imp-translate-result')!
+    expect(font).not.toBeNull()
+    expect(font.textContent).toBe('开始吧')
+    const a = p.querySelector('a')!
+    const fontIndex = Array.from(p.childNodes).indexOf(font)
+    const aIndex = Array.from(p.childNodes).indexOf(a)
+    expect(fontIndex).toBeLessThan(aIndex)
+  })
+
+  it('should inject translation before trailing image (long text)', () => {
+    document.body.innerHTML = `<p>This is a long paragraph that exceeds the short text threshold limit.<br><a href="#"><img src="test.png"></a></p>`
+    const p = document.querySelector('p')!
+    const blocks: TranslatableBlock[] = [
+      { element: p as HTMLElement, text: 'This is a long paragraph that exceeds the short text threshold limit.' },
+    ]
+    injectLoading(blocks)
+    replaceWithTranslation(blocks, ['这是一段很长的文本，超过了短文本的阈值限制。'])
+
+    const font = p.querySelector('font.imp-translate-result')!
+    expect(font).not.toBeNull()
+    const a = p.querySelector('a')!
+    const br = p.querySelector('br.imp-translate-br')!
+    expect(br).not.toBeNull()
+    const fontIndex = Array.from(p.childNodes).indexOf(font)
+    const aIndex = Array.from(p.childNodes).indexOf(a)
+    expect(fontIndex).toBeLessThan(aIndex)
+  })
+
+  it('should still append at end when no trailing non-text nodes', () => {
+    document.body.innerHTML = `<p>Hello <strong>world</strong> and more</p>`
+    const p = document.querySelector('p')!
+    const blocks: TranslatableBlock[] = [
+      { element: p as HTMLElement, text: 'Hello world and more' },
+    ]
+    injectLoading(blocks)
+    replaceWithTranslation(blocks, ['你好世界还有更多'])
+
+    const font = p.querySelector('font.imp-translate-result')!
+    expect(font).toBe(p.lastElementChild)
+  })
+
   it('should not produce duplicate translations when parent and child are both extracted', () => {
     // Simulates: parent <span> and child <strong> both added in the same
     // mutation batch (e.g. Google search re-render), causing extractBlocks
