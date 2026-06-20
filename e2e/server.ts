@@ -201,6 +201,16 @@ ${appleRejectionBrFixture}
   </script>
 </body>
 </html>`,
+  '/deferred-visible': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Deferred Visible</title></head>
+<body>
+  <p>Visible paragraph for initial translation.</p>
+  <div id="deferred" style="display:none">
+    <p id="deferred-text">This content was hidden during initial render but becomes visible after framework hydration completes.</p>
+  </div>
+</body>
+</html>`,
 }
 
 const app = new Hono()

@@ -307,3 +307,40 @@ test('re-translates after language switch (stop + start)', async ({ context, bas
   await expect(translated).toBeVisible({ timeout: 15000 })
   await expect(translated).toContainText('[翻译]')
 })
+
+// Regression: SPA frameworks (React, Reddit's Lit components) hydrate
+// progressively — elements exist in the DOM but start with display:none,
+// then become visible once rendering completes. The initial extractBlocks
+// skips them (isHidden returns true). Changing style.display is an
+// attribute mutation, which MutationObserver (childList/characterData only)
+// doesn't observe, so without a delayed rescan the element is never found.
+test('translates elements hidden during initial scan that become visible later', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/deferred-visible`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  // Sanity: visible content translates normally
+  await expect(
+    page.locator('.imp-translate-result:not(.imp-translate-loading)').first(),
+  ).toBeVisible({ timeout: 15000 })
+
+  // Hidden content must NOT be translated yet
+  const deferredText = page.locator('#deferred-text')
+  await expect(deferredText.locator('.imp-translate-result')).toHaveCount(0)
+
+  // Simulate SPA hydration: make element visible via style change.
+  // This is a pure attribute mutation — MutationObserver (childList +
+  // characterData only) won't fire, so only a proactive rescan can find it.
+  await page.evaluate(() => {
+    document.getElementById('deferred')!.style.display = 'block'
+  })
+
+  // The delayed rescan (setTimeout 1000ms in startTranslation) should
+  // discover the newly-visible content and translate it.
+  const deferredTranslation = deferredText.locator('.imp-translate-result:not(.imp-translate-loading)')
+  await expect(deferredTranslation).toBeVisible({ timeout: 15000 })
+  await expect(deferredTranslation).toContainText('[翻译]')
+})

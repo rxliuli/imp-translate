@@ -501,6 +501,13 @@ export default defineUnlistedScript(() => {
       t(`translating ${visibleBlocks.length} visible blocks immediately`)
       translateBlocks(visibleBlocks)
     }
+
+    // SPA frameworks (React, Reddit's Lit-based UI, etc.) hydrate
+    // progressively — elements may exist in the DOM but have zero layout
+    // dimensions when the initial extractBlocks runs, so isHidden()
+    // filters them out. A delayed rescan catches them once rendering
+    // settles, without requiring the user to toggle translation off/on.
+    delayedRescanTimer = setTimeout(rescanBlocks, 1000)
   }
 
   function stopTranslation(keepToast = false) {
