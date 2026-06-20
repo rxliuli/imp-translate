@@ -198,6 +198,8 @@ web.telegram.org##:matches-path(/a/) .message-content .message-title
 ! https://discord.com/channels/<server>/<channel>  (private servers — verify against any text channel)
 discord.com#+#[id^="message-content-"]
 discord.com#+#[id^="message-accessories-"]
+! https://discord.com/channels/<server>/<thread> (thread heading)
+discord.com#+#[data-text-variant="heading-xxl/extrabold"]
 ! Channel mention chips inside messages (e.g. `# twitter-exporter`) are navigation links — the slug shouldn't be translated.
 discord.com##.channelMention
 ! Thread preview inside accessories: the topLine carries the thread name (redundant — the source message is already translated) and a "N Messages ›" CTA button; skip to avoid translating UI chrome. The message-content element inside the thread's bottomLine is still reached by the [id^="message-content-"] include rule.
@@ -208,3 +210,7 @@ discord.com##[id^="message-accessories-"] [class*="footerContainer_"]
 ! Channel header topic bar + click-to-expand topic modal. Narrow scopes so we don't pull in chrome (channel name H1, search box, modal "Channel Topic" heading). [class*="topic__"] depends on Discord's CSS-module source-name prefix being stable across deploys; section[aria-label="Channel header"] anchors it safely. [data-dialog="modal"] main targets the modal body only — its <header> with the title stays untranslated.
 discord.com#+#section[aria-label="Channel header"] [class*="topic__"]
 discord.com#+#[data-dialog="modal"] main
+! Reply reference quoting a system message (join/wave) — skip the quoted preview; normal user reply references are kept for translation.
+discord.com##[id^="message-reply-context-"]:has(svg[class*="SystemMessageIcon"])
+! System messages (user joined, wave to say hi, boost, etc.) are server chrome, not user-authored text.
+discord.com##[class*="systemMessage"]
