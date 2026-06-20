@@ -203,7 +203,6 @@ discord.com#+#[data-text-variant="heading-xxl/extrabold"]
 ! Channel mention chips inside messages (e.g. `# twitter-exporter`) are navigation links — the slug shouldn't be translated.
 discord.com##.channelMention
 ! Thread preview inside accessories: skip the "N Messages ›" CTA button — it's navigation chrome, not user text. The thread name and the message-content inside the bottomLine are still translated.
-discord.com##[id^="message-accessories-"] [class*="cta_"]
 discord.com##[id^="message-accessories-"] [class*="lineClamp1__"]
 discord.com##[id^="message-accessories-"] [class^="topLine__"]
 ! Forwarded message chrome: the "Forwarded" header label and "#channel • date" footer are structural navigation, not user-authored text.
