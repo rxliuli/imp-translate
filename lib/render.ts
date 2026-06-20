@@ -127,13 +127,16 @@ export function ensureShadowStyles(root: ShadowRoot) {
   root.appendChild(style)
 }
 
-function clearLineClamp(el: HTMLElement) {
+function hasLineClamp(el: HTMLElement): boolean {
   const style = getComputedStyle(el)
-  if (style.webkitLineClamp && style.webkitLineClamp !== 'none') {
-    el.style.webkitLineClamp = 'unset'
-    el.style.overflow = 'visible'
-  }
+  return !!(style.webkitLineClamp && style.webkitLineClamp !== 'none')
 }
+
+function applyLineClampOverride(el: HTMLElement) {
+  el.style.webkitLineClamp = 'unset'
+  el.style.overflow = 'visible'
+}
+
 
 // If the last visible child of the target already creates a visual line break
 // — its computed display is non-inline — then injecting a <br> before the
@@ -184,29 +187,48 @@ function findTrailingNonTextRef(target: HTMLElement): Node | null {
 
 export function injectLoading(blocks: TranslatableBlock[]) {
   ensureStyles()
+
+  const plans: {
+    target: HTMLElement
+    element: HTMLElement
+    isShort: boolean
+    ref: Node | null
+    needsBr: boolean
+    clampElement: boolean
+    clampTarget: boolean
+  }[] = []
+
   for (const { element, text } of blocks) {
     if (element.querySelector(`.${RESULT_CLASS}`)) continue
     if (element.parentElement?.closest(`[${PROCESSED_ATTR}]`)) continue
 
     const target = findInjectionPoint(element)
-    clearLineClamp(element)
-    if (target !== element) clearLineClamp(target)
+    const ref = findTrailingNonTextRef(target)
     const isShort = text.length <= SHORT_TEXT_THRESHOLD
+    const clampElement = hasLineClamp(element)
+    const clampTarget = target !== element && hasLineClamp(target)
+    const needsBr = !isShort && !lastVisibleChildIsBlockLike(target, ref)
+
+    plans.push({ target, element, isShort, ref, needsBr, clampElement, clampTarget })
+  }
+
+  for (const { target, element, isShort, ref, needsBr, clampElement, clampTarget } of plans) {
+    if (clampElement) applyLineClampOverride(element)
+    if (clampTarget) applyLineClampOverride(target)
 
     const wrapper = document.createElement('font')
     wrapper.className = `${RESULT_CLASS} ${LOADING_CLASS}`
     wrapper.setAttribute('translate', 'no')
 
-    const ref = findTrailingNonTextRef(target)
     if (isShort) {
       target.insertBefore(document.createTextNode(' '), ref)
       target.insertBefore(wrapper, ref)
-    } else if (lastVisibleChildIsBlockLike(target, ref)) {
-      target.insertBefore(wrapper, ref)
-    } else {
+    } else if (needsBr) {
       const br = document.createElement('br')
       br.className = BR_CLASS
       target.insertBefore(br, ref)
+      target.insertBefore(wrapper, ref)
+    } else {
       target.insertBefore(wrapper, ref)
     }
   }

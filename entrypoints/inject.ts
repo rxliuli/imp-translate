@@ -25,7 +25,6 @@ import {
   hideToastBar,
   ensureShadowStyles,
 } from '@/lib/render'
-import { detectLanguage } from '@/lib/language-detect'
 import { saveSettings } from '@/lib/storage'
 import { isUrlOnly, debugTime } from '@/lib/utils'
 
@@ -108,7 +107,10 @@ export default defineUnlistedScript(() => {
   async function filterByLanguage(
     blocks: TranslatableBlock[],
   ): Promise<TranslatableBlock[]> {
-    const results = await Promise.all(blocks.map((b) => detectLanguage(b.text)))
+    if (blocks.length === 0) return blocks
+    const results = await messager.sendMessage('detectLanguageBatch', {
+      texts: blocks.map((b) => b.text),
+    })
     return blocks.filter((_, i) => results[i] !== targetLang)
   }
 

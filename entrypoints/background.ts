@@ -317,6 +317,10 @@ export default defineBackground(() => {
     return eldDetectLanguage(data.text)
   })
 
+  messager.onMessage('detectLanguageBatch', ({ data }) => {
+    return data.texts.map((text) => eldDetectLanguage(text))
+  })
+
   messager.onMessage('refreshRemoteRules', async () => {
     await fetchRemoteRulesIfNeeded(true)
   })

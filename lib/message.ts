@@ -27,6 +27,7 @@ export const messager = defineExtensionMessaging<{
   isMobile(): boolean
   openOptionsPage(): void
   detectLanguage(data: { text: string }): string
+  detectLanguageBatch(data: { texts: string[] }): string[]
   refreshRemoteRules(): void
 }>()
 

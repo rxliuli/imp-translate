@@ -370,6 +370,64 @@ describe('render', () => {
     expect(font).toBe(p.lastElementChild)
   })
 
+  it('injectLoading avoids layout thrashing with many blocks', () => {
+    const style = document.createElement('style')
+    style.textContent = `
+      .perf-clamp {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+    `
+    document.head.appendChild(style)
+
+    // Each block needs nested child elements so that findInjectionPoint
+    // calls hasVisibleText → offsetWidth/offsetHeight, which are the
+    // layout reads that cause thrashing when interleaved with DOM writes.
+    // Deeply nested flex containers amplify reflow cost per read.
+    const container = document.createElement('div')
+    container.style.cssText = 'width:800px;position:absolute;top:0;left:0'
+    const count = 2000
+    for (let i = 0; i < count; i++) {
+      const div = document.createElement('div')
+      div.className = 'perf-clamp'
+      div.style.cssText = 'display:flex;flex-direction:column;gap:4px'
+      div.innerHTML = `
+        <div style="display:flex;gap:8px">
+          <span style="flex:1">This is a long paragraph that exceeds the short text threshold.</span>
+          <span style="width:60px">Block ${i}.</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <a href="#"><span>Link text here</span></a>
+          <em>Secondary info</em>
+        </div>
+      `
+      container.appendChild(div)
+    }
+    document.body.appendChild(container)
+
+    const blocks: TranslatableBlock[] = Array.from(
+      container.querySelectorAll('.perf-clamp'),
+    ).map((el) => ({
+      element: el as HTMLElement,
+      text: el.textContent!,
+    }))
+
+    const start = performance.now()
+    injectLoading(blocks)
+    const elapsed = performance.now() - start
+
+    style.remove()
+    container.remove()
+
+    const loadingEls = container.querySelectorAll('.imp-translate-loading')
+    expect(loadingEls.length).toBe(count)
+    // Interleaved read/write (regression): ~1000ms for 2000 blocks
+    // Read/write split (correct): ~90ms for 2000 blocks
+    expect(elapsed).toBeLessThan(500)
+  })
+
   it('should not produce duplicate translations when parent and child are both extracted', () => {
     // Simulates: parent <span> and child <strong> both added in the same
     // mutation batch (e.g. Google search re-render), causing extractBlocks
