@@ -213,4 +213,4 @@ discord.com#+#[data-dialog="modal"] main
 ! Reply reference quoting a system message (join/wave) — skip the quoted preview; normal user reply references are kept for translation.
 discord.com##[id^="message-reply-context-"]:has(svg[class*="SystemMessageIcon"])
 ! System messages (user joined, wave to say hi, boost, etc.) are server chrome, not user-authored text.
-discord.com##[class*="systemMessage"]
+discord.com##[class*="SystemMessage"]

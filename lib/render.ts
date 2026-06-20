@@ -137,6 +137,10 @@ function applyLineClampOverride(el: HTMLElement) {
   el.style.overflow = 'visible'
 }
 
+function hasOverflowClip(el: HTMLElement): boolean {
+  const s = getComputedStyle(el)
+  return s.overflow === 'hidden' || s.overflowY === 'hidden'
+}
 
 // If the last visible child of the target already creates a visual line break
 // — its computed display is non-inline — then injecting a <br> before the
@@ -196,6 +200,9 @@ export function injectLoading(blocks: TranslatableBlock[]) {
     needsBr: boolean
     clampElement: boolean
     clampTarget: boolean
+    clipElement: boolean
+    clipTarget: boolean
+    clippingAncestors: { el: HTMLElement; hasMaxHeight: boolean }[]
   }[] = []
 
   const seen = new Set<HTMLElement>()
@@ -210,14 +217,34 @@ export function injectLoading(blocks: TranslatableBlock[]) {
     const isShort = text.length <= SHORT_TEXT_THRESHOLD
     const clampElement = hasLineClamp(element)
     const clampTarget = target !== element && hasLineClamp(target)
+    const clipElement = !clampElement && hasOverflowClip(element)
+    const clipTarget = target !== element && !clampTarget && hasOverflowClip(target)
     const needsBr = !isShort && !lastVisibleChildIsBlockLike(target, ref)
 
-    plans.push({ target, element, isShort, ref, needsBr, clampElement, clampTarget })
+    const clippingAncestors: { el: HTMLElement; hasMaxHeight: boolean }[] = []
+    if (clampElement || clampTarget || clipElement || clipTarget) {
+      let anc = target.parentElement
+      for (let i = 0; i < 3 && anc; i++) {
+        const s = getComputedStyle(anc)
+        if (s.overflow === 'hidden' || s.overflowY === 'hidden') {
+          clippingAncestors.push({ el: anc, hasMaxHeight: s.maxHeight !== 'none' })
+        }
+        anc = anc.parentElement
+      }
+    }
+
+    plans.push({ target, element, isShort, ref, needsBr, clampElement, clampTarget, clipElement, clipTarget, clippingAncestors })
   }
 
-  for (const { target, element, isShort, ref, needsBr, clampElement, clampTarget } of plans) {
+  for (const { target, element, isShort, ref, needsBr, clampElement, clampTarget, clipElement, clipTarget, clippingAncestors } of plans) {
     if (clampElement) applyLineClampOverride(element)
     if (clampTarget) applyLineClampOverride(target)
+    if (clipElement) element.style.overflow = 'visible'
+    if (clipTarget) target.style.overflow = 'visible'
+    for (const { el, hasMaxHeight } of clippingAncestors) {
+      el.style.overflow = 'visible'
+      if (hasMaxHeight) el.style.maxHeight = 'none'
+    }
 
     const wrapper = document.createElement('font')
     wrapper.className = `${RESULT_CLASS} ${LOADING_CLASS}`

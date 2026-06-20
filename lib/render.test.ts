@@ -428,6 +428,41 @@ describe('render', () => {
     expect(elapsed).toBeLessThan(500)
   })
 
+  it('should override overflow:hidden on element without line-clamp', () => {
+    document.body.innerHTML = `
+      <div id="msg" style="overflow: hidden;">
+        This is a long paragraph that exceeds the short text threshold limit.
+      </div>
+    `
+    const div = document.getElementById('msg')! as HTMLElement
+    const blocks: TranslatableBlock[] = [
+      { element: div, text: 'This is a long paragraph that exceeds the short text threshold limit.' },
+    ]
+    injectLoading(blocks)
+
+    expect(div.style.overflow).toBe('visible')
+  })
+
+  it('should override clipping ancestor when child has line-clamp', () => {
+    document.body.innerHTML = `
+      <div id="parent" style="overflow: hidden; max-height: 20px;">
+        <div id="child" style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">
+          This is a long paragraph that exceeds the short text threshold limit.
+        </div>
+      </div>
+    `
+    const child = document.getElementById('child')! as HTMLElement
+    const parent = document.getElementById('parent')! as HTMLElement
+    const blocks: TranslatableBlock[] = [
+      { element: child, text: 'This is a long paragraph that exceeds the short text threshold limit.' },
+    ]
+    injectLoading(blocks)
+
+    expect(child.style.overflow).toBe('visible')
+    expect(parent.style.overflow).toBe('visible')
+    expect(parent.style.maxHeight).toBe('none')
+  })
+
   it('should not inject duplicate loadings when same element appears twice in batch', () => {
     document.body.innerHTML = `<p>Hello world</p>`
     const p = document.querySelector('p')! as HTMLElement
