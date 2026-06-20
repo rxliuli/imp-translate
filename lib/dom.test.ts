@@ -869,4 +869,65 @@ describe('extractBlocks', () => {
     // The invariant: zero layout reads after the first write.
     expect(readsAfterMutation).toBe(0)
   })
+
+  // Regression: shadcn/ui "On This Page" sidebar renders <a> links inside a
+  // flex-col container. Flex layout blockifies children (computed display
+  // becomes "block"), but isDisplayInline short-circuited on INLINE_TAGS and
+  // returned true without checking computed style. All links merged into one
+  // giant translation block, destroying the outline structure.
+  it('treats inline-tag children of flex-col container as separate blocks', () => {
+    const style = document.createElement('style')
+    style.textContent = '.imp-test-flex-col { display: flex; flex-direction: column; gap: 4px; }'
+    document.head.appendChild(style)
+    document.body.innerHTML = `
+      <div class="imp-test-flex-col">
+        <p>On This Page</p>
+        <a href="#one">First section</a>
+        <a href="#two">Second section</a>
+        <a href="#three">Third section</a>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    style.remove()
+    expect(blocks.map((b) => b.text)).toEqual([
+      'On This Page',
+      'First section',
+      'Second section',
+      'Third section',
+    ])
+    expect(document.querySelector('[data-imp-wrap]')).toBe(null)
+  })
+
+  // Regression: shadcn/ui "Deploy to Vercel" card uses an absolutely-positioned
+  // <a> overlay with a sr-only <span> (1×1px, clip:rect(0,0,0,0)). The old
+  // isHidden early-returned on checkVisibility() which returns true for sr-only
+  // elements, so the dimension check (offsetWidth <= 1) was never reached.
+  // The translated sr-only text appeared visually above the real content.
+  it('skips sr-only (screen-reader-only) text inside elements', () => {
+    const style = document.createElement('style')
+    style.textContent = `.imp-test-sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }`
+    document.head.appendChild(style)
+    document.body.innerHTML = `
+      <div style="position:relative;width:300px;height:200px">
+        <p>Visible card content</p>
+        <a href="/deploy" style="position:absolute;inset:0">
+          <span class="imp-test-sr-only">Deploy to Vercel</span>
+        </a>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    style.remove()
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('Visible card content')
+  })
 })

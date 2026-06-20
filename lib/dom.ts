@@ -168,7 +168,7 @@ function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
 }
 
 function isHidden(el: HTMLElement): boolean {
-  if (el.checkVisibility) return !el.checkVisibility()
+  if (el.checkVisibility && !el.checkVisibility()) return true
   if (el.offsetWidth <= 1 || el.offsetHeight <= 1) return true
   return getComputedStyle(el).visibility === 'hidden'
 }
@@ -209,17 +209,13 @@ function isBlockTag(tag: string): boolean {
 function isDisplayInline(el: Element): boolean {
   const inlineDisplay = (el as HTMLElement).style?.display
   if (inlineDisplay) return inlineDisplay.startsWith('inline')
-  const tag = el.tagName.toLowerCase()
-  if (INLINE_TAGS.has(tag)) return true
-  // A block-default tag (div, etc.) or custom element can still be rendered
-  // inline via a CSS class rather than an inline style attribute — e.g. X wraps
-  // each @mention in <div class="… r-xoduu5"> whose class sets
-  // display:inline-flex (no inline style). Tag/inline-style checks alone read
-  // that wrapper as a block, so it breaks the surrounding inline run and the
-  // tweet gets fragmented into per-span blocks (one bad out-of-context
-  // translation each). Consult computed style to catch it. Safe for the
-  // read/write split: this runs in the walk's read phase, before any deferred
-  // write, so it never forces a post-mutation reflow.
+  // Consult computed style for ALL elements, including inline-default tags
+  // (a, span, etc.). Flex/grid containers blockify their children — e.g.
+  // shadcn's "On This Page" sidebar renders <a> links in a flex-col container,
+  // so each <a> has computed display:block. Without this check, they all merge
+  // into one translation block, destroying the outline structure.
+  // Safe for the read/write split: this runs in the walk's read phase, before
+  // any deferred write, so it never forces a post-mutation reflow.
   return getComputedStyle(el).display.startsWith('inline')
 }
 
