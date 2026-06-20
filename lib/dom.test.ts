@@ -693,6 +693,19 @@ describe('extractBlocks', () => {
     ])
   })
 
+  it('should extract text from aria-hidden elements', () => {
+    document.body.innerHTML = `
+      <div>
+        <h3 aria-hidden="true">Thread title</h3>
+        <p>Message content</p>
+      </div>
+    `
+    const blocks = extractBlocks(document.body)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('Thread title')
+    expect(blocks[1].text).toBe('Message content')
+  })
+
   it('should skip time elements', () => {
     document.body.innerHTML = `
       <div>

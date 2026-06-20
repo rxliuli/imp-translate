@@ -159,7 +159,6 @@ function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
   if (SKIP_TAGS.has(el.tagName.toLowerCase())) return true
   if (el.classList.contains('notranslate')) return true
   if (el.getAttribute('translate') === 'no') return true
-  if (el.getAttribute('aria-hidden') === 'true') return true
   if ((el as HTMLElement).isContentEditable) return true
   if (el.closest(EDITOR_SELECTOR)) return true
   if (el.classList.contains(RESULT_CLASS)) return true

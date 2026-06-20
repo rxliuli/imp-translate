@@ -198,7 +198,10 @@ export function injectLoading(blocks: TranslatableBlock[]) {
     clampTarget: boolean
   }[] = []
 
+  const seen = new Set<HTMLElement>()
   for (const { element, text } of blocks) {
+    if (seen.has(element)) continue
+    seen.add(element)
     if (element.querySelector(`.${RESULT_CLASS}`)) continue
     if (element.parentElement?.closest(`[${PROCESSED_ATTR}]`)) continue
 

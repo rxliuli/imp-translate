@@ -428,6 +428,18 @@ describe('render', () => {
     expect(elapsed).toBeLessThan(500)
   })
 
+  it('should not inject duplicate loadings when same element appears twice in batch', () => {
+    document.body.innerHTML = `<p>Hello world</p>`
+    const p = document.querySelector('p')! as HTMLElement
+    const blocks: TranslatableBlock[] = [
+      { element: p, text: 'Hello world' },
+      { element: p, text: 'Hello world' },
+    ]
+    injectLoading(blocks)
+    const loadings = p.querySelectorAll('.imp-translate-loading')
+    expect(loadings).toHaveLength(1)
+  })
+
   it('should not produce duplicate translations when parent and child are both extracted', () => {
     // Simulates: parent <span> and child <strong> both added in the same
     // mutation batch (e.g. Google search re-render), causing extractBlocks

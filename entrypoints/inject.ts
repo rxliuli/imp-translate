@@ -120,6 +120,15 @@ export default defineUnlistedScript(() => {
     blocks = blocks.filter((b) => !isUrlOnly(b.text))
     if (blocks.length === 0) return
 
+    const seen = new Set<Element>()
+    blocks = blocks.filter((b) => {
+      if (b.element.hasAttribute(PROCESSED_ATTR)) return false
+      if (seen.has(b.element)) return false
+      seen.add(b.element)
+      return true
+    })
+    if (blocks.length === 0) return
+
     for (const block of blocks) {
       markTranslated(block.element)
       block.element.setAttribute('data-imp-text', block.text)
