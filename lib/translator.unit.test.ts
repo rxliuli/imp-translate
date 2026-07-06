@@ -1,6 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { decodeHTML } from './translator'
+import { chatCompletionsUrl, decodeHTML } from './translator'
 import type { Settings } from './storage'
+
+describe('chatCompletionsUrl', () => {
+  it('appends /chat/completions to the base URL', () => {
+    expect(chatCompletionsUrl('https://api.openai.com/v1')).toBe(
+      'https://api.openai.com/v1/chat/completions',
+    )
+  })
+
+  it('works with bare domains (DeepSeek style)', () => {
+    expect(chatCompletionsUrl('https://api.deepseek.com')).toBe(
+      'https://api.deepseek.com/chat/completions',
+    )
+  })
+
+  it('ignores trailing slashes', () => {
+    expect(chatCompletionsUrl('https://api.openai.com/v1/')).toBe(
+      'https://api.openai.com/v1/chat/completions',
+    )
+  })
+})
 
 describe('decodeHTML', () => {
   it('decodes the named entities Google Translate emits', () => {
@@ -47,7 +67,7 @@ const openaiSettings: Settings = {
   customRules: '',
   openai: {
     apiKey: 'test-key',
-    endpoint: 'https://api.example.com/v1/chat/completions',
+    baseUrl: 'https://api.example.com/v1',
     model: 'gpt-4o-mini',
     systemPrompt: 'You are a translator. Translate the following text to {{targetLang}}. Return only the translation, no explanations.',
   },
@@ -77,6 +97,9 @@ describe('OpenAI response parsing', () => {
     const result = await translate(['Hello world'], 'zh', openaiSettings)
 
     expect(result.texts).toEqual(['你好世界'])
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.example.com/v1/chat/completions',
+    )
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.messages[1].content).toBe('Hello world')
     expect(body.messages[0].content).not.toContain('<t id=')
@@ -192,7 +215,7 @@ const msSettings: Settings = {
   customRules: '',
   openai: {
     apiKey: '',
-    endpoint: '',
+    baseUrl: '',
     model: '',
     systemPrompt: '',
   },

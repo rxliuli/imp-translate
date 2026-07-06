@@ -5,7 +5,7 @@ import {
   type Settings,
   type TranslationProvider,
 } from '@/lib/storage'
-import { translate } from '@/lib/translator'
+import { chatCompletionsUrl, translate } from '@/lib/translator'
 import { messager } from '@/lib/message'
 import { LANGUAGES_SORTED } from '@/lib/languages'
 import { Input } from '@/components/ui/input'
@@ -29,12 +29,12 @@ function humanizeOpenAIError(raw: string): string {
   if (raw.includes('403')) return 'Forbidden — check your API key permissions.'
   if (raw.includes('429')) return 'Rate limited — try again in a moment.'
   if (raw.includes('404'))
-    return 'Endpoint or model not found — verify the URL and model name.'
+    return 'Model or URL not found — verify the base URL and model name.'
   if (raw.includes('400'))
-    return `Bad request — likely the model is not supported by this endpoint, or required fields are missing. Some newer models (e.g. gpt-5 family) only work via OpenAI's Responses API, which this extension doesn't support. Raw: ${raw}`
+    return `Bad request — likely the model is not supported by this provider, or required fields are missing. Some newer models (e.g. gpt-5 family) only work via OpenAI's Responses API, which this extension doesn't support. Raw: ${raw}`
   if (raw.match(/\b5\d\d\b/)) return 'Provider error — try again later.'
   if (raw.toLowerCase().includes('failed to fetch'))
-    return 'Cannot reach endpoint — check the URL and your network.'
+    return 'Cannot reach the server — check the base URL and your network.'
   return raw
 }
 
@@ -191,18 +191,25 @@ export function App() {
           <div>
             <h2 className="font-semibold">OpenAI Compatible API</h2>
             <p className="text-sm text-muted-foreground">
-              Configure your OpenAI-compatible API endpoint
+              Works with OpenAI, DeepSeek, Gemini, and any other
+              OpenAI-compatible API
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label>API Endpoint</Label>
+            <Label>Base URL</Label>
             <Input
               type="url"
-              value={settings.openai.endpoint}
-              onChange={(e) => updateOpenAI({ endpoint: e.target.value })}
-              placeholder="https://api.openai.com/v1/chat/completions"
+              value={settings.openai.baseUrl}
+              onChange={(e) => updateOpenAI({ baseUrl: e.target.value })}
+              placeholder="https://api.openai.com/v1"
             />
+            {settings.openai.baseUrl && (
+              <p className="text-xs text-muted-foreground break-all">
+                Requests will be sent to:{' '}
+                {chatCompletionsUrl(settings.openai.baseUrl)}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">

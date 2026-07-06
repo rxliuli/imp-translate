@@ -132,13 +132,18 @@ async function translateGoogle(
   }
 }
 
+export function chatCompletionsUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '') + '/chat/completions'
+}
+
 async function translateOpenAI(
   texts: string[],
   targetLang: string,
   settings: Settings,
 ): Promise<TranslationResult> {
-  const { apiKey, endpoint, model, systemPrompt } = settings.openai
+  const { apiKey, baseUrl, model, systemPrompt } = settings.openai
   if (!apiKey) throw new Error('OpenAI API key is not configured')
+  if (!baseUrl) throw new Error('Base URL is not configured')
 
   const prompt = systemPrompt.replace('{{targetLang}}', targetLang)
   const single = texts.length === 1
@@ -150,7 +155,7 @@ async function translateOpenAI(
     : prompt + '\nThe input contains multiple texts wrapped in <t id="N"> tags. Return translations in the same format with matching ids. Keep the XML tags intact.'
 
   const req: OpenAIRequest = {
-    endpoint,
+    endpoint: chatCompletionsUrl(baseUrl),
     model,
     headers: {
       'Content-Type': 'application/json',
