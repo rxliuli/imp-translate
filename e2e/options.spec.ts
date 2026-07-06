@@ -27,7 +27,10 @@ test('options page shows OpenAI settings when selected', async ({
 
   await page.locator('button[role="radio"][value="openai"]').click()
 
-  await expect(page.getByText('API Endpoint', { exact: true })).toBeVisible()
+  await expect(page.getByText('Base URL', { exact: true })).toBeVisible()
+  await expect(
+    page.getByText('Requests will be sent to: https://api.openai.com/v1/chat/completions'),
+  ).toBeVisible()
   await expect(page.getByText('API Key', { exact: true })).toBeVisible()
   await expect(page.getByText('Model', { exact: true })).toBeVisible()
   await expect(page.getByText('System Prompt', { exact: true })).toBeVisible()
