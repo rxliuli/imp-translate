@@ -3,8 +3,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { PublicPath } from 'wxt/browser'
 
 export default defineConfig({
-  modules: ['@wxt-dev/module-react', 'wxt-module-safari-xcode'],
-  safariXcode: {
+  modules: ['@wxt-dev/module-react', '@extport/wxt'],
+  extport: {
     appCategory: 'public.app-category.productivity',
     bundleIdentifier: 'com.rxliuli.imp-translate',
     developmentTeam: 'N2X78TUUFG',
