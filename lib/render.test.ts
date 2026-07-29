@@ -425,7 +425,9 @@ describe('render', () => {
     expect(loadingEls.length).toBe(count)
     // Interleaved read/write (regression): ~1000ms for 2000 blocks
     // Read/write split (correct): ~90ms for 2000 blocks
-    expect(elapsed).toBeLessThan(500)
+    // Threshold sits well above shared-CI-runner noise (saw 517ms on a slow
+    // runner with the correct implementation) but below the regression.
+    expect(elapsed).toBeLessThan(800)
   })
 
   it('should override overflow:hidden on element without line-clamp', () => {
