@@ -211,6 +211,34 @@ ${appleRejectionBrFixture}
   </div>
 </body>
 </html>`,
+  '/grok-stream': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Streaming Answer</title></head>
+<body>
+  <ul id="answer">
+    <li id="stream-li"><span><span class="chunk">This launch triggered</span></span></li>
+  </ul>
+  <div id="chat"></div>
+</body>
+</html>`,
+}
+
+// Per-test mock controls, reset on each server start (tests run serially per
+// worker, so module-level state is safe). `delays` holds exact source texts
+// the translation endpoint should stall on — this is how tests force
+// translation responses to arrive out of order, reproducing streaming races.
+interface MockLogEntry {
+  texts: string[]
+  receivedAt: number
+  completedAt: number | null
+}
+const mockState = {
+  delays: [] as { text: string; ms: number }[],
+  log: [] as MockLogEntry[],
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
 }
 
 const app = new Hono()
@@ -221,20 +249,41 @@ app.post('/v1/chat/completions', async (c) => {
   const data = await c.req.json()
   const userMsg: string = data.messages?.find((m: any) => m.role === 'user')?.content ?? ''
   const tagRegex = /<t id="(\d+)">([\s\S]*?)<\/t>/g
+  const sourceTexts: string[] = []
   let translated = ''
   let match
   while ((match = tagRegex.exec(userMsg)) !== null) {
+    sourceTexts.push(match[2])
     translated += `<t id="${match[1]}">[翻译] ${match[2]}</t>\n`
   }
   if (!translated) {
+    sourceTexts.push(userMsg)
     translated = `[翻译] ${userMsg}`
   }
+
+  const entry: MockLogEntry = { texts: sourceTexts, receivedAt: Date.now(), completedAt: null }
+  mockState.log.push(entry)
+  const delayMs = Math.max(
+    0,
+    ...mockState.delays.filter((d) => sourceTexts.includes(d.text)).map((d) => d.ms),
+  )
+  if (delayMs > 0) await sleep(delayMs)
+  entry.completedAt = Date.now()
+
   return c.json({
     choices: [{
       message: { role: 'assistant', content: translated.trim() },
     }],
   })
 })
+
+app.post('/mock/delays', async (c) => {
+  const body = await c.req.json()
+  mockState.delays = body.delays ?? []
+  return c.json({ ok: true })
+})
+
+app.get('/mock/log', (c) => c.json(mockState.log))
 
 app.get('/sample.pdf', (c) => {
   return c.html(`<!DOCTYPE html>
@@ -255,6 +304,8 @@ export function createTestServer(): { start(): Promise<string>; stop(): Promise<
 
   return {
     async start() {
+      mockState.delays = []
+      mockState.log = []
       return new Promise<string>((resolve) => {
         server = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' }, (info) => {
           resolve(`http://127.0.0.1:${info.port}`)

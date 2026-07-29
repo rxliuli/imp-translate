@@ -82,19 +82,28 @@ export default defineUnlistedScript(() => {
     for (const obs of shadowObservers.values()) obs.takeRecords()
   }
 
+  // The element's data-imp-text is the ownership token for in-flight
+  // requests: a recheck may retranslate an element with newer text while an
+  // older request is still pending (streaming pages), and responses can
+  // arrive out of order. A response may only be applied if its source text
+  // still matches the element's current data-imp-text.
+  function isStale(block: TranslatableBlock): boolean {
+    return block.element.getAttribute('data-imp-text') !== block.text
+  }
+
   function translateBatch(batch: TranslatableBlock[]) {
     const t = debugTime(`translateBatch(n=${batch.length})`)
     for (const block of batch) {
       messager
         .sendMessage('translate', { text: block.text, targetLang })
         .then((translated) => {
-          if (!isTranslating) return
+          if (!isTranslating || isStale(block)) return
           replaceWithTranslation([block], [translated])
           discardSelfMutations()
         })
         .catch((err) => {
           console.error('[imp-translate] translation error:', err)
-          if (!isTranslating) return
+          if (!isTranslating || isStale(block)) return
           replaceWithError([block], (retryBlocks) => {
             translateBatch(retryBlocks)
           })
@@ -123,13 +132,29 @@ export default defineUnlistedScript(() => {
     const seen = new Set<Element>()
     blocks = blocks.filter((b) => {
       if (b.element.hasAttribute(PROCESSED_ATTR)) return false
+      // An already-translated ancestor owns this text — its translation
+      // covers it, and a nested mark would race it for the result element.
+      if (b.element.parentElement?.closest(`[${PROCESSED_ATTR}]`)) return false
       if (seen.has(b.element)) return false
       seen.add(b.element)
       return true
     })
+    // Streaming re-renders can queue both an element and a descendant added
+    // later (e.g. React swapping the inner span of a pending <li>). Keep the
+    // outermost block; its text includes the descendant's.
+    blocks = blocks.filter(
+      (b) => !blocks.some((o) => o !== b && o.element.contains(b.element)),
+    )
     if (blocks.length === 0) return
 
     for (const block of blocks) {
+      // The text was captured at extraction time; on streaming pages it may
+      // have grown while the block waited in the visibility/batch queues.
+      // Translate what is in the DOM now, not the stale snapshot — without
+      // this, the growth mutation predates the mark, so no recheck would
+      // ever repair the truncated translation.
+      const current = getVisibleText(block.element, extractOpts.skipSelectors).trim()
+      if (current && current !== block.text) block.text = current
       markTranslated(block.element)
       block.element.setAttribute('data-imp-text', block.text)
     }
@@ -296,7 +321,13 @@ export default defineUnlistedScript(() => {
         targetLang,
       })
       if (!isTranslating) return
+      // A newer recheck may have superseded this one while awaiting.
+      if (el.getAttribute('data-imp-text') !== newText) return
       if (wrapper.parentElement) {
+        // Reset to the plain result class: the original request for this
+        // element may have been dropped as stale while the wrapper was still
+        // in its loading state, so the spinner class must be cleared here.
+        ;(wrapper as HTMLElement).className = RESULT_CLASS
         wrapper.textContent = translated
         discardSelfMutations()
       }
