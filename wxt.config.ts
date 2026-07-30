@@ -59,7 +59,9 @@ export default defineConfig({
             manifest.name!.toLowerCase().replaceAll(/[^a-z0-9]/g, '-') +
             '@rxliuli.com',
           data_collection_permissions: {
-            required: ['none'],
+            // Daily anonymous usage ping (version + language) — Firefox's
+            // "technical and interaction data" category.
+            required: ['technicalAndInteraction'],
           },
         },
       }

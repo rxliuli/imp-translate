@@ -2,7 +2,7 @@
   "name": "imp-translate",
   "description": "manifest.json description",
   "private": true,
-  "version": "0.0.55",
+  "version": "0.0.56",
   "type": "module",
   "scripts": {
     "dev": "mkdir -p .tmp/chrome-profile && wxt",
@@ -19,6 +19,7 @@
     "init-project": "vite-node lib/build/init.ts"
   },
   "dependencies": {
+    "@extport/sdk": "0.0.3",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-query": "^5.100.14",
     "@webext-core/messaging": "^2.3.0",

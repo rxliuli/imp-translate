@@ -1,10 +1,20 @@
 # Privacy Policy for Imp Translate
 
-> Last updated: 2026-05-16
+> Last updated: 2026-07-30
 
 ## Data Collection
 
-Imp Translate does **not** collect any personal or sensitive user data. We do not operate any servers or backend infrastructure.
+Imp Translate does **not** collect any personal or sensitive user data — no browsing history, no page content, no translated text, and nothing that identifies you.
+
+### Anonymous Usage Statistics
+
+The extension sends **at most one anonymous ping per day** to our own infrastructure (extport, running on Cloudflare) so we can see how many installs are active and which versions are in use. Each ping contains exactly:
+
+- a random install identifier (generated locally, not linked to you or your account on any service)
+- the extension version
+- your browser's UI language (e.g. `en-US`)
+
+From the network request itself our server derives the browser, operating system, and country (the IP address is used only for the country lookup and is **not stored**). Raw pings are deleted after 90 days; only aggregate daily counts are kept. No browsing data, page content, or behavioral data is ever collected.
 
 ## Third-Party Translation Services
 

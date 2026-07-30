@@ -8,6 +8,7 @@ import { parseRules, matchRulesForHostname, type SiteRule } from '@/lib/rules'
 import { getEffectiveRules, setupRemoteRulesAlarm, fetchRemoteRulesIfNeeded } from '@/lib/remote-rules'
 import { PublicPath } from 'wxt/browser'
 import { debugTime } from '@/lib/utils'
+import { attachAnalytics } from '@extport/sdk/analytics'
 
 async function getMatchedRulesForHostname(hostname: string): Promise<SiteRule[]> {
   const effectiveRules = await getEffectiveRules()
@@ -171,6 +172,10 @@ function setupCacheCleanupAlarm() {
 }
 
 export default defineBackground(() => {
+  // One anonymous ping per install per UTC day (version + language only) —
+  // see PRIVACY.md "Anonymous Usage Statistics".
+  attachAnalytics({ extensionId: 'ext_uYoV9o8FAzvwJyFCBBHZ' })
+
   setupRemoteRulesAlarm()
   setupCacheCleanupAlarm()
 
