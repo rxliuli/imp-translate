@@ -8,6 +8,11 @@ const INLINE_TAGS = new Set([
 
 const NO_LETTER_RE = /^\P{L}+$/u
 const ASCII_SHORT_RE = /^[a-zA-Z0-9]{1,2}$/
+// A blank line: two newlines separated only by intra-line whitespace. In
+// white-space:pre-wrap contexts this is a rendered paragraph break.
+const BLANK_LINE_RE = /\n[^\S\n]*\n/
+// A full separator run: maximal whitespace stretch containing a blank line.
+const SEP_RUN_RE = /\s*\n[^\S\n]*\n\s*/
 
 const SKIP_TAGS = new Set([
   'script', 'style', 'textarea', 'svg', 'template', 'noscript',
@@ -70,27 +75,33 @@ function isBr(node: Node): boolean {
   )
 }
 
-// Split a run of inline-ish siblings on <br>{2,}* boundaries (allowing whitespace
-// text nodes between the brs). A single <br> is a soft line break and stays in
-// the segment. Two or more consecutive brs act as a "fake paragraph" separator
-// — the pattern App Store / old webmail / Discord embed style emails use.
-function segmentRunByBrBr(run: Node[]): Node[][] {
+// Split a run of inline-ish siblings on "paragraph" boundaries. A boundary is
+// a soft-node run (brs and whitespace text) containing either <br>{2,} — the
+// fake-paragraph pattern App Store / old webmail / Discord embed emails use —
+// or, when splitOnBlankLines is set (white-space:pre-wrap contexts, e.g. x.com
+// long posts), a blank line: two newlines in the whitespace text. A single
+// <br> or single \n is a soft line break and stays in the segment.
+function segmentRunByBrBr(run: Node[], splitOnBlankLines = false): Node[][] {
   const segments: Node[][] = []
   let current: Node[] = []
   let i = 0
+  const isSoft = (n: Node) => isBr(n) || isWhitespaceText(n)
   while (i < run.length) {
-    if (!isBr(run[i])) {
+    if (!isSoft(run[i]) || (!isBr(run[i]) && !splitOnBlankLines)) {
       current.push(run[i])
       i++
       continue
     }
     let j = i
     let brCount = 0
-    while (j < run.length && (isBr(run[j]) || isWhitespaceText(run[j]))) {
+    let wsText = ''
+    while (j < run.length && isSoft(run[j])) {
       if (isBr(run[j])) brCount++
+      else wsText += run[j].textContent ?? ''
       j++
     }
-    if (brCount >= 2) {
+    const boundary = brCount >= 2 || (splitOnBlankLines && BLANK_LINE_RE.test(wsText))
+    if (boundary) {
       if (current.length > 0) {
         segments.push(current)
         current = []
@@ -234,6 +245,94 @@ function hasBrBrSeparator(el: Element): boolean {
   return false
 }
 
+// x.com long-form posts (and other pre-wrap renderers) put an entire article
+// into one flat element whose only structure is literal \n\n inside inline
+// span text — no <p>, no <br>. Detect that shape so the walker can segment
+// per paragraph instead of extracting one giant block.
+function preservesNewlines(el: Element): boolean {
+  const ws = getComputedStyle(el).whiteSpace
+  return ws.startsWith('pre') || ws === 'break-spaces'
+}
+
+function hasBlankLineSeparator(el: Element): boolean {
+  // Style check first: getComputedStyle is cheap relative to textContent,
+  // which allocates the full subtree text — only pay that on pre-wrap
+  // elements, which are rare.
+  if (!preservesNewlines(el)) return false
+  const text = el.textContent
+  if (!text || !BLANK_LINE_RE.test(text)) return false
+  return !isHidden(el as HTMLElement)
+}
+
+// Split `t` so each separator run (whitespace containing a blank line)
+// becomes its own standalone text node. Returns the separator nodes.
+function splitTextAtBlankLines(t: Text): Text[] {
+  const seps: Text[] = []
+  let node = t
+  for (;;) {
+    const m = SEP_RUN_RE.exec(node.data)
+    if (!m) break
+    const sep = m.index > 0 ? node.splitText(m.index) : node
+    const rest = m[0].length < sep.data.length ? sep.splitText(m[0].length) : null
+    seps.push(sep)
+    if (!rest) break
+    node = rest
+  }
+  return seps
+}
+
+// Prepare a preserves-newlines element for run segmentation: split every
+// blank-line separator out of its text node and hoist it up through inline
+// ancestors until it is a direct child of `parent` (cloning the ancestor at
+// each level, Text.splitText-style). Afterwards the direct-child run has the
+// same shape as br-br markup — content nodes with whitespace separator nodes
+// between them — and segmentRunByBrBr(run, true) applies unchanged. The
+// separators stay in the DOM (never wrapped), so rendering is untouched.
+//
+// This mutates during the walk's read phase, unlike the deferred writes used
+// elsewhere — acceptable because blank-line pre-wrap elements are rare (one
+// per long post), so the extra reflow is bounded.
+function segmentPreservedNewlines(parent: Element) {
+  const doc = parent.ownerDocument!
+  const walker = doc.createTreeWalker(parent, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as Element
+        // Block-level descendants segment themselves when the walk recurses
+        // into them; splitting across their boundary would move rendered
+        // whitespace between formatting contexts.
+        if (!isInlineish(el)) return NodeFilter.FILTER_REJECT
+        if (el.classList.contains(RESULT_CLASS)) return NodeFilter.FILTER_REJECT
+        if (el.classList.contains('notranslate')) return NodeFilter.FILTER_REJECT
+        if (el.getAttribute('translate') === 'no') return NodeFilter.FILTER_REJECT
+        if ((el as HTMLElement).isContentEditable) return NodeFilter.FILTER_REJECT
+        return NodeFilter.FILTER_SKIP
+      }
+      return BLANK_LINE_RE.test((node as Text).data)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_SKIP
+    },
+  })
+  const targets: Text[] = []
+  let n: Node | null
+  while ((n = walker.nextNode())) targets.push(n as Text)
+
+  for (const t of targets) {
+    for (const sep of splitTextAtBlankLines(t)) {
+      let cur: Node = sep
+      while (cur.parentNode && cur.parentNode !== parent) {
+        const p = cur.parentNode as Element
+        const after = p.cloneNode(false) as Element
+        after.removeAttribute('id')
+        while (cur.nextSibling) after.appendChild(cur.nextSibling)
+        const gp = p.parentNode!
+        gp.insertBefore(cur, p.nextSibling)
+        if (after.childNodes.length > 0) gp.insertBefore(after, cur.nextSibling)
+      }
+    }
+  }
+}
+
 function hasBlockChild(el: Element): boolean {
   for (const child of el.children) {
     const tag = child.tagName.toLowerCase()
@@ -344,7 +443,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     pendingWraps.push({ parent, wrapper, refNode: seg[0], seg })
   }
 
-  function walkMixed(parent: Element) {
+  function walkMixed(parent: Element, splitOnBlankLines = false) {
     const isCustomElement = parent.tagName.includes('-')
     const children = Array.from(parent.childNodes)
     let run: Node[] = []
@@ -399,7 +498,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
     const flush = () => {
       if (run.length === 0) return
-      const segments = segmentRunByBrBr(run)
+      const segments = segmentRunByBrBr(run, splitOnBlankLines)
       for (const seg of segments) {
         flushSegment(seg)
       }
@@ -423,6 +522,17 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     const tag = node.tagName.toLowerCase()
 
     if (SKIP_CONTAINERS.has(tag)) return
+
+    // Pre-wrap content whose paragraphs are literal blank lines in the text
+    // (x.com long posts): normalize the separators to direct children, then
+    // segment the run like br-br fake paragraphs. Checked before the leaf
+    // paths so a leaf block or flat div with blank lines splits too.
+    if (hasBlankLineSeparator(node)) {
+      segmentPreservedNewlines(node)
+      walkMixed(node, true)
+      walkShadow(node)
+      return
+    }
 
     if (isLeafBlock(node)) {
       tryExtract(node)

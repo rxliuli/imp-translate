@@ -943,4 +943,81 @@ describe('extractBlocks', () => {
     expect(blocks).toHaveLength(1)
     expect(blocks[0].text).toBe('Visible card content')
   })
+
+  // x.com long-form posts: one flat pre-wrap element, paragraphs as literal
+  // \n\n inside inline span text, no <p>/<br> structure at all.
+  describe('pre-wrap blank-line segmentation', () => {
+    it('splits pre-wrap text on blank lines into separate blocks', () => {
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.textContent =
+        'First paragraph of the long post.\n\nSecond paragraph of the long post.'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text)).toEqual([
+        'First paragraph of the long post.',
+        'Second paragraph of the long post.',
+      ])
+    })
+
+    it('keeps single newlines (soft line breaks) in one block', () => {
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.textContent = 'Line one continues here.\nLine two of the same block.'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(1)
+      expect(blocks[0].text).toContain('Line one continues here.')
+      expect(blocks[0].text).toContain('Line two of the same block.')
+    })
+
+    it('ignores blank lines when white-space does not preserve them', () => {
+      const div = document.createElement('div')
+      div.textContent = 'First collapsed paragraph.\n\nSecond collapsed paragraph.'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(1)
+    })
+
+    it('splits nested spans crossing paragraph boundaries', () => {
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.innerHTML =
+        '<span><span class="hl">Heading paragraph of the post.</span><span>\n\nMiddle paragraph of the post.\n\nTail start of paragraph </span></span><a href="https://example.com/a">example.com/a</a><span> and tail end here.\n\nClosing paragraph of the post.</span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text)).toEqual([
+        'Heading paragraph of the post.',
+        'Middle paragraph of the post.',
+        'Tail start of paragraph example.com/a and tail end here.',
+        'Closing paragraph of the post.',
+      ])
+      // Rendering must be unchanged: the separators stay in the DOM.
+      expect(div.textContent).toContain('post.\n\nMiddle')
+    })
+
+    it('does not split inside excluded (translate="no") children', () => {
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.innerHTML =
+        'Visible text of the block. <span translate="no">code\n\nsample</span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(1)
+      expect(blocks[0].text).toBe('Visible text of the block.')
+    })
+
+    it('is idempotent across re-scans once blocks are marked', () => {
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.innerHTML =
+        '<span><span>Alpha paragraph text.\n\nBeta paragraph text.</span></span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(2)
+      for (const b of blocks) markTranslated(b.element)
+      const again = extractBlocks(document.body)
+      expect(again).toHaveLength(0)
+    })
+  })
 })

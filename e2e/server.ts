@@ -221,6 +221,25 @@ ${appleRejectionBrFixture}
   <div id="chat"></div>
 </body>
 </html>`,
+  // Mimics an x.com long-form post: one flat div with white-space:pre-wrap,
+  // only inline children, paragraph breaks as literal \\n\\n INSIDE span text
+  // (some spans crossing paragraph boundaries), and an inline link mid-
+  // paragraph. The div content is deliberately written without formatting
+  // whitespace — every newline inside #longpost is intentional.
+  '/x-longpost': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Long Post</title></head>
+<body>
+<div id="longpost" style="white-space: pre-wrap"><span><span class="hl">The Manila week was not a summit, it was a staging ground for the chronology.</span><span>
+
+How one week and one city turned into the first stitch of a new alignment that nobody had to name.
+
+The Diplomat ran a piece about it at </span></span><a href="https://example.com/article" id="post-link">example.com/article</a><span> which is credible but far too cautious about the choreography.
+
+Line one of the closing paragraph.
+Line two stays in the same block.</span></div>
+</body>
+</html>`,
 }
 
 // Per-test mock controls, reset on each server start (tests run serially per
