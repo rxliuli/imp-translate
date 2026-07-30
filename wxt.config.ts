@@ -59,9 +59,13 @@ export default defineConfig({
             manifest.name!.toLowerCase().replaceAll(/[^a-z0-9]/g, '-') +
             '@rxliuli.com',
           data_collection_permissions: {
-            // Daily anonymous usage ping (version + language) — Firefox's
-            // "technical and interaction data" category.
-            required: ['technicalAndInteraction'],
+            // Daily anonymous usage ping (version + language). AMO rejects
+            // technicalAndInteraction in `required` — Firefox's position is
+            // that technical data must always be user-declinable, so it can
+            // only be optional (an install-time toggle). The background
+            // honors the toggle via permissions.getAll().data_collection.
+            required: ['none'],
+            optional: ['technicalAndInteraction'],
           },
         },
       }
