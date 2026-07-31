@@ -20,8 +20,8 @@ importers:
   .:
     dependencies:
       '@extport/sdk':
-        specifier: 0.0.4
-        version: 0.0.4(react@19.2.5)
+        specifier: 0.0.5
+        version: 0.0.5(react@19.2.5)
       '@tailwindcss/vite':
         specifier: ^4.2.4
         version: 4.2.4(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))
@@ -78,8 +78,8 @@ importers:
         version: 1.4.0
     devDependencies:
       '@extport/wxt':
-        specifier: ^0.0.3
-        version: 0.0.3(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
+        specifier: ^0.0.5
+        version: 0.0.5(@extport/sdk@0.0.5(react@19.2.5))(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
       '@hono/node-server':
         specifier: ^2.0.0
         version: 2.0.0(hono@4.12.15)
@@ -363,17 +363,22 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@extport/sdk@0.0.4':
-    resolution: {integrity: sha512-YyHVwNgGjyaHruLjZCUcZmmc5zDLItlniUs8QpPHqq9L1sbQeBkwVPuT69RBdd1gWdf+VMC/50ufjNZW1cq4bA==}
+  '@extport/sdk@0.0.5':
+    resolution: {integrity: sha512-/Sn4rwoFPMcb+h6A3yGnfqKzDzM9YTcxU7Mn8QxgEUqroIy0s2w5RwvUE1BuOuR+RWvtMfoc+9bnzvcNaqAeyg==}
     peerDependencies:
       react: '>=18'
     peerDependenciesMeta:
       react:
         optional: true
 
-  '@extport/wxt@0.0.3':
-    resolution: {integrity: sha512-d9bIhwrb+YQnDEI9X47QFKeQhvH2Pl+qZ8Xy/NrSV3BO49WJfIPTbiK3OpuqVO+7BaJvjWkF1euzJ01+QckBkQ==}
+  '@extport/wxt@0.0.5':
+    resolution: {integrity: sha512-70roUt0YRQhqoiIesOS03YldiD2BfAs8xzILxZWvPlI6JzOv/0ifqKcRwuyS3ZnuNnbdH9fsihVXJWYrSXFBFA==}
     engines: {node: '>=18'}
+    peerDependencies:
+      '@extport/sdk': '>=0.0.5'
+    peerDependenciesMeta:
+      '@extport/sdk':
+        optional: true
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -3342,14 +3347,15 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
-  '@extport/sdk@0.0.4(react@19.2.5)':
+  '@extport/sdk@0.0.5(react@19.2.5)':
     dependencies:
       idb-keyval: 6.3.0
     optionalDependencies:
       react: 19.2.5
 
-  '@extport/wxt@0.0.3(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)':
+  '@extport/wxt@0.0.5(@extport/sdk@0.0.5(react@19.2.5))(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)':
     optionalDependencies:
+      '@extport/sdk': 0.0.5(react@19.2.5)
       wxt: 0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
     transitivePeerDependencies:
       - '@types/node'

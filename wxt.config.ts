@@ -5,9 +5,15 @@ import { PublicPath } from 'wxt/browser'
 export default defineConfig({
   modules: ['@wxt-dev/module-react', '@extport/wxt'],
   extport: {
-    appCategory: 'public.app-category.productivity',
-    bundleIdentifier: 'com.rxliuli.imp-translate',
-    developmentTeam: 'N2X78TUUFG',
+    extension: 'ext_uYoV9o8FAzvwJyFCBBHZ',
+    safari: {
+      appCategory: 'public.app-category.productivity',
+      bundleIdentifier: 'com.rxliuli.imp-translate',
+      developmentTeam: 'N2X78TUUFG',
+    },
+    // Daily anonymous usage ping + the Firefox data-collection declaration,
+    // injected by @extport/wxt — see PRIVACY.md "Anonymous Usage Statistics".
+    analytics: true,
   },
   vite: () => ({
     plugins: [tailwindcss()],
@@ -58,15 +64,6 @@ export default defineConfig({
           id:
             manifest.name!.toLowerCase().replaceAll(/[^a-z0-9]/g, '-') +
             '@rxliuli.com',
-          data_collection_permissions: {
-            // Daily anonymous usage ping (version + language). AMO rejects
-            // technicalAndInteraction in `required` — Firefox's position is
-            // that technical data must always be user-declinable, so it can
-            // only be optional (an install-time toggle). The background
-            // honors the toggle via permissions.getAll().data_collection.
-            required: ['none'],
-            optional: ['technicalAndInteraction'],
-          },
         },
       }
       // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/author
