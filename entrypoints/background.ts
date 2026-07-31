@@ -173,19 +173,9 @@ function setupCacheCleanupAlarm() {
 
 export default defineBackground(() => {
   // One anonymous ping per install per UTC day (version + language only) —
-  // see PRIVACY.md "Anonymous Usage Statistics". Starts disabled and is
-  // switched by consent state: on Firefox that's the user's
-  // technicalAndInteraction toggle (install dialog / about:addons); on
-  // browsers without the data_collection mechanism the manifest-level
-  // disclosure governs and it enables immediately.
-  const analytics = attachAnalytics({ extensionId: 'ext_uYoV9o8FAzvwJyFCBBHZ', defaultEnabled: false })
-  const syncAnalyticsConsent = async () => {
-    const all = (await browser.permissions.getAll()) as { data_collection?: string[] }
-    await analytics.setEnabled(all.data_collection === undefined || all.data_collection.includes('technicalAndInteraction'))
-  }
-  void syncAnalyticsConsent()
-  browser.permissions.onAdded?.addListener(() => void syncAnalyticsConsent())
-  browser.permissions.onRemoved?.addListener(() => void syncAnalyticsConsent())
+  // see PRIVACY.md "Anonymous Usage Statistics". Firefox's
+  // technicalAndInteraction toggle is honored by the SDK automatically.
+  attachAnalytics({ extensionId: 'ext_uYoV9o8FAzvwJyFCBBHZ' })
 
   setupRemoteRulesAlarm()
   setupCacheCleanupAlarm()
