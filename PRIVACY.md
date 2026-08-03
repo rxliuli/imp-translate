@@ -1,6 +1,6 @@
 # Privacy Policy for Imp Translate
 
-> Last updated: 2026-07-30
+> Last updated: 2026-08-03
 
 ## Data Collection
 
@@ -20,8 +20,8 @@ From the network request itself our server derives the browser, operating system
 
 To provide translation functionality, the extension sends the text you select directly from your browser to a third-party translation service based on your chosen settings. The supported providers are:
 
-- **Microsoft Translator** (default, no API key required)
-- **Google Translate** (no API key required)
+- **Google Translate** (default, no API key required)
+- **Microsoft Translator** (no API key required)
 - **OpenAI-compatible API** (user-configured endpoint and API key)
 
 No data passes through or is stored on our infrastructure. The text is sent directly from your browser to the selected service.

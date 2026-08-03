@@ -20,8 +20,8 @@ importers:
   .:
     dependencies:
       '@extport/sdk':
-        specifier: 0.0.5
-        version: 0.0.5(react@19.2.5)
+        specifier: 0.0.9
+        version: 0.0.9(react@19.2.5)
       '@tailwindcss/vite':
         specifier: ^4.2.4
         version: 4.2.4(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))
@@ -78,8 +78,8 @@ importers:
         version: 1.4.0
     devDependencies:
       '@extport/wxt':
-        specifier: ^0.0.5
-        version: 0.0.5(@extport/sdk@0.0.5(react@19.2.5))(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
+        specifier: ^0.0.7
+        version: 0.0.7(@extport/sdk@0.0.9(react@19.2.5))(wxt@0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1))
       '@hono/node-server':
         specifier: ^2.0.0
         version: 2.0.0(hono@4.12.15)
@@ -363,19 +363,20 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@extport/sdk@0.0.5':
-    resolution: {integrity: sha512-/Sn4rwoFPMcb+h6A3yGnfqKzDzM9YTcxU7Mn8QxgEUqroIy0s2w5RwvUE1BuOuR+RWvtMfoc+9bnzvcNaqAeyg==}
+  '@extport/sdk@0.0.9':
+    resolution: {integrity: sha512-mniP2vPVAa4aabguH5HmEcboH8y9fQ43YD20pCFKbnOP1KfLqnNd1kq8mg88X2EnSc4KJKZERVSOE5UDM01p7Q==}
     peerDependencies:
       react: '>=18'
     peerDependenciesMeta:
       react:
         optional: true
 
-  '@extport/wxt@0.0.5':
-    resolution: {integrity: sha512-70roUt0YRQhqoiIesOS03YldiD2BfAs8xzILxZWvPlI6JzOv/0ifqKcRwuyS3ZnuNnbdH9fsihVXJWYrSXFBFA==}
+  '@extport/wxt@0.0.7':
+    resolution: {integrity: sha512-lm9uTYIPsn7Kc+5kw9/CLuu1hiPXjIO+Eg7OslkeLRqdeNB2/YloJjbPUg1OfHJmxxOQQo5log45+EiDrAANrg==}
     engines: {node: '>=18'}
     peerDependencies:
       '@extport/sdk': '>=0.0.5'
+      wxt: '>=0.20.0'
     peerDependenciesMeta:
       '@extport/sdk':
         optional: true
@@ -3347,32 +3348,17 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
-  '@extport/sdk@0.0.5(react@19.2.5)':
+  '@extport/sdk@0.0.9(react@19.2.5)':
     dependencies:
       idb-keyval: 6.3.0
     optionalDependencies:
       react: 19.2.5
 
-  '@extport/wxt@0.0.5(@extport/sdk@0.0.5(react@19.2.5))(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)':
-    optionalDependencies:
-      '@extport/sdk': 0.0.5(react@19.2.5)
+  '@extport/wxt@0.0.7(@extport/sdk@0.0.9(react@19.2.5))(wxt@0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1))':
+    dependencies:
       wxt: 0.20.25(patch_hash=a63cf5327d46d4eb0e431bf3b4c20ab84b015b268f6b5088e050de16f1bdd4ea)(@types/node@25.6.0)(jiti@2.6.1)(rollup@4.57.1)
-    transitivePeerDependencies:
-      - '@types/node'
-      - '@vitejs/devtools'
-      - canvas
-      - eslint
-      - jiti
-      - less
-      - rollup
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - yaml
+    optionalDependencies:
+      '@extport/sdk': 0.0.9(react@19.2.5)
 
   '@floating-ui/core@1.7.5':
     dependencies:

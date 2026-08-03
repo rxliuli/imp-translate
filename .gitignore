@@ -30,3 +30,6 @@ playwright-report
 *.sln
 *.sw?
 *.json.gz
+
+# synced by @extport/wxt from wxt.config.ts
+extport.config.json
