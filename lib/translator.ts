@@ -43,58 +43,191 @@ export interface TranslationResult {
   detectedLang?: string
 }
 
-let msTokenCache: { token: string; expires: number } | null = null
-let msTokenInflight: Promise<string> | null = null
+// Microsoft retired the legacy Edge translation pipeline
+// (edge.microsoft.com/translate/auth) on 2026-07-30, so this now goes through
+// the Bing web translator: scrape a session from the translator page, then
+// call ttranslatev3. The token is valid for one hour; each request accepts at
+// most 1000 characters of text.
+interface BingSession {
+  ig: string
+  iid: string
+  key: number
+  token: string
+  expires: number
+}
 
-async function getMicrosoftToken(): Promise<string> {
-  if (msTokenCache && Date.now() < msTokenCache.expires) {
-    return msTokenCache.token
+let bingSession: BingSession | null = null
+let bingSessionInflight: Promise<BingSession> | null = null
+
+async function getBingSession(): Promise<BingSession> {
+  if (bingSession && Date.now() < bingSession.expires) {
+    return bingSession
   }
-  if (msTokenInflight) return msTokenInflight
-  msTokenInflight = (async () => {
+  if (bingSessionInflight) return bingSessionInflight
+  bingSessionInflight = (async () => {
     try {
-      const resp = await fetch('https://edge.microsoft.com/translate/auth', {
-        method: 'GET',
-      })
-      if (!resp.ok) throw new Error(`Microsoft auth failed: ${resp.status}`)
-      const token = await resp.text()
-      msTokenCache = { token, expires: Date.now() + 8 * 60 * 1000 }
-      return token
+      const resp = await fetch('https://www.bing.com/translator')
+      if (!resp.ok) throw new Error(`Bing session failed: ${resp.status}`)
+      const html = await resp.text()
+      const ig = /IG:"([^"]+)"/.exec(html)?.[1]
+      const iid = /data-iid="([^"]+)"/.exec(html)?.[1] ?? 'translator.5023'
+      const helper = /params_AbusePreventionHelper\s*=\s*(\[[^\]]+\])/.exec(html)?.[1]
+      if (!ig || !helper) {
+        throw new Error('Bing session failed: page layout changed')
+      }
+      const [key, token, duration] = JSON.parse(helper) as [number, string, number]
+      bingSession = {
+        ig,
+        iid,
+        key,
+        token,
+        expires: Date.now() + Math.min(duration || 3600000, 3600000) - 60000,
+      }
+      return bingSession
     } finally {
-      msTokenInflight = null
+      bingSessionInflight = null
     }
   })()
-  return msTokenInflight
+  return bingSessionInflight
+}
+
+// Map Google-style/bare codes to the codes Bing expects.
+const BING_LANG_MAP: Record<string, string> = {
+  zh: 'zh-Hans',
+  'zh-cn': 'zh-Hans',
+  'zh-CN': 'zh-Hans',
+  'zh-tw': 'zh-Hant',
+  'zh-TW': 'zh-Hant',
+  tl: 'fil',
+  iw: 'he',
+  no: 'nb',
+  sr: 'sr-Cyrl',
+  mn: 'mn-Cyrl',
+  hmn: 'mww',
+  ku: 'kmr',
+}
+
+const BING_TEXT_LIMIT = 950
+
+async function bingTranslateOne(text: string, to: string, retried = false): Promise<string> {
+  const s = await getBingSession()
+  const resp = await fetch(
+    `https://www.bing.com/ttranslatev3?isVertical=1&IG=${s.ig}&IID=${s.iid}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        fromLang: 'auto-detect',
+        to,
+        text,
+        token: s.token,
+        key: String(s.key),
+      }),
+    },
+  )
+  if (!resp.ok) {
+    bingSession = null
+    if (!retried) return bingTranslateOne(text, to, true)
+    throw new Error(`Microsoft translate failed: ${resp.status}`)
+  }
+  const data = await resp.json()
+  const first = Array.isArray(data) ? data[0] : null
+  if (!first?.translations?.[0]?.text) {
+    // An expired token or a captcha challenge comes back as an object
+    // (e.g. {"statusCode":400}) instead of the translations array.
+    bingSession = null
+    if (!retried) return bingTranslateOne(text, to, true)
+    throw new Error(`Microsoft translate failed: ${JSON.stringify(data).slice(0, 200)}`)
+  }
+  return first.translations[0].text
+}
+
+// Translate a single text longer than the request limit by splitting it on
+// sentence boundaries and rejoining the translated pieces.
+async function bingTranslateLong(text: string, to: string): Promise<string> {
+  const segments = text.match(/[^.!?。！？]*[.!?。！？]+["')\]]*\s*|[^.!?。！？]+$/g) ?? [text]
+  const parts: string[] = []
+  let current = ''
+  for (let seg of segments) {
+    while (seg.length > BING_TEXT_LIMIT) {
+      if (current) {
+        parts.push(current)
+        current = ''
+      }
+      parts.push(seg.slice(0, BING_TEXT_LIMIT))
+      seg = seg.slice(BING_TEXT_LIMIT)
+    }
+    if (current.length + seg.length > BING_TEXT_LIMIT) {
+      parts.push(current)
+      current = seg
+    } else {
+      current += seg
+    }
+  }
+  if (current) parts.push(current)
+  const translated = await Promise.all(parts.map((p) => bingTranslateOne(p, to)))
+  return translated.join(' ')
 }
 
 async function translateMicrosoft(
   texts: string[],
   targetLang: string,
 ): Promise<TranslationResult> {
-  const token = await getMicrosoftToken()
-  const url = new URL('https://api-edge.cognitive.microsofttranslator.com/translate')
-  url.searchParams.set('api-version', '3.0')
-  url.searchParams.set('to', targetLang)
-
-  const resp = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(texts.map((t) => ({ Text: t }))),
-  })
-
-  if (!resp.ok) {
-    msTokenCache = null
-    throw new Error(`Microsoft translate failed: ${resp.status}`)
+  const to = BING_LANG_MAP[targetLang] ?? targetLang
+  // ttranslatev3 takes one text per request, so pack the batch into
+  // newline-joined groups within the request limit (Bing preserves newlines)
+  // and split each result back. Text-internal newlines are flattened so they
+  // cannot break the alignment.
+  const cleaned = texts.map((t) => t.replace(/\s*\n\s*/g, ' ').trim())
+  const groups: number[][] = []
+  let group: number[] = []
+  let groupChars = 0
+  for (let i = 0; i < cleaned.length; i++) {
+    const len = cleaned[i].length + 1
+    if (group.length > 0 && groupChars + len > BING_TEXT_LIMIT) {
+      groups.push(group)
+      group = []
+      groupChars = 0
+    }
+    group.push(i)
+    groupChars += len
   }
+  if (group.length > 0) groups.push(group)
 
-  const data = await resp.json()
-  return {
-    texts: data.map((item: any) => item.translations[0].text),
-    detectedLang: data[0]?.detectedLanguage?.language,
-  }
+  const results = new Array<string>(cleaned.length)
+  await Promise.all(
+    groups.map(async (indices) => {
+      const groupTexts = indices.map((i) => cleaned[i])
+      if (indices.length === 1) {
+        const text = groupTexts[0]
+        if (text === '') {
+          results[indices[0]] = text
+        } else if (text.length > BING_TEXT_LIMIT) {
+          results[indices[0]] = await bingTranslateLong(text, to)
+        } else {
+          results[indices[0]] = await bingTranslateOne(text, to)
+        }
+        return
+      }
+      if (groupTexts.every((t) => t !== '')) {
+        const lines = (await bingTranslateOne(groupTexts.join('\n'), to)).split('\n')
+        if (lines.length === groupTexts.length) {
+          indices.forEach((idx, j) => {
+            results[idx] = lines[j].trim()
+          })
+          return
+        }
+        // The translator merged or split lines — redo this group per text.
+      }
+      await Promise.all(
+        indices.map(async (idx) => {
+          const text = cleaned[idx]
+          results[idx] = text === '' ? text : await bingTranslateOne(text, to)
+        }),
+      )
+    }),
+  )
+  return { texts: results }
 }
 
 const GOOGLE_TRANSLATE_HTML_KEY = 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520'

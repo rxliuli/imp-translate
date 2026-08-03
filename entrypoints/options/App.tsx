@@ -44,13 +44,13 @@ const PROVIDERS: {
   description: string
 }[] = [
   {
-    value: 'microsoft',
-    label: 'Microsoft Translator',
+    value: 'google',
+    label: 'Google Translate',
     description: 'Free, no API key required',
   },
   {
-    value: 'google',
-    label: 'Google Translate',
+    value: 'microsoft',
+    label: 'Microsoft Translator',
     description: 'Free, no API key required',
   },
   {

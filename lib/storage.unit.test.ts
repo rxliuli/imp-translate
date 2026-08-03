@@ -27,7 +27,7 @@ describe('storage', () => {
   it('getSettings returns defaults when nothing stored', async () => {
     const { getSettings } = await import('./storage')
     const settings = await getSettings()
-    expect(settings.provider).toBe('microsoft')
+    expect(settings.provider).toBe('google')
     expect(settings.targetLang).toBeTruthy()
     expect(settings.openai.model).toBe('gpt-4o-mini')
   })
@@ -44,7 +44,7 @@ describe('storage', () => {
     await saveSettings({ targetLang: 'ja' })
     const settings = await getSettings()
     expect(settings.targetLang).toBe('ja')
-    expect(settings.provider).toBe('microsoft')
+    expect(settings.provider).toBe('google')
     expect(settings.openai.model).toBe('gpt-4o-mini')
   })
 
@@ -70,7 +70,7 @@ describe('storage', () => {
     await saveSettings({ openai })
     const settings = await getSettings()
     expect(settings.openai).toEqual(openai)
-    expect(settings.provider).toBe('microsoft')
+    expect(settings.provider).toBe('google')
   })
 })
 

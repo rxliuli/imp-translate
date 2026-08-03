@@ -17,7 +17,7 @@ export interface Settings {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  provider: 'microsoft',
+  provider: 'google',
   targetLang: navigator.language.split('-')[0] || 'zh',
   developerMode: false,
   debugMode: false,
