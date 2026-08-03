@@ -12,8 +12,8 @@ test('options page renders with default settings', async ({
   await expect(page.locator('text=Google Translate')).toBeVisible()
   await expect(page.locator('text=OpenAI Compatible')).toBeVisible()
 
-  const msRadio = page.locator('button[role="radio"][value="microsoft"]')
-  await expect(msRadio).toHaveAttribute('data-state', 'checked')
+  const googleRadio = page.locator('button[role="radio"][value="google"]')
+  await expect(googleRadio).toHaveAttribute('data-state', 'checked')
 })
 
 test('options page shows OpenAI settings when selected', async ({
@@ -47,11 +47,12 @@ test('options page saves and persists settings', async ({
   await page.locator('[data-slot="select-trigger"]').click()
   await page.getByRole('option', { name: '日本語' }).click()
 
-  await page.locator('button[role="radio"][value="google"]').click()
+  // Pick the non-default provider so the reload actually proves persistence
+  await page.locator('button[role="radio"][value="microsoft"]').click()
 
   await page.waitForTimeout(200)
   await page.reload()
 
   await expect(page.locator('[data-slot="select-trigger"]')).toContainText('日本語')
-  await expect(page.locator('button[role="radio"][value="google"]')).toHaveAttribute('data-state', 'checked')
+  await expect(page.locator('button[role="radio"][value="microsoft"]')).toHaveAttribute('data-state', 'checked')
 })
