@@ -23,7 +23,6 @@ import {
   removeDebugStyles,
   showToastBar,
   hideToastBar,
-  ensureShadowStyles,
 } from '@/lib/render'
 import { saveSettings } from '@/lib/storage'
 import { isUrlOnly, debugTime } from '@/lib/utils'
@@ -398,9 +397,16 @@ export default defineUnlistedScript(() => {
     if (newBlocks.length > 0) observeBlocks(newBlocks)
   }
 
+  // Only observe here — do NOT push our stylesheet into the shadow root.
+  // Styles are adopted lazily in injectLoading, for the roots that actually
+  // receive a translation. Touching adoptedStyleSheets on every shadow root
+  // the walker visits (~200 on a GitHub discussion: hidden <tool-tip>s and
+  // <include-fragment>s) makes Dark Reader's per-root adopted-sheet watcher
+  // re-render + re-match CSS variables ~200 times in one frame — tens of
+  // seconds of main-thread time on an iPhone, seen as a white, unresponsive
+  // page after translate + scroll.
   function attachShadowObserver(root: ShadowRoot) {
     if (shadowObservers.has(root)) return
-    ensureShadowStyles(root)
     if (!isTranslating) return
     const obs = new MutationObserver(handleMutations)
     obs.observe(root, { childList: true, subtree: true, characterData: true })

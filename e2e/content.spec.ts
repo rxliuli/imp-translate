@@ -344,3 +344,32 @@ test('translates elements hidden during initial scan that become visible later',
   await expect(deferredTranslation).toBeVisible({ timeout: 15000 })
   await expect(deferredTranslation).toContainText('[翻译]')
 })
+
+test('does not adopt stylesheets into shadow roots that receive no translation', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/shadow-roots`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  // Wait until the light-DOM paragraph, the slotted host text and the shadow
+  // paragraph are all translated, so every injection path has run.
+  const done = '.imp-translate-result:not(.imp-translate-loading)'
+  await expect(page.locator(`p ${done}`).first()).toBeVisible({ timeout: 15000 })
+  await expect(page.locator(`#frag ${done}`)).toBeVisible({ timeout: 15000 })
+  await expect(page.locator(`#card #inner ${done}`)).toBeVisible({ timeout: 15000 })
+
+  const styles = await page.evaluate(() => {
+    const has = (id: string) => {
+      const root = document.getElementById(id)!.shadowRoot!
+      return root.adoptedStyleSheets.length > 0 || root.querySelector('#imp-translate-style') !== null
+    }
+    return { tip1: has('tip1'), tip2: has('tip2'), frag: has('frag'), card: has('card') }
+  })
+  // Roots that get no translation *inside them* must be left untouched (the
+  // <x-frag> translation is slotted light DOM, styled by the document sheet).
+  // Dark Reader watches adoptedStyleSheets on every shadow root and re-renders
+  // on each change — GitHub has ~200 such hosts.
+  expect(styles).toEqual({ tip1: false, tip2: false, frag: false, card: true })
+})

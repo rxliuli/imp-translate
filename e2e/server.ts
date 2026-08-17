@@ -76,6 +76,35 @@ const pages: Record<string, string> = {
   </script>
 </body>
 </html>`,
+  '/shadow-roots': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Shadow Roots</title></head>
+<body>
+  <h1>Shadow root page</h1>
+  <p>This light DOM paragraph has enough words to be translated as a block.</p>
+  <div id="header">
+    <span>Header area</span>
+    <!-- Hidden hosts, like GitHub's <tool-tip class="sr-only">: the walker
+         visits them, finds nothing visible, and used to adopt styles anyway. -->
+    <x-tip id="tip1" style="display:none">Dismiss alert</x-tip>
+    <x-tip id="tip2" style="display:none">Close the dialog</x-tip>
+    <!-- Block host with slotted light-DOM text, like <include-fragment>. -->
+    <x-frag id="frag">Uh oh! There was an error while loading this fragment. Please reload the page.</x-frag>
+  </div>
+  <x-card id="card"></x-card>
+  <script>
+    for (const id of ['tip1', 'tip2']) {
+      const root = document.getElementById(id).attachShadow({ mode: 'open' })
+      root.innerHTML = '<style>:host { position: absolute; }</style><slot></slot>'
+    }
+    document.getElementById('frag').attachShadow({ mode: 'open' }).innerHTML =
+      '<style>:host { display: block; }</style><slot></slot>'
+    // A host whose shadow content IS translated.
+    document.getElementById('card').attachShadow({ mode: 'open' }).innerHTML =
+      '<p id="inner">This paragraph lives inside a shadow root and should be translated.</p>'
+  </script>
+</body>
+</html>`,
   '/inner-scroll': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Inner Scroll</title></head>

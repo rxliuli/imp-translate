@@ -507,4 +507,35 @@ describe('render', () => {
     expect(results).toHaveLength(1)
     expect(results[0].parentElement).toBe(span)
   })
+
+  it('injectLoading adopts styles only into the shadow root that receives a translation', () => {
+    document.body.innerHTML = `
+      <div id="host-a"></div>
+      <div id="host-b"></div>
+      <p id="light">Light DOM paragraph with enough text to be a block.</p>
+    `
+    const hostA = document.getElementById('host-a')!
+    const hostB = document.getElementById('host-b')!
+    const rootA = hostA.attachShadow({ mode: 'open' })
+    const rootB = hostB.attachShadow({ mode: 'open' })
+    rootA.innerHTML = '<p id="a">Shadow paragraph A with enough text to be a block.</p>'
+    rootB.innerHTML = '<p id="b">Shadow paragraph B with enough text to be a block.</p>'
+
+    const hasOurStyles = (root: ShadowRoot) =>
+      root.adoptedStyleSheets.length > 0 || root.querySelector('#imp-translate-style') !== null
+
+    // Only the root that gets a translation injected receives the styles.
+    // (The eager per-shadow-root injection that used to live in the content
+    // script's onShadowRoot callback is covered by e2e/content.spec.ts.)
+    const pA = rootA.getElementById('a') as HTMLElement
+    injectLoading([{ element: pA, text: pA.textContent!.trim() }])
+    expect(hasOurStyles(rootA)).toBe(true)
+    expect(hasOurStyles(rootB)).toBe(false)
+
+    // Light-DOM injection never touches shadow roots.
+    const light = document.getElementById('light') as HTMLElement
+    injectLoading([{ element: light, text: light.textContent!.trim() }])
+    expect(hasOurStyles(rootB)).toBe(false)
+    expect(document.getElementById('imp-translate-style')).not.toBeNull()
+  })
 })

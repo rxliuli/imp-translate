@@ -237,6 +237,11 @@ export function injectLoading(blocks: TranslatableBlock[]) {
   }
 
   for (const { target, element, isShort, ref, needsBr, clampElement, clampTarget, clipElement, clipTarget, clippingAncestors } of plans) {
+    // Adopt our stylesheet into a shadow root only when a translation actually
+    // lands inside it (see attachShadowObserver in inject.ts for why eager
+    // injection into every shadow root is harmful).
+    const root = target.getRootNode()
+    if (root instanceof ShadowRoot) ensureShadowStyles(root)
     if (clampElement) applyLineClampOverride(element)
     if (clampTarget) applyLineClampOverride(target)
     if (clipElement) element.style.overflow = 'visible'
