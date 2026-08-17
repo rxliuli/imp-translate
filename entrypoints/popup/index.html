@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Without this, Safari's extension popup (a WKWebView context) renders
+         light while the same build in a normal tab / options page, same OS
+         appearance, renders dark: it doesn't reliably pick up
+         prefers-color-scheme. Declaring both explicitly opts the page into
+         the OS-driven media query. Same fix as gmail-notifier. -->
+    <meta name="color-scheme" content="light dark" />
     <title>Imp Translate</title>
   </head>
   <body>
