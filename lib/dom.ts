@@ -254,6 +254,13 @@ function preservesNewlines(el: Element): boolean {
   return ws.startsWith('pre') || ws === 'break-spaces'
 }
 
+// Exported for the content script's recheck path: a translated element whose
+// text later gains blank lines (x.com "Show more" on a tweet whose truncated
+// text had none) must be re-segmented, not retranslated as one block.
+export function needsBlankLineSplit(el: Element): boolean {
+  return hasBlankLineSeparator(el)
+}
+
 function hasBlankLineSeparator(el: Element): boolean {
   // Style check first: getComputedStyle is cheap relative to textContent,
   // which allocates the full subtree text — only pay that on pre-wrap
@@ -279,6 +286,26 @@ function splitTextAtBlankLines(t: Text): Text[] {
     node = rest
   }
   return seps
+}
+
+// Nodes produced by segmentPreservedNewlines for a given source element: the
+// hoisted separator text nodes and the element clones holding the content
+// after each separator. Frameworks that own the source element (React on
+// x.com) don't know about them: when the page later replaces the source's
+// text wholesale ("Show more" swaps the truncated text for the full post),
+// the old clones stay behind as stale duplicates. Tracking them lets a later
+// re-split drop the ones whose content now lives in the source again.
+const splitDerivedNodes = new WeakMap<Element, { sep: Text; clone: Element | null }[]>()
+
+function isStaleDerivedClone(clone: Element, sourceText: string): boolean {
+  const probe = getVisibleText(clone).trim()
+  if (!probe) return true
+  // Compare on a prefix: the stale clone may end with content that the
+  // fresh source no longer has (x.com appends the "Show more" t.co link to
+  // the truncated tail), and the source may continue where the clone ended.
+  const head = probe.slice(0, 32)
+  if (head.length < 8) return sourceText.includes(probe)
+  return sourceText.includes(head)
 }
 
 // Prepare a preserves-newlines element for run segmentation: split every
@@ -317,20 +344,69 @@ function segmentPreservedNewlines(parent: Element) {
   let n: Node | null
   while ((n = walker.nextNode())) targets.push(n as Text)
 
+  // Elements about to be split that were split before: their previous
+  // derived nodes are stale if the source now contains that content again.
+  const seenSources = new Set<Element>()
+  const dropStaleDerived = (p: Element) => {
+    if (seenSources.has(p)) return
+    seenSources.add(p)
+    const prev = splitDerivedNodes.get(p)
+    if (!prev) return
+    const sourceText = getVisibleText(p)
+    const kept: { sep: Text; clone: Element | null }[] = []
+    for (const d of prev) {
+      const stale = d.clone
+        ? d.clone.isConnected && isStaleDerivedClone(d.clone, sourceText)
+        : false
+      if (stale) {
+        d.clone!.remove()
+        if (d.sep.isConnected) d.sep.remove()
+      } else if (d.sep.isConnected || d.clone?.isConnected) {
+        kept.push(d)
+      }
+    }
+    if (kept.length > 0) splitDerivedNodes.set(p, kept)
+    else splitDerivedNodes.delete(p)
+  }
+
   for (const t of targets) {
     for (const sep of splitTextAtBlankLines(t)) {
       let cur: Node = sep
       while (cur.parentNode && cur.parentNode !== parent) {
         const p = cur.parentNode as Element
+        dropStaleDerived(p)
         const after = p.cloneNode(false) as Element
         after.removeAttribute('id')
+        // The split element may already be translated (x.com "Show more"
+        // grows a translated span into several paragraphs). The clone is new
+        // content that must be walked and translated on its own, so it must
+        // not inherit our translation state.
+        after.removeAttribute(PROCESSED_ATTR)
+        after.removeAttribute('data-imp-text')
+        after.removeAttribute('data-imp-noop')
         while (cur.nextSibling) after.appendChild(cur.nextSibling)
+        // Our own injected nodes (the translation result and its <br>) sit at
+        // the tail of the element and would otherwise ride along into the last
+        // clone. They belong to the original, whose mark and text they match.
+        for (const n of Array.from(after.childNodes)) {
+          if (isOurInjectedNode(n)) p.appendChild(n)
+        }
         const gp = p.parentNode!
         gp.insertBefore(cur, p.nextSibling)
-        if (after.childNodes.length > 0) gp.insertBefore(after, cur.nextSibling)
+        const hasClone = after.childNodes.length > 0
+        if (hasClone) gp.insertBefore(after, cur.nextSibling)
+        const list = splitDerivedNodes.get(p) ?? []
+        list.push({ sep, clone: hasClone ? after : null })
+        splitDerivedNodes.set(p, list)
       }
     }
   }
+}
+
+function isOurInjectedNode(n: Node): boolean {
+  if (n.nodeType !== Node.ELEMENT_NODE) return false
+  const cl = (n as Element).classList
+  return cl.contains(RESULT_CLASS) || cl.contains('imp-translate-br')
 }
 
 function hasBlockChild(el: Element): boolean {

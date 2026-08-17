@@ -1007,6 +1007,66 @@ describe('extractBlocks', () => {
       expect(blocks[0].text).toBe('Visible text of the block.')
     })
 
+    it('x.com "Show more": re-split drops the stale clone, keeps the lead result, and yields the new paragraphs', () => {
+      // Collapsed tweet: ONE span whose text already contains a blank line
+      // (React owns this span and its single text node).
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.innerHTML =
+        '<span>Opening paragraph of the tweet text.\n\nCollapsed tail paragraph that gets cut https://t.co/abc</span>'
+      document.body.appendChild(div)
+      const span = div.querySelector('span')! as HTMLElement
+      const reactTextNode = span.firstChild as Text
+
+      const initial = extractBlocks(document.body)
+      expect(initial.map((b) => b.text)).toEqual([
+        'Opening paragraph of the tweet text.',
+        'Collapsed tail paragraph that gets cut https://t.co/abc',
+      ])
+      expect(initial[0].element).toBe(span)
+      const staleClone = initial[1].element
+      expect(staleClone).not.toBe(span)
+      // Simulate translation of both.
+      for (const b of initial) {
+        markTranslated(b.element)
+        b.element.setAttribute('data-imp-text', b.text)
+      }
+      const br = document.createElement('br')
+      br.className = 'imp-translate-br'
+      const result = document.createElement('font')
+      result.className = 'imp-translate-result'
+      result.textContent = '推文开头段落。'
+      span.append(br, result)
+
+      // "Show more": React swaps ITS text node's value for the full post. It
+      // knows nothing about our clone, which now duplicates the tail.
+      reactTextNode.nodeValue =
+        'Opening paragraph of the tweet text.\n\nCollapsed tail paragraph that gets cut short but continues here.\n\nThird paragraph revealed on expand.'
+
+      // Click-triggered rescan.
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text)).toEqual([
+        'Collapsed tail paragraph that gets cut short but continues here.',
+        'Third paragraph revealed on expand.',
+      ])
+      // New clones do not inherit our translation state.
+      for (const b of blocks) {
+        expect(b.element.hasAttribute('data-imp-translated')).toBe(false)
+        expect(b.element.hasAttribute('data-imp-text')).toBe(false)
+      }
+      // The lead keeps its own text, mark and result element.
+      expect(span.hasAttribute('data-imp-translated')).toBe(true)
+      expect(span.querySelector('.imp-translate-result')).toBe(result)
+      expect(span.textContent).toContain('Opening paragraph of the tweet text.')
+      expect(span.textContent).not.toContain('Collapsed tail')
+      // The stale clone from the collapsed render is gone — no duplicated text.
+      expect(staleClone.isConnected).toBe(false)
+      expect(div.textContent).not.toContain('https://t.co/abc')
+      expect(div.textContent!.match(/Collapsed tail/g)).toHaveLength(1)
+      // Rendered order: lead, blank line, tail, blank line, third.
+      expect(div.textContent).toMatch(/Opening paragraph[^]*\n\n[^]*Collapsed tail[^]*\n\n[^]*Third paragraph/)
+    })
+
     it('is idempotent across re-scans once blocks are marked', () => {
       const div = document.createElement('div')
       div.style.whiteSpace = 'pre-wrap'

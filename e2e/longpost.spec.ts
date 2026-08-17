@@ -42,3 +42,68 @@ test('pre-wrap long post is translated per paragraph', async ({ context, baseURL
   )
   await expect(page.locator('#post-link')).toHaveAttribute('href', 'https://example.com/article')
 })
+
+// After the collapsed tweet is translated, "Show more" swaps the lead span's
+// text for the full post. The rescan must re-split it, translate the new
+// paragraphs, keep the lead's translation with the lead, and drop the stale
+// clone left over from the collapsed render (React never removes it).
+test('paragraphs revealed by "Show more" are translated after the split', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/x-showmore`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  const done = '.imp-translate-result:not(.imp-translate-loading)'
+  await expect(page.locator(`#tweet ${done}`)).toHaveCount(2, { timeout: 15000 })
+  await expect(page.locator(`#lead ${done}`)).toContainText('Opening paragraph')
+
+  await page.click('#show-more')
+
+  await expect(page.locator(`#tweet ${done}`)).toHaveCount(3, { timeout: 15000 })
+  const texts = await page.locator(`#tweet ${done}`).allTextContents()
+  // Document order: lead, tail (full), third.
+  expect(texts.map((t) => t.replace(/^\[翻译\]\s*/, '').slice(0, 9))).toEqual([
+    'Opening p', 'Collapsed', 'Third par',
+  ])
+  expect(texts[1]).toContain('continues here')
+  // The lead keeps exactly its own translation, in place.
+  await expect(page.locator(`#lead ${done}`)).toHaveCount(1)
+  await expect(page.locator(`#lead ${done}`)).not.toContainText('Collapsed')
+  // No stale duplicate of the collapsed tail (nor its t.co link) survives.
+  const tweetText = await page.locator('#tweet').textContent()
+  expect(tweetText).not.toContain('https://t.co/abc')
+  expect(tweetText!.match(/Collapsed tail/g)).toHaveLength(2) // original + its translation
+})
+
+// Same, but the truncated text had no blank line, so the collapsed tweet was
+// translated as ONE block with the mark on the tweetText div itself. After
+// "Show more" the div's text has paragraph breaks: it must be re-segmented,
+// not retranslated as a single block that lands in one blob at the bottom.
+test('"Show more" on a tweet translated as one block re-segments it per paragraph', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/x-showmore-nosplit`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  const done = '.imp-translate-result:not(.imp-translate-loading)'
+  await expect(page.locator(`#tweet ${done}`)).toHaveCount(1, { timeout: 15000 })
+  await expect(page.locator('#tweet')).toHaveAttribute('data-imp-translated', 'true')
+
+  await page.click('#show-more')
+
+  await expect(page.locator(`#tweet ${done}`)).toHaveCount(3, { timeout: 15000 })
+  const texts = await page.locator(`#tweet ${done}`).allTextContents()
+  expect(texts.map((t) => t.replace(/^\[翻译\]\s*/, '').slice(0, 9))).toEqual([
+    'Following', 'Most roya', 'They have',
+  ])
+  // Per-paragraph, not one blob: no single result contains two paragraphs.
+  expect(texts.some((t) => t.includes('Following') && t.includes('Most royal'))).toBe(false)
+  // The div is no longer the (single) marked block.
+  await expect(page.locator('#tweet')).not.toHaveAttribute('data-imp-translated', 'true')
+  const tweetText = await page.locator('#tweet').textContent()
+  expect(tweetText).not.toContain('https://t.co/xyz')
+})

@@ -12,6 +12,7 @@ import {
   PROCESSED_ATTR,
   RESULT_CLASS,
   getVisibleText,
+  needsBlankLineSplit,
 } from '@/lib/dom'
 import {
   injectLoading,
@@ -299,6 +300,18 @@ export default defineUnlistedScript(() => {
   const pendingRecheck = new Set<Element>()
 
   async function retranslateElement(el: Element, newText: string) {
+    // The element was translated as one block, but its new text has blank-line
+    // paragraph breaks in a pre-wrap context (x.com "Show more" on a tweet
+    // whose truncated text had none). The walker would have segmented it, so
+    // re-walk it instead of retranslating the whole thing as a single block —
+    // clearing the mark first, otherwise shouldSkip hides it from the walk.
+    if (needsBlankLineSplit(el)) {
+      clearTranslations(el)
+      const newBlocks = extractBlocks(el, extractOpts)
+      discardSelfMutations()
+      observeBlocks(newBlocks)
+      return
+    }
     const wrapper = el.querySelector(`.${RESULT_CLASS}`)
     if (!wrapper) {
       el.removeAttribute(PROCESSED_ATTR)

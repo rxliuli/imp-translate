@@ -255,6 +255,46 @@ ${appleRejectionBrFixture}
   // (some spans crossing paragraph boundaries), and an inline link mid-
   // paragraph. The div content is deliberately written without formatting
   // whitespace — every newline inside #longpost is intentional.
+  // x.com "Show more": the collapsed tweet is ONE span whose text already
+  // contains a blank line. Expanding makes React swap that span's text node
+  // for the full post — React knows nothing about the clone our blank-line
+  // split created for the collapsed tail.
+  '/x-showmore': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Show More</title></head>
+<body>
+<div id="tweet" style="white-space: pre-wrap"><span id="lead">Opening paragraph of the tweet text.
+
+Collapsed tail paragraph that gets cut https://t.co/abc</span></div>
+<button id="show-more">Show more</button>
+<script>
+  var reactTextNode = document.getElementById('lead').firstChild
+  document.getElementById('show-more').addEventListener('click', function () {
+    reactTextNode.nodeValue =
+      'Opening paragraph of the tweet text.\\n\\nCollapsed tail paragraph that gets cut short but continues here.\\n\\nThird paragraph revealed on expand.'
+  })
+</script>
+</body>
+</html>`,
+  // x.com "Show more" where the truncated text has NO blank line: the whole
+  // tweetText div is translated as one block and marked. Expanding swaps the
+  // text for a multi-paragraph post — it must be re-segmented, not
+  // retranslated as one block on the div.
+  '/x-showmore-nosplit': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Show More (no split)</title></head>
+<body>
+<div id="tweet" style="white-space: pre-wrap"><span id="lead">Following the first snowfall, netizens are flocking to the palace to take pictures of the beloved royal https://t.co/xyz</span></div>
+<button id="show-more">Show more</button>
+<script>
+  var reactTextNode = document.getElementById('lead').firstChild
+  document.getElementById('show-more').addEventListener('click', function () {
+    reactTextNode.nodeValue =
+      'Following the first snowfall, netizens are flocking to the palace to take pictures of the beloved royal kittens.\\n\\nMost royal cats are descendants of the emperors pets and guard the library.\\n\\nThey have also been a source of revenue for the palace.'
+  })
+</script>
+</body>
+</html>`,
   '/x-longpost': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Long Post</title></head>
