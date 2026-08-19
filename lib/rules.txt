@@ -19,22 +19,30 @@
 ! the page, confirm whether the rule is still needed, and safely remove
 ! obsolete rules — without URL annotations the list is a one-way ratchet.
 
-! Google Search (www.google.* avoids matching mail/drive/docs subdomains).
+! Google Search — path-gated to /search. The www.google.* domain keeps regional
+! search hosts (google.com, google.co.uk, google.com.hk) while avoiding
+! mail/drive/docs subdomains; the :matches-path(/^\/search/) gate stops the
+! include set from leaking into same-host products — Google Maps, Flights,
+! Finance, Books, Travel all live on www.google.com/*, so domain scoping alone
+! can't separate them. Without the gate, an active include set that matches
+! nothing on those pages (their DOM has no #rcnt/#cnt — verified) suppresses
+! translation of the entire page (uBO isolate semantics: "only translate inside
+! the include scope").
 ! Desktop wraps results in #cnt > #rcnt > #center_col; mobile drops #rcnt and goes #cnt > #center_col directly. Including #cnt only when #rcnt is absent picks up the mobile layout without expanding the desktop scope (which would pull in appbar/hdtb chrome above #rcnt).
 ! https://www.google.com/search?q=test  (desktop)
 ! https://www.google.com/search?q=test  (mobile — DevTools device toolbar, iPhone UA)
-www.google.*#+##rcnt
-www.google.*#+##cnt:not(:has(#rcnt))
-www.google.*#+#[data-subtree="mfc"]
+www.google.*#+#:matches-path(/^\/search/) #rcnt
+www.google.*#+#:matches-path(/^\/search/) #cnt:not(:has(#rcnt))
+www.google.*#+#:matches-path(/^\/search/) [data-subtree="mfc"]
 ! Google AI Mode (udm=50) renders its answer in data-subtree="aimc" instead of #rcnt.
 ! https://www.google.com/search?q=test&udm=50
-www.google.*#+#[data-subtree="aimc"]
-www.google.*##:has(>[hreftranslate])
-www.google.*##[role="navigation"]
+www.google.*#+#:matches-path(/^\/search/) [data-subtree="aimc"]
+www.google.*##:matches-path(/^\/search/) :has(>[hreftranslate])
+www.google.*##:matches-path(/^\/search/) [role="navigation"]
 ! AI Overview show more button
-www.google.*##[role="button"]:has([d="M5.41 7.59L4 9l8 8 8-8-1.41-1.41L12 14.17"])
+www.google.*##:matches-path(/^\/search/) [role="button"]:has([d="M5.41 7.59L4 9l8 8 8-8-1.41-1.41L12 14.17"])
 ! Footer
-www.google.*###fbar
+www.google.*##:matches-path(/^\/search/) #fbar
 
 ! Twitter/X
 ! https://x.com/home, https://x.com/x  (timeline tweets + profile bio)

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import builtinRulesRaw from '@/lib/rules.txt?raw'
 import {
   parseRules,
   matchRulesForUrl,
@@ -135,14 +136,51 @@ mail.google.*##.gmail-toolbar
 
   // Without the www. prefix, search-specific include rules would fire on
   // Gmail / Drive / Docs and (because they lack #rcnt) suppress translation
-  // of the entire page. www.google.* scopes the rules to Search only.
+  // of the entire page. www.google.* scopes the rules to Search's host, and
+  // the :matches-path(/^\/search/) gate stops them leaking into same-host
+  // products — Maps/Flights/Finance share www.google.com, and an active
+  // include set that matches nothing on those pages suppresses the whole
+  // page (uBO isolate semantics).
   it('www.google.* does not leak to other Google products', () => {
-    const searchRules = parseRules(`www.google.*#+#[id="rcnt"]`)
-    expect(matchRulesForUrl(searchRules, 'www.google.com').includeSelectors).toEqual(['[id="rcnt"]'])
-    expect(matchRulesForUrl(searchRules, 'www.google.com.hk').includeSelectors).toEqual(['[id="rcnt"]'])
+    const searchRules = parseRules(
+      'www.google.*#+#:matches-path(/^\\/search/) [id="rcnt"]',
+    )
+    expect(matchRulesForUrl(searchRules, 'www.google.com', '/search').includeSelectors).toEqual(['[id="rcnt"]'])
+    expect(matchRulesForUrl(searchRules, 'www.google.com.hk', '/search?q=test').includeSelectors).toEqual(['[id="rcnt"]'])
+    // Same-host products share www.google.com — only the path gate separates them.
+    expect(matchRulesForUrl(searchRules, 'www.google.com', '/maps').includeSelectors).toHaveLength(0)
+    expect(matchRulesForUrl(searchRules, 'www.google.com', '/maps/place/xyz').includeSelectors).toHaveLength(0)
+    expect(matchRulesForUrl(searchRules, 'www.google.com', '/flights').includeSelectors).toHaveLength(0)
+    expect(matchRulesForUrl(searchRules, 'www.google.com', '/').includeSelectors).toHaveLength(0)
+    // Subdomain products never match in the first place.
     expect(matchRulesForUrl(searchRules, 'mail.google.com').includeSelectors).toHaveLength(0)
     expect(matchRulesForUrl(searchRules, 'drive.google.com').includeSelectors).toHaveLength(0)
     expect(matchRulesForUrl(searchRules, 'docs.google.com').includeSelectors).toHaveLength(0)
+  })
+})
+
+describe('builtin rules.txt — Google Search scoped to /search', () => {
+  // The real regression guard, parsing the actual rules.txt (not an inline
+  // snippet): every www.google.* rule must stay path-gated. An ungated
+  // include set leaks into same-host products (Maps, Flights, ...) whose DOM
+  // has no #rcnt/#cnt, and the include gate then suppresses translation of
+  // the entire page.
+  const builtinRules = parseRules(builtinRulesRaw)
+
+  it('every www.google.* rule is path-gated to /search', () => {
+    const googleRules = builtinRules.filter((r) => r.domain === 'www.google.*')
+    expect(googleRules.length).toBeGreaterThan(0)
+    for (const r of googleRules) {
+      expect(r.pathPattern).toBe('/^\\/search/')
+    }
+  })
+
+  it('search results pages get the include set, same-host products do not', () => {
+    const onSearch = matchRulesForUrl(builtinRules, 'www.google.com', '/search?q=test')
+    expect(onSearch.includeSelectors.length).toBeGreaterThan(0)
+    for (const path of ['/maps', '/maps/place/xyz', '/flights', '/']) {
+      expect(matchRulesForUrl(builtinRules, 'www.google.com', path).includeSelectors).toHaveLength(0)
+    }
   })
 })
 
