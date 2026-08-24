@@ -1,7 +1,7 @@
 import { rpc } from '@/lib/rpc'
 import { messager } from '@/lib/message'
 
-const ALLOWED_HOSTS = ['https://imp-translate.rxliuli.com/*']
+const ALLOWED_HOSTS = ['https://imp.rxliuli.com/translate*']
 if (import.meta.env.DEV) {
   ALLOWED_HOSTS.push('*://localhost/*')
 }
