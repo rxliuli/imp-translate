@@ -1,4 +1,10 @@
-export type TranslationProvider = 'microsoft' | 'google' | 'openai'
+export type TranslationProvider = 'microsoft' | 'google' | 'openai' | 'imp'
+
+export interface ImpProvider {
+  apiKey: string
+  baseUrl: string
+  model: string
+}
 
 export interface OpenAIConfig {
   apiKey: string
@@ -11,6 +17,7 @@ export interface Settings {
   provider: TranslationProvider
   targetLang: string
   openai: OpenAIConfig
+  imp?: ImpProvider // filled in automatically by the connect flow
   developerMode: boolean
   customRules: string
   debugMode: boolean

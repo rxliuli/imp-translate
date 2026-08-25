@@ -24,7 +24,7 @@ An open-source, cross-platform browser extension for bilingual web page translat
 ## Features
 
 - Bilingual display: translations appear below original text
-- Supports OpenAI-compatible, Google, and Microsoft translation providers
+- Supports Google, Microsoft, Imp Credits, and OpenAI-compatible translation providers
 - Smart DOM walker: only translates visible content, handles SPAs, lazy-loaded content, and dynamic text changes
 - Site-specific rules for skipping or targeting content areas
 - Shadow DOM isolation for injected UI

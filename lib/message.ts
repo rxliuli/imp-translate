@@ -17,6 +17,14 @@ export const messager = defineExtensionMessaging<{
   translate(req: TranslateRequest): string
   translateBatch(req: TranslateBatchRequest): string[]
   getSettings(): Settings
+  // connect content script (imp-connect.content.ts) => background: exchanges
+  // the one-time code read off the success page's <meta> tag for a persistent
+  // Imp Credits api key (see imp-credits docs/extension-integration.md).
+  impConnect(code: string): Promise<{ ok: boolean; error?: string }>
+  // options page (on mount, when an Imp connection is stored) => background:
+  // zero-cost check that the stored Imp api key is still valid (401 == revoked)
+  // so the "Connected" badge reflects reality rather than just local state.
+  checkConnection(): Promise<{ ok: true } | { ok: false; error: string }>
   getMatchedRulesForHostname(data: { hostname: string }): SiteRule[]
   startTab(data: { tabId: number; targetLang: string }): void
   stopTab(data: { tabId: number }): void

@@ -7,6 +7,8 @@ import {
 } from '@/lib/storage'
 import { chatCompletionsUrl, translate } from '@/lib/translator'
 import { messager } from '@/lib/message'
+import { IMP_CONNECT_URL } from '@/lib/imp'
+import { browser } from 'wxt/browser'
 import { LANGUAGES_SORTED } from '@/lib/languages'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -54,6 +56,11 @@ const PROVIDERS: {
     description: 'Free, no API key required',
   },
   {
+    value: 'imp',
+    label: 'Imp Credits',
+    description: 'Hosted, metered translation — connect your Imp account',
+  },
+  {
     value: 'openai',
     label: 'OpenAI Compatible',
     description: 'Requires API key',
@@ -73,9 +80,62 @@ export function App() {
     msg: string
   } | null>(null)
 
+  const [connStatus, setConnStatus] = useState<
+    'idle' | 'checking' | 'connected' | 'disconnected' | 'unknown'
+  >('idle')
+  const impConnected =
+    settings?.provider === 'imp' && !!settings?.imp?.apiKey
+
   useEffect(() => {
     getSettings().then(setSettings)
+
+    // The connect flow finishes in a DIFFERENT tab and writes `settings`
+    // directly to storage, so this page has to pick that up via
+    // storage.onChanged rather than only reading on mount.
+    const listener = (
+      changes: Record<string, { newValue?: unknown }>,
+      areaName: string,
+    ) => {
+      if (areaName !== 'local' || !changes.settings) return
+      getSettings().then(setSettings)
+    }
+    browser.storage.onChanged.addListener(listener)
+    return () => browser.storage.onChanged.removeListener(listener)
   }, [])
+
+  // Auto-verify the stored Imp key when the options page opens (and whenever
+  // the key changes) so the "Connected" badge reflects whether the key is
+  // still valid rather than just "we have a stored key". Never calls the
+  // model — see background.ts's checkConnection handler.
+  useEffect(() => {
+    if (!impConnected) {
+      setConnStatus('idle')
+      return
+    }
+    let cancelled = false
+    setConnStatus('checking')
+    void (async () => {
+      let next: 'connected' | 'disconnected' | 'unknown'
+      try {
+        const result = await messager.sendMessage('checkConnection')
+        next = result.ok ? 'connected' : 'disconnected'
+      } catch {
+        next = 'unknown'
+      }
+      if (!cancelled) setConnStatus(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [impConnected, settings?.imp?.apiKey])
+
+  function connectImp() {
+    browser.tabs.create({ url: IMP_CONNECT_URL })
+  }
+
+  function disconnectImp() {
+    update({ provider: 'openai' })
+  }
 
   if (!settings) return null
 
@@ -185,6 +245,53 @@ export function App() {
           </RadioGroup>
         </div>
       </section>
+
+      {settings.provider === 'imp' && (
+        <section className="space-y-4">
+          <div>
+            <h2 className="font-semibold">Imp Credits</h2>
+            <p className="text-sm text-muted-foreground">
+              Hosted, metered translation. Connect an Imp account to use it
+              without your own API key.
+            </p>
+          </div>
+
+          {impConnected ? (
+            <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-2 text-sm">
+                <span
+                  className={`size-2 shrink-0 rounded-full ${
+                    connStatus === 'connected'
+                      ? 'bg-green-500'
+                      : connStatus === 'checking'
+                        ? 'bg-muted animate-pulse'
+                        : 'bg-red-500'
+                  }`}
+                />
+                <span className="truncate">
+                  {connStatus === 'connected'
+                    ? `Connected · ${settings.imp?.model ?? 'imp-standard'}`
+                    : connStatus === 'checking'
+                      ? 'Checking connection…'
+                      : 'Connection lost — reconnect'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={disconnectImp}>
+                  Use another provider
+                </Button>
+                <Button variant="secondary" size="sm" onClick={connectImp}>
+                  Reconnect
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button className="w-full" onClick={connectImp}>
+              Connect Imp Account
+            </Button>
+          )}
+        </section>
+      )}
 
       {settings.provider === 'openai' && (
         <section className="space-y-4">

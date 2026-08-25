@@ -349,6 +349,74 @@ async function translateOpenAI(
   return { texts: results }
 }
 
+/**
+ * Calls the Imp Credits metered translate endpoint (`POST {baseUrl}/translate`,
+ * where `baseUrl` ends in `/api/v1`). The server owns the prompt, model
+ * selection, chunking, and 1:1 cardinality — the client never sends a model.
+ *
+ * Error mapping mirrors the imp-write convention and, critically, must NOT
+ * surface the server's raw error text: imp-credits returns a 402 body that
+ * contains an external top-up URL (`... top up at ${DASHBOARD_URL}/buy`),
+ * which would violate App Store guideline 3.1.1 anti-steering. We map each
+ * status to a plain, link-free message instead.
+ */
+async function translateImp(
+  texts: string[],
+  targetLang: string,
+  settings: Settings,
+): Promise<TranslationResult> {
+  const imp = settings.imp
+  if (!imp?.apiKey) throw new Error('Connect your Imp account in the extension settings')
+  if (!imp.baseUrl) throw new Error('Imp base URL is not configured')
+
+  const resp = await fetch(`${imp.baseUrl.replace(/\/+$/, '')}/translate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${imp.apiKey}`,
+    },
+    body: JSON.stringify({
+      to: targetLang,
+      from: 'auto',
+      texts,
+    }),
+  })
+
+  if (!resp.ok) {
+    throw new Error(impError(resp.status))
+  }
+
+  const data = (await resp.json().catch(() => null)) as {
+    texts?: unknown
+    from?: unknown
+  } | null
+  const result = data?.texts
+  if (!Array.isArray(result) || result.length !== texts.length) {
+    throw new Error('Imp Credits returned a mismatched number of translations')
+  }
+  const strings = result.map((t) => (typeof t === 'string' ? t : String(t ?? '')))
+  return {
+    texts: strings,
+    detectedLang: typeof data?.from === 'string' ? data.from : undefined,
+  }
+}
+
+/** Maps an Imp Credits HTTP status to a user-facing, link-free message. */
+function impError(status: number): string {
+  if (status === 401) {
+    return 'Your Imp connection has expired — reconnect from the extension settings'
+  }
+  if (status === 402) {
+    // No external top-up link here (App Store 3.1.1 anti-steering) — keep it
+    // plain text only; the purchase flow lives off-app.
+    return 'Insufficient credits — top up on the Imp website'
+  }
+  if (status === 429) return 'Rate limited — try again in a moment'
+  if (status === 413) return 'Too many segments for a single request — retry with fewer'
+  if (status >= 500) return 'Imp Credits service error — try again later'
+  return `Imp Credits error (${status})`
+}
+
 export async function translate(
   texts: string[],
   targetLang: string,
@@ -363,6 +431,8 @@ export async function translate(
       return translateGoogle(texts, targetLang)
     case 'openai':
       return translateOpenAI(texts, targetLang, settings)
+    case 'imp':
+      return translateImp(texts, targetLang, settings)
     default:
       throw new Error(`Unknown provider: ${settings.provider}`)
   }

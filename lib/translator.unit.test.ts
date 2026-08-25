@@ -507,3 +507,126 @@ describe('chunked concurrent translation', () => {
     expect(body.get('text')!.split('\n')).toHaveLength(2)
   })
 })
+
+const impSettings: Settings = {
+  provider: 'imp',
+  targetLang: 'zh',
+  developerMode: false,
+  debugMode: false,
+  customRules: '',
+  openai: {
+    apiKey: '',
+    baseUrl: '',
+    model: '',
+    systemPrompt: '',
+  },
+  imp: {
+    apiKey: 'imp-key',
+    baseUrl: 'https://imp.rxliuli.com/api/v1',
+    model: 'imp-standard',
+  },
+}
+
+function mockImpResponse(texts: string[], from = 'en') {
+  return {
+    ok: true,
+    json: async () => ({
+      texts,
+      from,
+      usage: { inputTokens: 40, outputTokens: 30, upstreamRequests: 1 },
+    }),
+  }
+}
+
+describe('Imp Credits translate', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  it('POSTs {to, from, texts} to {baseUrl}/translate and returns 1:1 texts', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(mockImpResponse(['你好', '世界']))
+
+    const { translate } = await import('./translator')
+    const result = await translate(['Hello', 'World'], 'zh', impSettings)
+
+    expect(result.texts).toEqual(['你好', '世界'])
+    expect(result.detectedLang).toBe('en')
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://imp.rxliuli.com/api/v1/translate',
+    )
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toEqual({ to: 'zh', from: 'auto', texts: ['Hello', 'World'] })
+    const headers = fetchMock.mock.calls[0][1].headers
+    expect(headers.Authorization).toBe('Bearer imp-key')
+  })
+
+  it('throws when the Imp api key is missing', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { translate } = await import('./translator')
+    const noKey = { ...impSettings, imp: { ...impSettings.imp!, apiKey: '' } }
+    await expect(translate(['Hello'], 'zh', noKey)).rejects.toThrow(
+      'Connect your Imp account',
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('throws on cardinality mismatch', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(mockImpResponse(['only one']))
+
+    const { translate } = await import('./translator')
+    await expect(
+      translate(['Hello', 'World'], 'zh', impSettings),
+    ).rejects.toThrow(/mismatched number/)
+  })
+
+  it('maps 402 to a plain message with NO external link (App Store 3.1.1)', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    // The real imp-credits server embeds an external top-up URL in the 402
+    // body — that must never reach the user.
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 402,
+      json: async () => ({
+        error: 'insufficient balance — top up at https://imp.rxliuli.com/buy',
+      }),
+    })
+
+    const { translate } = await import('./translator')
+    await expect(translate(['Hello'], 'zh', impSettings)).rejects.toThrow(
+      'Insufficient credits — top up on the Imp website',
+    )
+    const caught = await translate(['Hello'], 'zh', impSettings).catch((e: Error) => e)
+    expect(caught).toBeInstanceOf(Error)
+    expect((caught as Error).message).not.toMatch(/http|\/buy|imp\.rxliuli\.com/)
+  })
+
+  it('maps 401 to a reconnect message', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) })
+
+    const { translate } = await import('./translator')
+    await expect(translate(['Hello'], 'zh', impSettings)).rejects.toThrow(
+      'connection has expired',
+    )
+  })
+
+  it('maps 429 to a rate-limit message', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue({ ok: false, status: 429, json: async () => ({ error: 'rate limit' }) })
+
+    const { translate } = await import('./translator')
+    await expect(translate(['Hello'], 'zh', impSettings)).rejects.toThrow(
+      'Rate limited',
+    )
+  })
+})

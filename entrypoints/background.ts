@@ -1,5 +1,5 @@
 import { messager, sendToTab } from '@/lib/message'
-import { getSettings, type TranslationProvider } from '@/lib/storage'
+import { getSettings, saveSettings, type TranslationProvider } from '@/lib/storage'
 import { translate } from '@/lib/translator'
 import { getCached, setCached, evictOldEntries } from '@/lib/cache'
 import { createTranslateService, type TranslateService } from '@/lib/translate-service'
@@ -8,6 +8,7 @@ import { parseRules, matchRulesForHostname, type SiteRule } from '@/lib/rules'
 import { getEffectiveRules, setupRemoteRulesAlarm, fetchRemoteRulesIfNeeded } from '@/lib/remote-rules'
 import { PublicPath } from 'wxt/browser'
 import { debugTime } from '@/lib/utils'
+import { IMP_ORIGIN } from '@/lib/imp'
 
 async function getMatchedRulesForHostname(hostname: string): Promise<SiteRule[]> {
   const effectiveRules = await getEffectiveRules()
@@ -203,6 +204,10 @@ export default defineBackground(() => {
     microsoft: { batchWindowMs: 50, maxBatchSize: 25 },
     google: { batchWindowMs: 50, maxBatchSize: 20, maxBatchChars: 14000 },
     openai: { batchWindowMs: 100, maxBatchSize: 8, maxBatchChars: 1000 },
+    // Imp Credits chunks and guarantees 1:1 server-side (cap 500 texts per
+    // request), so the client can hand the whole array over in one call
+    // rather than partitioning itself.
+    imp: { batchWindowMs: 100, maxBatchSize: 500, maxBatchChars: 20000 },
   }
 
   const services = new Map<TranslationProvider, TranslateService>()
@@ -235,6 +240,90 @@ export default defineBackground(() => {
     const result = await getService(settings.provider).translate(data.text, data.targetLang)
     t('translate done')
     return result
+  })
+
+  // Exchanges the one-time code the connect content script read off the
+  // success page's <meta> tag for a persistent Imp Credits api key. See
+  // imp-credits docs/extension-integration.md for the full contract.
+  messager.onMessage('impConnect', async (message) => {
+    const code = message.data
+    try {
+      const res = await fetch(`${IMP_ORIGIN}/api/connect/exchange`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+      const body = (await res.json().catch(() => null)) as {
+        apiKey?: string
+        baseUrl?: string
+        model?: string
+        error?: string
+      } | null
+      if (!res.ok) {
+        return {
+          ok: false,
+          error:
+            body?.error ?? `Connect failed with status ${res.status}`,
+        }
+      }
+      const { apiKey, baseUrl, model } = body ?? {}
+      if (!apiKey || !baseUrl) {
+        return { ok: false, error: 'Unexpected response from the connect service' }
+      }
+      const current = await getSettings()
+      await saveSettings({
+        provider: 'imp',
+        imp: { apiKey, baseUrl, model: model ?? 'imp-standard' },
+      })
+      return { ok: true }
+    } catch (err) {
+      console.error(
+        '[imp-translate] impConnect failed:',
+        err instanceof Error ? err.message : err,
+      )
+      return {
+        ok: false,
+        error: 'Could not reach the Imp Credits service — please retry.',
+      }
+    }
+  })
+
+  // Zero-cost check whether the stored Imp api key is still valid, so the
+  // options page's "Connected" badge reflects reality rather than just local
+  // state. Deliberately calls the /me endpoint with `credentials: 'omit'` —
+  // without it, a logged-in session's cookie would make a REVOKED key still
+  // return 200, so the badge would show "Connected" while real requests 401.
+  messager.onMessage('checkConnection', async () => {
+    const current = await getSettings()
+    const imp = current.imp
+    if (current.provider !== 'imp' || !imp?.apiKey) {
+      return { ok: false, error: 'no Imp connection' } as const
+    }
+    try {
+      const res = await fetch(`${imp.baseUrl.replace(/\/+$/, '')}/me`, {
+        credentials: 'omit',
+        headers: { Authorization: `Bearer ${imp.apiKey}` },
+      })
+      if (res.status === 401) return { ok: false, error: 'unauthorized' } as const
+      const contentType = res.headers.get('content-type') ?? ''
+      if (!contentType.includes('application/json')) {
+        return { ok: false, error: 'unexpected endpoint response' } as const
+      }
+      const body = (await res.json().catch(() => null)) as { email?: unknown } | null
+      if (typeof body?.email !== 'string') {
+        return { ok: false, error: 'unexpected endpoint response' } as const
+      }
+      return { ok: true } as const
+    } catch (err) {
+      console.error(
+        '[imp-translate] checkConnection failed:',
+        err instanceof Error ? err.message : err,
+      )
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'network error',
+      } as const
+    }
   })
 
   messager.onMessage('translateBatch', async ({ data }) => {
