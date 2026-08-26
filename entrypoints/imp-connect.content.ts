@@ -1,3 +1,5 @@
+import { isForExtension } from '@rxliuli/imp-credits-sdk'
+import { IMP_SRC } from '@/lib/imp'
 import { messager } from '@/lib/message'
 
 // The Imp Credits Worker serves this success page at /api/connect/success
@@ -35,6 +37,12 @@ export default defineContentScript({
       .querySelector('meta[name="imp-connect-code"]')
       ?.getAttribute('content')
     if (!code) return
+
+    // Only the extension that opened this connect page may exchange the
+    // one-time code. Every Imp-family extension injects on this URL — without
+    // this gate they'd all race to redeem the same single-use code (and all
+    // but one get a 400). See the SDK's `isForExtension` doc comment.
+    if (!isForExtension({ src: IMP_SRC, url: location.href })) return
 
     try {
       const result = await messager.sendMessage('impConnect', code)
