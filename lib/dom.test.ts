@@ -280,6 +280,61 @@ describe('extractBlocks', () => {
     expect(blocks[0].text).toBe('Translate this')
   })
 
+  it('old.reddit classic DOM: a.title + .md isolate text slots, chrome stays out', () => {
+    // Regression: old.reddit.com (logged-in) serves the classic SSR DOM. The *.reddit.com
+    // SDUI include selectors ([slot], [data-testid]) match nothing there; because include is
+    // an isolate gate, a non-matching include set suppresses the whole page (nothing translates).
+    // old.reddit.com must get its own include scope: the post title anchor (a.title) and the
+    // markdown body container (.md). Author/vote/button chrome must stay untranslated.
+    document.body.innerHTML = `
+      <div class="sitetable linklisting">
+        <div class="thing">
+          <div class="entry">
+            <p class="title">
+              <a class="title may-blank" href="#">What's the best language?</a>
+            </p>
+            <div class="tagline">
+              <a class="author">u/foo</a> · <span class="score">123 points</span> · 4 hours ago
+            </div>
+            <div class="expando">
+              <div class="md"><p>Self-post body text.</p></div>
+            </div>
+          </div>
+        </div>
+        <div class="comment">
+          <div class="entry">
+            <div class="md"><p>A comment that should be translated.</p></div>
+            <div class="tagline">
+              <a class="author">u/bar</a> · <span class="score">5 points</span>
+            </div>
+          </div>
+        </div>
+        <div class="side">
+          <div class="md"><p>Community description.</p></div>
+          <button>Create Post</button>
+        </div>
+      </div>
+    `
+    const blocks = extractBlocks(document.body, {
+      // New-UI SDUI selectors are inert on classic DOM but stay in the include set (as in rules.txt).
+      includeSelectors: [
+        '[slot="title"]',
+        '[data-testid="post-title-text"]',
+        'a.title',
+        '.md',
+      ],
+    })
+    const texts = blocks.map((b) => b.text)
+    expect(texts).toContain("What's the best language?")
+    expect(texts).toContain('Self-post body text.')
+    expect(texts).toContain('A comment that should be translated.')
+    expect(texts).toContain('Community description.')
+    // Chrome must not leak in as translated blocks.
+    expect(texts.some((t) => t.includes('123 points'))).toBe(false)
+    expect(texts.some((t) => t.includes('u/foo'))).toBe(false)
+    expect(texts.some((t) => t.includes('Create Post'))).toBe(false)
+  })
+
   it('should skip editable rich text editors', () => {
     document.body.innerHTML = `
       <div>

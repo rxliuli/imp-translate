@@ -94,6 +94,16 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 *.reddit.com#+#[slot="title"]
 *.reddit.com#+#[slot="text-body"]
 *.reddit.com#+#[slot="comment"]
+! old.reddit.com (logged-in) serves the classic SSR DOM — no slot / data-testid / shreddit / faceplate
+! markup, so none of the *.reddit.com SDUI include selectors match. Because include is an isolate gate
+! (uBO semantics), an include set that matches nothing suppresses translation of the whole page — which
+! is why old.reddit.com never translated under the *.reddit.com rules. Its text slots are the post title
+! anchor (a.title) and the markdown body container (.md), which covers self-post bodies, comments, and
+! the sidebar community description. The *.reddit.com SDUI selectors are inert on classic DOM (they match
+! nothing), so they stay safe to keep; old.reddit.com gets its own narrow include scope on top.
+! https://old.reddit.com/r/programming/  (classic feed: titles + self-post bodies + comments)
+old.reddit.com#+#a.title
+old.reddit.com#+#.md
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=all&t=week  (search: post titles, community descriptions)
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=comment&t=week  (search comments: comment text + parent post title)
 ! https://www.reddit.com/search/?q=twitter+export+followers+list&type=media&t=week  (search media: post titles below thumbnails)
