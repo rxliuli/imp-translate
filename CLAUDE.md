@@ -36,7 +36,8 @@ If `list_pages` returns the wrong tabs (e.g. `about:blank` only) it means the MC
 ### Driving the extension's service worker
 
 In dev builds the background SW exposes `globalThis.__imp` (gated by `import.meta.env.DEV`, dropped in production):
-- `__imp.toggle()` — same as toolbar click on active tab
+- `__imp.toggle()` — desktop `Alt+A` / popup semantics: start if idle, stop if translating
+- `__imp.openPanel()` — mobile toolbar-icon semantics: start if idle, otherwise re-open the in-page toast panel (never stops)
 - `__imp.start(lang?, tabId?)` — explicit start
 - `__imp.stop(tabId?)` — explicit stop
 - `__imp.state(tabId?)` — `{ tabId, lang | null }`

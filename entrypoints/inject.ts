@@ -501,6 +501,8 @@ export default defineUnlistedScript(() => {
         toastTimer = setTimeout(dismissToast, delayMs)
       },
     })
+    // Restart the countdown so a re-summoned bar doesn't vanish immediately.
+    if (toastTimer) clearTimeout(toastTimer)
     toastTimer = setTimeout(dismissToast, 5000)
   }
 
@@ -626,6 +628,8 @@ export default defineUnlistedScript(() => {
         startTranslation(message.targetLang, message.showToast, message.rules)
       } else if (message.action === 'stopTranslation') {
         stopTranslation()
+      } else if (message.action === 'showToast') {
+        maybeShowToast()
       } else if (message.action === 'getState') {
         sendResponse({ isTranslating })
         return true

@@ -115,6 +115,19 @@ export async function stopTranslation(page: Page) {
   )
 }
 
+// What the background sends to a tab that is already translating when the
+// toolbar icon is clicked on mobile (there is no popup there, so the in-page
+// toast bar is the control panel). `chrome.action.onClicked` can't be
+// dispatched from a test, so the background's branch is exercised through the
+// message it emits.
+export async function summonPanel(page: Page) {
+  const tabId = await getTabId(page)
+  const sw = await getServiceWorker(page.context())
+  await sw.evaluate(async (tabId) => {
+    await chrome.tabs.sendMessage(tabId, { action: 'showToast' })
+  }, tabId)
+}
+
 // Chrome has no chrome.action.getIcon, so to assert icon state in e2e we
 // monkey-patch chrome.action.setIcon in the service worker and record every
 // call. Detect kind by path: '/icon/active/...' is active, anything else is

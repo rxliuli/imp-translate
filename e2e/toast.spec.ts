@@ -4,6 +4,7 @@ import {
   stopTranslation,
   configureMockProvider,
   enableMobileMode,
+  summonPanel,
 } from './helpers'
 
 const TOAST = '#imp-translate-toast'
@@ -117,4 +118,46 @@ test('toast restore button stops translation', async ({ context, baseURL }) => {
 
   // Translations should be removed
   await expect(page.locator('.imp-translate-result')).toHaveCount(0)
+})
+
+// Mobile has no action popup, so clicking the toolbar icon while translating
+// re-summons the panel instead of stopping the translation (see
+// openPanelForActiveTab in entrypoints/background.ts). The translation staying
+// on screen is what proves the click took the summon branch: a re-start would
+// have been swallowed by the content script's isTranslating guard and no bar
+// would have appeared at all.
+test('summoning the panel while translating keeps the translation', async ({
+  context,
+  baseURL,
+}) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await enableMobileMode(context)
+  await startTranslation(page, 'zh', true)
+
+  const toast = page.locator(TOAST)
+  await expect(toast).toBeVisible({ timeout: 5000 })
+  const translated = page.locator(TRANSLATED)
+  await expect(translated.first()).toBeVisible({ timeout: 15000 })
+  const countBefore = await translated.count()
+
+  // Let the auto-dismiss timer fire — the state the user is in when they tap
+  // the icon to reach settings or switch language
+  await expect(toast).not.toBeVisible({ timeout: 8000 })
+
+  await summonPanel(page)
+
+  await expect(toast).toBeVisible({ timeout: 3000 })
+  await expect(page.locator(LANG_SELECT)).toHaveValue('zh')
+  await expect(toast).toHaveCount(1)
+
+  // Panel is interactive on the re-summoned bar, and translation survived
+  await page.locator(`${TOAST} .imp-toast-lang`).selectOption('ja')
+  await expect(page.locator(`${TOAST} .imp-toast-lang`)).toHaveValue('ja')
+  await expect(page.locator(TRANSLATED).first()).toBeVisible({ timeout: 15000 })
+  expect(await translated.count()).toBeGreaterThan(0)
+  expect(countBefore).toBeGreaterThan(0)
 })

@@ -152,6 +152,26 @@ async function toggleTranslationForActiveTab() {
   }
 }
 
+// Mobile has no action popup, so the toolbar icon is the only way back to the
+// in-page panel (restore / settings / language): clicking it opens the panel
+// instead of toggling translation off, which is now an explicit "Show
+// original" tap. Desktop keeps its popup and the keyboard keeps the toggle.
+async function openPanelForActiveTab() {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id) return
+  if (isPdfUrl(tab.url)) return
+  if (await isPageTranslating(tab.id)) {
+    try {
+      await sendToTab(tab.id, { action: 'showToast' })
+      return
+    } catch {
+      // Content script gone (extension reload, frame teardown) — restart below.
+    }
+  }
+  const settings = await getSettings()
+  await startTranslationForTab(tab.id, settings.targetLang, true)
+}
+
 async function isMobile(): Promise<boolean> {
   const info = await browser.runtime.getPlatformInfo()
   return info.os === 'android' || info.os === 'ios'
@@ -179,13 +199,14 @@ export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => setupMobileAction())
   browser.runtime.onStartup.addListener(() => setupMobileAction())
 
-  browser.action.onClicked.addListener(() => toggleTranslationForActiveTab())
+  browser.action.onClicked.addListener(() => openPanelForActiveTab())
 
   // browser.commands is unavailable on Firefox Android
   // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/commands#browser_compatibility
   if (import.meta.env.BROWSER !== 'firefox') {
     browser.commands.onCommand.addListener(async (command) => {
       if (command !== 'toggle-translate') return
+      // Keyboard keeps the toggle — a keypress is deliberate.
       await toggleTranslationForActiveTab()
     })
   }
@@ -498,6 +519,8 @@ export default defineBackground(() => {
         return id
       },
       toggle: () => toggleTranslationForActiveTab(),
+      // What clicking the toolbar icon does on mobile (see above).
+      openPanel: () => openPanelForActiveTab(),
       state: async (tabId?: number) => {
         const id = tabId ?? (await activeTabId())
         if (!id) return null

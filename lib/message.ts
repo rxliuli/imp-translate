@@ -51,6 +51,9 @@ export type ContentAction =
       rules?: SiteRule[]
     }
   | { action: 'stopTranslation' }
+  // Re-open the mobile panel without touching translation state: the icon click
+  // must not stop a translation the user may want to keep.
+  | { action: 'showToast' }
   | { action: 'getState' }
 
 export type ContentResponse =
