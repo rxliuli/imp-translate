@@ -136,7 +136,7 @@ export function App() {
           {toggleMutation.isPending
             ? 'Translating...'
             : isTranslated
-              ? 'Restore Original'
+              ? 'Show Original'
               : 'Translate Page'}
         </Button>
       )}

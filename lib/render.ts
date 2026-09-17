@@ -531,7 +531,7 @@ export function showToastBar(options: ToastBarOptions) {
 
   const restoreBtn = document.createElement('button')
   restoreBtn.className = 'imp-toast-restore'
-  restoreBtn.textContent = 'Show original'
+  restoreBtn.textContent = 'Show Original'
   restoreBtn.addEventListener('click', options.onRestore)
 
   const settingsBtn = document.createElement('button')
