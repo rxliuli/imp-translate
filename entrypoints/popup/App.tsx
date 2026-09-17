@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  queryOptions,
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { messager } from '@/lib/message'
 import { getSettings, saveSettings } from '@/lib/storage'
@@ -7,21 +12,27 @@ import { LANGUAGES_SORTED } from '@/lib/languages'
 import { isPdfUrl } from '@/lib/utils'
 import { LanguagesIcon, SettingsIcon } from 'lucide-react'
 
-const settingsQuery = {
+type TabMeta = { id: number; isPdf: boolean }
+
+// Defined once and reused by useQuery, fetchQuery and invalidateQueries, so a
+// key shape or queryFn can't drift between the render path and the action path.
+const settingsQuery = queryOptions({
   queryKey: ['settings'] as const,
   queryFn: getSettings,
-}
+})
 
-function tabStateQuery(tabId: number) {
-  return {
-    queryKey: ['tabState', tabId] as const,
-    queryFn: () => messager.sendMessage('getTabState', { tabId }),
-  }
-}
+const tabStateQuery = (tab: TabMeta | null) =>
+  queryOptions({
+    queryKey: ['tabState', tab?.id] as const,
+    // `enabled` only gates useQuery — fetchQuery runs the queryFn regardless,
+    // so every fetchQuery call below sits behind a resolved, non-PDF tab.
+    queryFn: () => messager.sendMessage('getTabState', { tabId: tab!.id }),
+    enabled: tab !== null && !tab.isPdf,
+  })
 
 export function App() {
   const queryClient = useQueryClient()
-  const [tabMeta, setTabMeta] = useState<{ id: number; isPdf: boolean } | null>(null)
+  const [tabMeta, setTabMeta] = useState<TabMeta | null>(null)
 
   // Capture the active tab once when popup opens (it's tied to this tab)
   useEffect(() => {
@@ -34,14 +45,8 @@ export function App() {
   // Settings — always fresh, no stale closure issues
   const { data: settings } = useQuery(settingsQuery)
 
-  // Tab translation state — disabled until tabMeta is resolved
-  // queryKey includes tabMeta?.id (undefined → null at mount) so the key is
-  // stable across renders; enabled guard prevents actual execution.
-  const { data: tabLang } = useQuery({
-    queryKey: ['tabState', tabMeta?.id],
-    queryFn: () => messager.sendMessage('getTabState', { tabId: tabMeta!.id }),
-    enabled: tabMeta !== null && !tabMeta.isPdf,
-  })
+  // Tab translation state — the query is disabled until tabMeta resolves
+  const { data: tabLang } = useQuery(tabStateQuery(tabMeta))
 
   const isTranslated = tabLang !== null
 
@@ -49,7 +54,7 @@ export function App() {
   const toggleMutation = useMutation({
     mutationFn: async () => {
       const tabId = tabMeta!.id
-      const currentLang = await queryClient.fetchQuery(tabStateQuery(tabId))
+      const currentLang = await queryClient.fetchQuery(tabStateQuery(tabMeta))
       if (currentLang) {
         await messager.sendMessage('stopTab', { tabId })
       } else {
@@ -59,7 +64,7 @@ export function App() {
     },
     onSuccess: () => {
       if (tabMeta) {
-        queryClient.invalidateQueries({ queryKey: ['tabState', tabMeta.id] })
+        queryClient.invalidateQueries({ queryKey: tabStateQuery(tabMeta).queryKey })
       }
     },
   })
@@ -69,7 +74,7 @@ export function App() {
     mutationFn: async (newLang: string) => {
       const updated = await saveSettings({ targetLang: newLang })
       if (tabMeta && !tabMeta.isPdf) {
-        const currentLang = await queryClient.fetchQuery(tabStateQuery(tabMeta.id))
+        const currentLang = await queryClient.fetchQuery(tabStateQuery(tabMeta))
         if (currentLang) {
           await messager.sendMessage('stopTab', { tabId: tabMeta.id })
           await messager.sendMessage('startTab', { tabId: tabMeta.id, targetLang: newLang })
@@ -78,9 +83,9 @@ export function App() {
       return updated
     },
     onSuccess: (updated) => {
-      queryClient.setQueryData(['settings'], updated)
+      queryClient.setQueryData(settingsQuery.queryKey, updated)
       if (tabMeta) {
-        queryClient.invalidateQueries({ queryKey: ['tabState', tabMeta.id] })
+        queryClient.invalidateQueries({ queryKey: tabStateQuery(tabMeta).queryKey })
       }
     },
   })
