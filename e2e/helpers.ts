@@ -151,6 +151,33 @@ export async function summonPanel(page: Page) {
   await sendToContentScript(page.context(), tabId, 'showToast')
 }
 
+// The popup inspects `tabs.query({ active: true, currentWindow: true })`, so
+// opening popup.html as a normal tab (what a plain page.goto does) makes it
+// inspect itself — a chrome-extension:// page with no content script, which is
+// never translating. Creating the tab in the background instead keeps the page
+// under test active, and is the only way to reach the popup's translate path:
+// chrome.action.onClicked cannot be dispatched from a test.
+export async function openBackgroundPopup(
+  context: BrowserContext,
+  extensionId: string,
+): Promise<Page> {
+  const url = `chrome-extension://${extensionId}/popup.html`
+  const sw = await getServiceWorker(context)
+  await sw.evaluate(async (url) => {
+    await chrome.tabs.create({ url, active: false })
+  }, url)
+
+  for (let i = 0; i < 50; i++) {
+    const found = context.pages().find((p) => p.url().startsWith(url))
+    if (found) {
+      await found.waitForLoadState('domcontentloaded')
+      return found
+    }
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  throw new Error('popup tab did not appear')
+}
+
 // Chrome has no chrome.action.getIcon, so to assert icon state in e2e we
 // monkey-patch chrome.action.setIcon in the service worker and record every
 // call. Detect kind by path: '/icon/active/...' is active, anything else is

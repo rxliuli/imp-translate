@@ -1,4 +1,7 @@
 import { test, expect } from './fixtures'
+import { configureMockProvider, openBackgroundPopup, startTranslation } from './helpers'
+
+const TRANSLATED = '.imp-translate-result:not(.imp-translate-loading)'
 
 test('popup renders with translate button and language selector', async ({
   context,
@@ -45,4 +48,38 @@ test('popup settings button opens options page', async ({
   ])
 
   await expect(optionsPage).toHaveURL(new RegExp(`chrome-extension://${extensionId}/options.html`))
+})
+
+// Covers what the three tests above can't: the popup's translate/restore path
+// against a tab that is really translating. The button label is the assertion —
+// it comes from the getTabState query, refetched after each mutation.
+test('popup translates and restores the active tab', async ({
+  context,
+  baseURL,
+  extensionId,
+}) => {
+  const page = await context.newPage()
+  await page.goto(baseURL)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+  await expect(page.locator(TRANSLATED).first()).toBeVisible({ timeout: 15000 })
+
+  const popup = await openBackgroundPopup(context, extensionId)
+  const restore = popup.getByRole('button', { name: 'Show Original' })
+  await expect(restore).toBeVisible({ timeout: 5000 })
+
+  await restore.click()
+
+  // The popup asked the background to stop, and the page really reverted
+  await expect(page.locator('.imp-translate-result')).toHaveCount(0, { timeout: 5000 })
+  await expect(popup.getByRole('button', { name: 'Translate Page' })).toBeVisible({
+    timeout: 5000,
+  })
+
+  // ...and back again
+  await popup.getByRole('button', { name: 'Translate Page' }).click()
+  await expect(page.locator(TRANSLATED).first()).toBeVisible({ timeout: 15000 })
+  await expect(restore).toBeVisible({ timeout: 5000 })
 })
