@@ -4,16 +4,8 @@ import { Button } from '@/components/ui/button'
 import { messager } from '@/lib/message'
 import { getSettings, saveSettings } from '@/lib/storage'
 import { LANGUAGES_SORTED } from '@/lib/languages'
+import { isPdfUrl } from '@/lib/utils'
 import { LanguagesIcon, SettingsIcon } from 'lucide-react'
-
-function isPdfUrl(url: string | undefined): boolean {
-  if (!url) return false
-  try {
-    return new URL(url).pathname.toLowerCase().endsWith('.pdf')
-  } catch {
-    return false
-  }
-}
 
 const settingsQuery = {
   queryKey: ['settings'] as const,

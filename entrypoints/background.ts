@@ -8,7 +8,7 @@ import { eldDetectLanguage } from '@/lib/eld-detect'
 import { parseRules, matchRulesForHostname, type SiteRule } from '@/lib/rules'
 import { getEffectiveRules, setupRemoteRulesAlarm, fetchRemoteRulesIfNeeded } from '@/lib/remote-rules'
 import { PublicPath } from 'wxt/browser'
-import { debugTime } from '@/lib/utils'
+import { debugTime, isPdfUrl } from '@/lib/utils'
 import { IMP_ORIGIN } from '@/lib/imp'
 
 async function getMatchedRulesForHostname(hostname: string): Promise<SiteRule[]> {
@@ -22,15 +22,6 @@ async function getMatchedRulesForHostname(hostname: string): Promise<SiteRule[]>
     }
   } catch {}
   return rules
-}
-
-function isPdfUrl(url: string | undefined): boolean {
-  if (!url) return false
-  try {
-    return new URL(url).pathname.toLowerCase().endsWith('.pdf')
-  } catch {
-    return false
-  }
 }
 
 function hostnameFromUrl(url: string | undefined): string {
@@ -211,10 +202,6 @@ export default defineBackground(() => {
     })
   }
 
-  messager.onMessage('getSettings', async () => {
-    return await getSettings()
-  })
-
   messager.onMessage('getMatchedRulesForHostname', async ({ data }) => {
     return await getMatchedRulesForHostname(data.hostname)
   })
@@ -387,10 +374,6 @@ export default defineBackground(() => {
 
   messager.onMessage('openOptionsPage', async () => {
     await browser.runtime.openOptionsPage()
-  })
-
-  messager.onMessage('detectLanguage', ({ data }) => {
-    return eldDetectLanguage(data.text)
   })
 
   messager.onMessage('detectLanguageBatch', ({ data }) => {

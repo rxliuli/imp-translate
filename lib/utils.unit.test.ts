@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isUrlOnly } from './utils'
+import { isPdfUrl, isUrlOnly } from './utils'
 
 describe('isUrlOnly', () => {
   it.each([
@@ -24,5 +24,27 @@ describe('isUrlOnly', () => {
     ['leading whitespace', '  https://example.com'],
   ])('rejects %s', (_label, text) => {
     expect(isUrlOnly(text)).toBe(false)
+  })
+})
+
+describe('isPdfUrl', () => {
+  it.each([
+    'https://example.com/paper.pdf',
+    'https://example.com/dir/Paper.PDF',
+    'https://example.com/paper.pdf?download=1',
+    'http://example.com/paper.pdf#page=2',
+  ])('matches %s', (url) => {
+    expect(isPdfUrl(url)).toBe(true)
+  })
+
+  it.each([
+    ['undefined', undefined],
+    ['empty', ''],
+    ['html page', 'https://example.com/'],
+    ['pdf in a query string', 'https://example.com/view?file=paper.pdf'],
+    ['pdf as a directory', 'https://example.com/paper.pdf/'],
+    ['not a URL', 'not a url'],
+  ])('rejects %s', (_label, url) => {
+    expect(isPdfUrl(url as string | undefined)).toBe(false)
   })
 })

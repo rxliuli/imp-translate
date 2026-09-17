@@ -1,5 +1,4 @@
 import { defineExtensionMessaging } from '@webext-core/messaging'
-import type { Settings } from './storage'
 import type { SiteRule } from './rules'
 
 export interface TranslateRequest {
@@ -16,7 +15,6 @@ export interface TranslateBatchRequest {
 export const messager = defineExtensionMessaging<{
   translate(req: TranslateRequest): string
   translateBatch(req: TranslateBatchRequest): string[]
-  getSettings(): Settings
   // connect content script (imp-connect.content.ts) => background: exchanges
   // the one-time code read off the success page's <meta> tag for a persistent
   // Imp Credits api key (see imp-credits docs/extension-integration.md).
@@ -34,7 +32,6 @@ export const messager = defineExtensionMessaging<{
   startSelfTab(data: { targetLang: string }): void
   isMobile(): boolean
   openOptionsPage(): void
-  detectLanguage(data: { text: string }): string
   detectLanguageBatch(data: { texts: string[] }): string[]
   refreshRemoteRules(): void
 }>()

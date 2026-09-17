@@ -34,3 +34,15 @@ const URL_ONLY_RE = /^https?:\/\/\S+$/
 export function isUrlOnly(text: string): boolean {
   return URL_ONLY_RE.test(text)
 }
+
+// A .pdf URL, matched on the pathname (query strings and fragments don't
+// change what the browser renders). Translated pages are plain HTML, so
+// translation is skipped there.
+export function isPdfUrl(url: string | undefined): boolean {
+  if (!url) return false
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith('.pdf')
+  } catch {
+    return false
+  }
+}

@@ -15,8 +15,7 @@
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
     "test": "is-ci && pnpm exec playwright install || echo 'Not in CI' && vitest run",
-    "e2e": "pnpm build && playwright test",
-    "init-project": "vite-node lib/build/init.ts"
+    "e2e": "pnpm build && playwright test"
   },
   "dependencies": {
     "@extport/sdk": "0.0.9",
@@ -29,12 +28,10 @@
     "eld": "^2.0.3",
     "idb": "^8.0.3",
     "lucide-react": "^1.11.0",
-    "next-themes": "^0.4.6",
     "radix-ui": "^1.4.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-icons": "^5.6.0",
-    "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.4",
     "tldts": "^7.0.28",
@@ -56,11 +53,9 @@
     "playwright": "^1.60.0",
     "pngjs": "^7.0.0",
     "typescript": "^6.0.3",
-    "vite-node": "^6.0.0",
     "vitest": "^4.1.5",
     "vitest-browser-react": "^2.2.0",
-    "wxt": "^0.20.25",
-    "zx": "^8.8.5"
+    "wxt": "^0.20.25"
   },
   "packageManager": "pnpm@10.5.2+sha512.da9dc28cd3ff40d0592188235ab25d3202add8a207afbedc682220e4a0029ffbff4562102b9e6e46b4e3f9e8bd53e6d05de48544b0c57d4b0179e22c76d1199b",
   "pnpm": {
