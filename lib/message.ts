@@ -11,7 +11,13 @@ export interface TranslateBatchRequest {
   targetLang: string
 }
 
-// Content/Popup → Background
+// One protocol for both directions: extension page/content script → background
+// with no target (runtime messaging), and background → content script with an
+// explicit target. `@webext-core/messaging` picks the API from the send
+// arguments, so the four entries at the bottom are addressed as
+// `messager.sendMessage('stopTranslation', undefined, { tabId })` and are the
+// only ones the content script (inject.ts) handles — everything above them is
+// a background handler.
 export const messager = defineExtensionMessaging<{
   translate(req: TranslateRequest): string
   translateBatch(req: TranslateBatchRequest): string[]
@@ -34,39 +40,21 @@ export const messager = defineExtensionMessaging<{
   openOptionsPage(): void
   detectLanguageBatch(data: { texts: string[] }): string[]
   refreshRemoteRules(): void
+
+  // Background → content script (entrypoints/inject.ts). Omitting frameId
+  // broadcasts to every frame in the tab; passing it drives a single frame
+  // (dynamically added iframes) without re-waking the already-translating
+  // ones. The content script receives the full host-matched rule set
+  // (including each rule's pathPattern) — path filtering happens client-side
+  // at walk time, so SPA navigation needs no extra round-trip.
+  startTranslation(data: {
+    targetLang: string
+    showToast?: boolean
+    rules: SiteRule[]
+  }): void
+  stopTranslation(): void
+  // Re-open the mobile panel without touching translation state: the icon
+  // click must not stop a translation the user may want to keep.
+  showToast(): void
+  getState(): boolean
 }>()
-
-// Background/Popup → Content (via browser.tabs.sendMessage). The content
-// script receives the full host-matched rule set (including each rule's
-// pathPattern). Path filtering happens client-side at walk time, so SPA
-// navigation doesn't require a round-trip to refresh the rule set.
-export type ContentAction =
-  | {
-      action: 'startTranslation'
-      targetLang: string
-      showToast?: boolean
-      rules?: SiteRule[]
-    }
-  | { action: 'stopTranslation' }
-  // Re-open the mobile panel without touching translation state: the icon click
-  // must not stop a translation the user may want to keep.
-  | { action: 'showToast' }
-  | { action: 'getState' }
-
-export type ContentResponse =
-  | { isTranslating: boolean }
-  | void
-
-export function sendToTab(
-  tabId: number,
-  message: ContentAction,
-  frameId?: number,
-): Promise<ContentResponse> {
-  // Omitting frameId broadcasts to every frame in the tab; passing it
-  // targets a single frame (used to drive dynamically added iframes without
-  // re-waking already-translating frames).
-  if (frameId !== undefined) {
-    return browser.tabs.sendMessage(tabId, message, { frameId })
-  }
-  return browser.tabs.sendMessage(tabId, message)
-}

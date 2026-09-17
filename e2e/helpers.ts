@@ -53,6 +53,31 @@ export async function getTabId(page: Page): Promise<number> {
   return tabId
 }
 
+// Messages to the content script go through @webext-core/messaging on the
+// receiving side, so tests must send the library's wire envelope
+// ({ id, type, data, timestamp }) instead of a bare { action } object — the
+// content script's listener rejects anything without a `type` and
+// `timestamp`, and `tabs.sendMessage` would then hang with no response.
+// Keeping the envelope in one place here keeps that coupling visible.
+export async function sendToContentScript(
+  context: BrowserContext,
+  tabId: number,
+  type: 'startTranslation' | 'stopTranslation' | 'showToast' | 'getState',
+  data?: unknown,
+): Promise<unknown> {
+  const sw = await getServiceWorker(context)
+  return await sw.evaluate(
+    async ([tabId, type, data]) =>
+      await chrome.tabs.sendMessage(tabId, {
+        id: 1,
+        type,
+        data,
+        timestamp: Date.now(),
+      }),
+    [tabId, type, data] as const,
+  )
+}
+
 export async function configureMockProvider(page: Page, baseURL: string) {
   const sw = await getServiceWorker(page.context())
   await sw.evaluate(async (endpoint) => {
@@ -76,22 +101,20 @@ export async function startTranslation(page: Page, targetLang = 'zh', showToast 
   const sw = await getServiceWorker(page.context())
   const rules = await computeRulesForPage(page)
   await sw.evaluate(
-    async ([tabId, lang, showToast, rules]) => {
-      const key = `tab_translating_${tabId}`
-      await chrome.storage.session.set({ [key]: lang })
+    async ([tabId, lang]) => {
+      await chrome.storage.session.set({ [`tab_translating_${tabId}`]: lang })
       await chrome.scripting.executeScript({
         target: { tabId, allFrames: true },
         files: ['/inject.js'],
       })
-      chrome.tabs.sendMessage(tabId, {
-        action: 'startTranslation',
-        targetLang: lang,
-        showToast,
-        rules,
-      })
     },
-    [tabId, targetLang, showToast, rules] as const,
+    [tabId, targetLang] as const,
   )
+  await sendToContentScript(page.context(), tabId, 'startTranslation', {
+    targetLang,
+    showToast,
+    rules,
+  })
 }
 
 export async function enableMobileMode(context: BrowserContext) {
@@ -105,14 +128,17 @@ export async function enableMobileMode(context: BrowserContext) {
 export async function stopTranslation(page: Page) {
   const tabId = await getTabId(page)
   const sw = await getServiceWorker(page.context())
-  await sw.evaluate(
-    async ([tabId]) => {
-      chrome.tabs.sendMessage(tabId, { action: 'stopTranslation' })
-      const key = `tab_translating_${tabId}`
-      await chrome.storage.session.remove(key)
-    },
-    [tabId] as const,
-  )
+  try {
+    await sendToContentScript(page.context(), tabId, 'stopTranslation')
+  } catch {
+    // No content script in this tab (the test may drive a tab that just
+    // navigated, e.g. before the background re-injected on DOMContentLoaded).
+    // Clearing the session key below is what the assertions depend on — the
+    // same best-effort shape the background's stopTranslationForTab uses.
+  }
+  await sw.evaluate(async (tabId) => {
+    await chrome.storage.session.remove(`tab_translating_${tabId}`)
+  }, tabId)
 }
 
 // What the background sends to a tab that is already translating when the
@@ -122,10 +148,7 @@ export async function stopTranslation(page: Page) {
 // message it emits.
 export async function summonPanel(page: Page) {
   const tabId = await getTabId(page)
-  const sw = await getServiceWorker(page.context())
-  await sw.evaluate(async (tabId) => {
-    await chrome.tabs.sendMessage(tabId, { action: 'showToast' })
-  }, tabId)
+  await sendToContentScript(page.context(), tabId, 'showToast')
 }
 
 // Chrome has no chrome.action.getIcon, so to assert icon state in e2e we

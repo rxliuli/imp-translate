@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures'
-import { startTranslation, stopTranslation, configureMockProvider, getTabId, getServiceWorker } from './helpers'
+import { startTranslation, stopTranslation, configureMockProvider } from './helpers'
 
 test('content script translates page', async ({ context, baseURL }) => {
   const page = await context.newPage()
@@ -276,31 +276,10 @@ test('re-translates after language switch (stop + start)', async ({ context, bas
   await expect(translated).toContainText('[翻译]')
 
   // Simulate language switch: stop then start with a different language.
-  // This mirrors what popup's langChangeMutation does on language change.
-  const tabId = await getTabId(page)
-  const sw = await getServiceWorker(page.context())
-  await sw.evaluate(
-    async ([tabId, newLang]) => {
-      // stopTab
-      chrome.tabs.sendMessage(tabId, { action: 'stopTranslation' })
-      const key = `tab_translating_${tabId}`
-      await chrome.storage.session.remove(key)
-
-      // startTab — same flow as startTranslationForTab
-      await chrome.storage.session.set({ [key]: newLang })
-      await chrome.scripting.executeScript({
-        target: { tabId, allFrames: true },
-        files: ['/inject.js'],
-      })
-      chrome.tabs.sendMessage(tabId, {
-        action: 'startTranslation',
-        targetLang: newLang,
-        showToast: false,
-        rules: [],
-      })
-    },
-    [tabId, 'ja'] as const,
-  )
+  // This mirrors what popup's langChangeMutation does on language change
+  // (helpers do the same steps the background's start/stopTranslationForTab do).
+  await stopTranslation(page)
+  await startTranslation(page, 'ja')
 
   // After language switch, translations should still be visible
   // (regression guard: stop + start should not leave the page untranslated)

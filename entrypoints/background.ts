@@ -1,5 +1,5 @@
 import { checkConnection, exchangeCode, humanizeError } from '@rxliuli/imp-credits-sdk'
-import { messager, sendToTab } from '@/lib/message'
+import { messager } from '@/lib/message'
 import { getSettings, saveSettings, type TranslationProvider } from '@/lib/storage'
 import { translate } from '@/lib/translator'
 import { getCached, setCached, evictOldEntries } from '@/lib/cache'
@@ -92,8 +92,8 @@ async function startTranslationForTab(
   // Also send startTranslation directly. The content script's auto-init
   // only fires on FIRST injection; if inject.js was already loaded (e.g.
   // after stop + start for language switching), the second injection is a
-  // no-op (__imp_injected guard) and auto-init never re-runs. sendToTab
-  // is the reliable way to wake the content script back up.
+  // no-op (__imp_injected guard) and auto-init never re-runs. The explicit
+  // message is the reliable way to wake the content script back up.
   //
   // This is safe w.r.t. onDOMContentLoaded races: non-main frames no
   // longer send startTranslation (they only inject), and the main frame's
@@ -101,18 +101,13 @@ async function startTranslationForTab(
   const tab = await browser.tabs.get(tabId)
   const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
   t('rules fetched')
-  await sendToTab(tabId, {
-    action: 'startTranslation',
-    targetLang,
-    showToast,
-    rules,
-  })
-  t('sendToTab (startTranslation) done')
+  await messager.sendMessage('startTranslation', { targetLang, showToast, rules }, { tabId })
+  t('startTranslation sent')
 }
 
 async function stopTranslationForTab(tabId: number) {
   try {
-    await sendToTab(tabId, { action: 'stopTranslation' })
+    await messager.sendMessage('stopTranslation', undefined, { tabId })
   } catch {
     // Content script may not be loaded
   }
@@ -122,10 +117,7 @@ async function stopTranslationForTab(tabId: number) {
 
 async function isPageTranslating(tabId: number): Promise<boolean> {
   try {
-    const response = (await sendToTab(tabId, { action: 'getState' })) as
-      | { isTranslating: boolean }
-      | undefined
-    return response?.isTranslating === true
+    return (await messager.sendMessage('getState', undefined, { tabId })) === true
   } catch {
     return false
   }
@@ -153,7 +145,7 @@ async function openPanelForActiveTab() {
   if (isPdfUrl(tab.url)) return
   if (await isPageTranslating(tab.id)) {
     try {
-      await sendToTab(tab.id, { action: 'showToast' })
+      await messager.sendMessage('showToast', undefined, { tabId: tab.id })
       return
     } catch {
       // Content script gone (extension reload, frame teardown) — restart below.
@@ -421,7 +413,7 @@ export default defineBackground(() => {
       if (!lang) return
       // Transient sub-frames (ad/embed iframes, especially common on Reddit)
       // often vanish between onDOMContentLoaded and the time these async calls
-      // run, so executeScript / sendToTab reject with "No frame with id N".
+      // run, so executeScript / sendMessage reject with "No frame with id N".
       // That's expected, not an error — swallow it instead of letting it
       // surface as an uncaught promise rejection.
       try {
@@ -433,10 +425,10 @@ export default defineBackground(() => {
         const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
         // Target this frame only — broadcasting would needlessly re-wake every
         // already-translating frame in the tab.
-        await sendToTab(
-          details.tabId,
-          { action: 'startTranslation', targetLang: lang, rules },
-          details.frameId,
+        await messager.sendMessage(
+          'startTranslation',
+          { targetLang: lang, rules },
+          { tabId: details.tabId, frameId: details.frameId },
         )
       } catch {
         // Frame gone (or otherwise un-injectable) — nothing to translate.
@@ -472,12 +464,12 @@ export default defineBackground(() => {
     const tab = await browser.tabs.get(details.tabId)
     const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
     t('rules fetched')
-    await sendToTab(details.tabId, {
-      action: 'startTranslation',
-      targetLang: lang,
-      rules,
-    })
-    t('sendToTab done')
+    await messager.sendMessage(
+      'startTranslation',
+      { targetLang: lang, rules },
+      { tabId: details.tabId },
+    )
+    t('startTranslation sent')
   })
 
   browser.tabs.onRemoved.addListener(async (tabId) => {

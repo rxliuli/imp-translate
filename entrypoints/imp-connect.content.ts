@@ -1,5 +1,5 @@
 import { isForExtension } from '@rxliuli/imp-credits-sdk'
-import { IMP_SRC } from '@/lib/imp'
+import { IMP_ORIGIN, IMP_SRC } from '@/lib/imp'
 import { messager } from '@/lib/message'
 
 // The Imp Credits Worker serves this success page at /api/connect/success
@@ -8,7 +8,7 @@ import { messager } from '@/lib/message'
 // apps/api/src/routes/connect.ts's `route.post('/success')`.
 // Deliberately NOT /connect/success (no /api/ prefix): that path is never
 // served, so matching it would silently break the connect flow.
-const PROD_MATCH = 'https://imp.rxliuli.com/api/connect/success*'
+const PROD_MATCH = `${IMP_ORIGIN}/api/connect/success*`
 // Match patterns can't carry a port number (Chrome/Firefox reject the
 // pattern outright if one is present) — omitting the port matches the host
 // on any port, which is exactly what we want against `wrangler dev`'s

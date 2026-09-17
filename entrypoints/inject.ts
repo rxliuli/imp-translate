@@ -1,5 +1,4 @@
 import { messager } from '@/lib/message'
-import type { ContentAction } from '@/lib/message'
 import { ContentScriptContext } from 'wxt/utils/content-script-context'
 import { selectorsForPath, type SiteRule } from '@/lib/rules'
 import {
@@ -621,21 +620,22 @@ export default defineUnlistedScript(() => {
     if (!keepToast) dismissToast()
   }
 
-  browser.runtime.onMessage.addListener(
-    (message: ContentAction, _sender, sendResponse) => {
-      if (!message?.action) return
-      if (message.action === 'startTranslation') {
-        startTranslation(message.targetLang, message.showToast, message.rules)
-      } else if (message.action === 'stopTranslation') {
-        stopTranslation()
-      } else if (message.action === 'showToast') {
-        maybeShowToast()
-      } else if (message.action === 'getState') {
-        sendResponse({ isTranslating })
-        return true
-      }
-    },
-  )
+  // Registered synchronously during injection (this is an unlisted script
+  // driven by scripting.executeScript), so the background's post-inject
+  // startTranslation can't outrun the listener. Handlers deliberately do not
+  // return or await the work: the background only needs the message delivered,
+  // not the translation to finish, and waiting here would keep the sender's
+  // response channel (and the SW) busy for the whole first scan.
+  messager.onMessage('startTranslation', ({ data }) => {
+    startTranslation(data.targetLang, data.showToast, data.rules)
+  })
+  messager.onMessage('stopTranslation', () => {
+    stopTranslation()
+  })
+  messager.onMessage('showToast', () => {
+    maybeShowToast()
+  })
+  messager.onMessage('getState', () => isTranslating)
 
   window.addEventListener('pageshow', async (e) => {
     if (!e.persisted) return
@@ -660,14 +660,14 @@ export default defineUnlistedScript(() => {
 
   // Auto-init: when inject.js is loaded (via injectContentScript from
   // startTranslationForTab), check if this tab should be translating.
-  // This avoids the race where sendToTab(startTranslation) arrives before
+  // This avoids the race where the startTranslation message arrives before
   // the content script's message listener is registered in some frames.
   //
   // Only the top frame auto-inits. Sub-frames are driven explicitly by the
   // background's webNavigation handlers (which send a per-frame
   // startTranslation), so they never self-start from a session key that may
   // still be stale during a reload. The listener above is registered
-  // synchronously, so the background's post-inject sendToTab can't outrace it.
+  // synchronously, so the background's post-inject startTranslation can't outrace it.
   ;(async () => {
     if (window.self !== window.top) return
     await waitForDOMReady()
