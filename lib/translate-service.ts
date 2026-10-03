@@ -136,6 +136,16 @@ export function createTranslateService(config: TranslateServiceConfig): Translat
  * returns null when that translation can't be mapped back onto the segments,
  * including when it comes back unchanged (a failed/declined translation).
  */
+/**
+ * Segments that carry no translatable content and are kept verbatim: whitespace
+ * and citation-style markers such as "[", "12", "]". Wikipedia-like pages split
+ * every reference into three Text nodes; sending dozens of these as tagged
+ * segments makes Google misalign the ids of the real words around them.
+ */
+export function isPassthroughSegment(s: string): boolean {
+  return /^[\s\[\]\d]*$/.test(s)
+}
+
 export async function translateSegmentsVia(
   segments: string[],
   lang: string,
@@ -143,7 +153,7 @@ export async function translateSegmentsVia(
 ): Promise<string[] | null> {
   const indices: number[] = []
   segments.forEach((s, i) => {
-    if (s.trim() !== '') indices.push(i)
+    if (!isPassthroughSegment(s)) indices.push(i)
   })
   if (indices.length === 0) return [...segments]
   const encoded = encodeSegments(indices.map((i) => segments[i]))

@@ -681,6 +681,23 @@ describe('segment translation', () => {
     expect(body[0][0]).toEqual([ENCODED])
   })
 
+  it('google: keeps citation markers verbatim and does not send them', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockGoogleResponse(['<i id="0">创造性作品</i><i id="1">，例如</i><i id="2">艺术作品</i>']),
+    )
+    const run = await setup(googleSettings)
+    const segments = ['creative work', '[', '1', ']', ', such as a ', 'work of art', '[', '12', ']']
+    expect(await run(segments)).toEqual([
+      '创造性作品', '[', '1', ']', '，例如', '艺术作品', '[', '12', ']',
+    ])
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body[0][0]).toEqual([
+      '<i id="0">creative work</i><i id="1">, such as a </i><i id="2">work of art</i>',
+    ])
+  })
+
   it('google: decodes a well-formed response', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
