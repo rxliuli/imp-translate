@@ -3,6 +3,7 @@ import {
   startTranslation,
   configureMockProvider,
   setCustomRules,
+  setDisplayMode,
 } from './helpers'
 
 const TRANSLATED_SELECTOR = '.imp-translate-result:not(.imp-translate-loading)'
@@ -115,4 +116,33 @@ test('SPA navigation re-evaluates path-gated rules', async ({ context, baseURL }
     .locator(`#spa-plain ${TRANSLATED_SELECTOR}`)
     .count()
   expect(plainSpaTranslated).toBe(0)
+})
+
+// Include rules are a bilingual layout compromise; replace mode ignores them
+// (and translates nav/footer) but still honors exclude rules.
+test('replace mode ignores include rules but honors exclude rules', async ({
+  context,
+  baseURL,
+}) => {
+  const impURL = impHost(baseURL)
+  const page = await context.newPage()
+  await page.goto(`${impURL}/replace-mode`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, impURL)
+  await setCustomRules(context, 'imp.test#+##plain\nimp.test###linked')
+  await setDisplayMode(context, 'replace')
+
+  await startTranslation(page)
+
+  await expect(page.locator('#plain')).toContainText('[翻译]', { timeout: 15000 })
+  // Outside the include scope, translated anyway.
+  await expect(page.locator('#title')).toContainText('[翻译]')
+  await expect(page.locator('#login')).toContainText('[翻译]')
+  await expect(page.locator('#footer-note')).toContainText('[翻译]')
+  // Excluded: left alone even after settle time.
+  await page.waitForTimeout(1500)
+  await expect(page.locator('#linked')).toHaveText(
+    'Please read the documentation before you start.',
+  )
 })

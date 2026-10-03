@@ -32,6 +32,30 @@ const CONTAINER_TAGS = new Set([
 
 const SKIP_CONTAINERS = new Set(['nav', 'footer'])
 
+// With translateChrome, these inline-block controls are standalone blocks
+// inside page chrome (CHROME_SELECTOR): a toolbar of buttons (or a link next
+// to a button) is a list of separate labels, not one sentence. In body text
+// (`<p>Click <button>here</button> to continue</p>`) and in bilingual mode
+// they stay inline.
+const CHROME_BLOCK_TAGS = new Set(['button'])
+
+const CHROME_SELECTOR = [
+  'nav', 'header', 'footer', 'aside',
+  '[role="navigation"]', '[role="toolbar"]', '[role="menubar"]', '[role="menu"]', '[role="tablist"]',
+].join(',')
+
+// How CHROME_BLOCK_TAGS are treated at a given point of the walk:
+// 'off'    — translateChrome is off: always inline.
+// 'body'   — translateChrome is on, not inside page chrome: inline.
+// 'chrome' — inside page chrome: standalone blocks.
+// Carried down the walk as context so no node needs an ancestor lookup.
+type ButtonMode = 'off' | 'body' | 'chrome'
+
+// Mode for `el`'s children, given the mode `el` itself was reached with.
+function enterMode(el: Element, mode: ButtonMode): ButtonMode {
+  return mode === 'body' && el.matches(CHROME_SELECTOR) ? 'chrome' : mode
+}
+
 const EDITOR_SELECTOR = [
   '.RichEditor-root:has([contenteditable="true"])',
   '.DraftEditor-root:has([contenteditable="true"])',
@@ -50,13 +74,15 @@ const PROCESSED_ATTR = 'data-imp-translated'
 const WRAP_ATTR = 'data-imp-wrap'
 const OVERSIZED_BLOCK_THRESHOLD = 8000
 
-function isInlineish(node: Node): boolean {
+// `mode`: the ButtonMode of `node`'s parent.
+function isInlineish(node: Node, mode: ButtonMode = 'off'): boolean {
   if (node.nodeType === Node.TEXT_NODE) return true
   if (node.nodeType !== Node.ELEMENT_NODE) return false
   const el = node as Element
   const tag = el.tagName.toLowerCase()
   if (SKIP_TAGS.has(tag)) return false
-  if (hasBlockChild(el)) return false
+  if (mode === 'chrome' && CHROME_BLOCK_TAGS.has(tag)) return false
+  if (hasBlockChild(el, enterMode(el, mode))) return false
   if (INLINE_TAGS.has(tag)) return isDisplayInline(el)
   if (isDisplayInline(el)) return true
   return false
@@ -140,6 +166,20 @@ export interface ExtractOptions {
   // of the candidate run so a run that grew at its head still counts as
   // processed — skipped like elements carrying PROCESSED_ATTR.
   isRunProcessed?: (nodes: Node[]) => boolean
+  // Translate page chrome (replace display mode). Bilingual mode skips
+  // <nav>/<footer> and honors include rules only to protect layout — appended
+  // translations would overflow tight UI. Replace mode only rewrites Text.data,
+  // so both compromises are dropped: nav/footer are walked and
+  // includeSelectors is ignored. skipSelectors (exclude rules) still apply.
+  translateChrome?: boolean
+}
+
+// Include rules restrict where bilingual translations are appended — a layout
+// compromise that does not apply when translateChrome is on.
+function activeIncludeSelectors(opts?: ExtractOptions): string[] | undefined {
+  if (opts?.translateChrome) return undefined
+  const s = opts?.includeSelectors
+  return s && s.length > 0 ? s : undefined
 }
 
 function hasShadowDescendant(el: Element): boolean {
@@ -168,10 +208,11 @@ function closestThroughShadow(el: Element, selector: string): Element | null {
 }
 
 function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
-  if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
-    const inside = opts.includeSelectors.some((s) => closestThroughShadow(el, s))
+  const includes = activeIncludeSelectors(opts)
+  if (includes) {
+    const inside = includes.some((s) => closestThroughShadow(el, s))
     if (!inside) {
-      const contains = opts.includeSelectors.some((s) => el.querySelector(s))
+      const contains = includes.some((s) => el.querySelector(s))
       if (!contains && !hasShadowDescendant(el)) return true
     }
   }
@@ -446,9 +487,11 @@ function isOurInjectedNode(n: Node): boolean {
   return cl.contains(RESULT_CLASS) || cl.contains('imp-translate-br')
 }
 
-function hasBlockChild(el: Element): boolean {
+// `mode`: the ButtonMode of `el`'s children (i.e. already entered for `el`).
+function hasBlockChild(el: Element, mode: ButtonMode = 'off'): boolean {
   for (const child of el.children) {
     const tag = child.tagName.toLowerCase()
+    if (mode === 'chrome' && CHROME_BLOCK_TAGS.has(tag)) return true
     if (isBlockTag(tag)) {
       if (tag.includes('-') && !child.textContent?.trim()) continue
       // A block-tag element with display:inline-* (e.g. Google's
@@ -457,7 +500,7 @@ function hasBlockChild(el: Element): boolean {
       // descendants can still contain real blocks. Recurse instead of
       // skipping outright.
       if (isDisplayInline(child)) {
-        if (hasBlockChild(child)) return true
+        if (hasBlockChild(child, enterMode(child, mode))) return true
         continue
       }
       return true
@@ -467,16 +510,16 @@ function hasBlockChild(el: Element): boolean {
     // from a leaf-extraction decision. Bounded by inline-chain depth,
     // which is naturally small in real DOM.
     if (INLINE_TAGS.has(tag)) {
-      if (hasBlockChild(child)) return true
+      if (hasBlockChild(child, enterMode(child, mode))) return true
     }
   }
   return false
 }
 
-function isLeafBlock(el: Element): boolean {
+function isLeafBlock(el: Element, mode: ButtonMode = 'off'): boolean {
   const tag = el.tagName.toLowerCase()
   if (!LEAF_BLOCK_TAGS.has(tag)) return false
-  if (hasBlockChild(el)) return false
+  if (hasBlockChild(el, mode)) return false
   return true
 }
 
@@ -490,6 +533,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       if (closestThroughShadow(root, s)) return []
     }
   }
+  const chrome = !!opts?.translateChrome
   const blocks: TranslatableBlock[] = []
   // Deferred writes. The walk is a pure read phase — every DOM mutation
   // (wrapper insertion, shadow-root style/observer setup) is collected here and
@@ -507,10 +551,11 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
   function tryExtract(node: Element): boolean {
     if (isHidden(node as HTMLElement)) return false
-    if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
-      const inside = opts.includeSelectors.some((s) => closestThroughShadow(node, s))
+    const includes = activeIncludeSelectors(opts)
+    if (includes) {
+      const inside = includes.some((s) => closestThroughShadow(node, s))
       if (!inside) {
-        const contains = opts.includeSelectors.some((s) => node.querySelector(s))
+        const contains = includes.some((s) => node.querySelector(s))
         if (!contains) return false
       }
     }
@@ -536,10 +581,11 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
   // plain <font> directly under `parent` that never matches an include selector.
   function deferWrap(parent: Element, seg: Node[]) {
     if (opts?.noStructuralWrites && opts.isRunProcessed?.(seg)) return
-    if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
-      const inside = opts.includeSelectors.some((s) => closestThroughShadow(parent, s))
+    const includes = activeIncludeSelectors(opts)
+    if (includes) {
+      const inside = includes.some((s) => closestThroughShadow(parent, s))
       if (!inside) {
-        const contains = seg.some((n) => n.nodeType === Node.ELEMENT_NODE && opts.includeSelectors!.some((s) => (n as Element).matches(s) || (n as Element).querySelector(s)))
+        const contains = seg.some((n) => n.nodeType === Node.ELEMENT_NODE && includes.some((s) => (n as Element).matches(s) || (n as Element).querySelector(s)))
         if (!contains) return
       }
     }
@@ -562,7 +608,8 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     pendingWraps.push({ parent, wrapper, refNode: seg[0], seg })
   }
 
-  function walkMixed(parent: Element, splitOnBlankLines = false) {
+  // `mode`: ButtonMode for `parent`'s children.
+  function walkMixed(parent: Element, mode: ButtonMode, splitOnBlankLines = false) {
     const isCustomElement = parent.tagName.includes('-')
     const children = Array.from(parent.childNodes)
     let run: Node[] = []
@@ -580,7 +627,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       if (seg.length === 0) return
 
       if (seg.length === 1 && seg[0].nodeType === Node.ELEMENT_NODE) {
-        walk(seg[0] as Element)
+        walk(seg[0] as Element, mode)
         return
       }
 
@@ -589,7 +636,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
         // of the host carry slot="..." semantics. Walk each element child
         // individually; loose text between them is unrendered without slotting.
         for (const n of seg) {
-          if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element)
+          if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element, mode)
         }
         return
       }
@@ -603,7 +650,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       )
       if (hasStateful) {
         for (const n of seg) {
-          if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element)
+          if (n.nodeType === Node.ELEMENT_NODE) walk(n as Element, mode)
         }
         return
       }
@@ -628,22 +675,25 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       // Our own bilingual results (and their <br>) can sit right after a
       // virtual run in the same parent; they are never part of a run.
       if (isOurInjectedNode(child)) continue
-      if (isInlineish(child)) {
+      if (isInlineish(child, mode)) {
         run.push(child)
       } else if (child.nodeType === Node.ELEMENT_NODE) {
         flush()
-        walk(child as Element)
+        walk(child as Element, mode)
       }
     }
     flush()
   }
 
-  function walk(node: Element) {
+  // `parentMode`: ButtonMode `node` is reached with (its parent's context).
+  function walk(node: Element, parentMode: ButtonMode) {
     if (shouldSkip(node, opts)) return
 
     const tag = node.tagName.toLowerCase()
 
-    if (SKIP_CONTAINERS.has(tag)) return
+    if (!chrome && SKIP_CONTAINERS.has(tag)) return
+
+    const mode = enterMode(node, parentMode)
 
     // Pre-wrap content whose paragraphs are literal blank lines in the text
     // (x.com long posts): normalize the separators to direct children, then
@@ -651,47 +701,57 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     // paths so a leaf block or flat div with blank lines splits too.
     if (!opts?.noStructuralWrites && hasBlankLineSeparator(node)) {
       segmentPreservedNewlines(node)
-      walkMixed(node, true)
-      walkShadow(node)
+      walkMixed(node, mode, true)
+      walkShadow(node, mode)
       return
     }
 
-    if (isLeafBlock(node)) {
+    if (isLeafBlock(node, mode)) {
       tryExtract(node)
-      walkShadow(node)
+      walkShadow(node, mode)
       return
     }
 
-    if (hasBlockChild(node) || hasBrBrSeparator(node)) {
-      walkMixed(node)
-      walkShadow(node)
+    if (hasBlockChild(node, mode) || hasBrBrSeparator(node)) {
+      walkMixed(node, mode)
+      walkShadow(node, mode)
       return
     }
 
     if (tryExtract(node)) {
-      walkShadow(node)
+      walkShadow(node, mode)
       return
     }
 
     for (const child of node.children) {
-      walk(child)
+      walk(child, mode)
     }
-    walkShadow(node)
+    walkShadow(node, mode)
   }
 
-  function walkShadow(node: Element) {
+  // `mode`: ButtonMode for the shadow root's children (entered for the host).
+  function walkShadow(node: Element, mode: ButtonMode) {
     const root = node.shadowRoot
     if (!root) return
     // Defer the onShadowRoot callback (style injection + observer attach) — it
     // mutates the shadow root and would dirty layout mid-walk.
     pendingShadowRoots.push(root)
     for (const child of root.children) {
-      walk(child)
+      walk(child, mode)
     }
   }
 
-  walk(root)
-  if (root instanceof Element) walkShadow(root)
+  // Page chrome above `root` (a subtree re-walk inside a nav) is resolved once
+  // here; below it the walk carries the context down.
+  const rootParentMode: ButtonMode = !chrome
+    ? 'off'
+    : root.parentElement && closestThroughShadow(root.parentElement, CHROME_SELECTOR)
+      ? 'chrome'
+      : root.parentNode instanceof ShadowRoot && closestThroughShadow(root.parentNode.host, CHROME_SELECTOR)
+        ? 'chrome'
+        : 'body'
+  walk(root, rootParentMode)
+  if (root instanceof Element) walkShadow(root, enterMode(root, rootParentMode))
 
   // WRITE PHASE — every DOM mutation happens here, after all layout reads, so
   // the browser coalesces the work into a single reflow instead of one per node.

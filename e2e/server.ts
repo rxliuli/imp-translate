@@ -305,9 +305,11 @@ Collapsed tail paragraph that gets cut https://t.co/abc</span></div>
 <html lang="en">
 <head><title>Replace Mode</title></head>
 <body>
+  <nav id="nav"><a href="/login" id="login">Log in</a> <button id="save">Save</button></nav>
   <h1 id="title">Replace mode test page</h1>
   <p id="plain">This is a plain paragraph that should be replaced in place.</p>
   <p id="linked">Please read <a href="/docs" id="docs-link">the documentation</a> before you start.</p>
+  <footer id="footer"><p id="footer-note">Footer notice for this page</p></footer>
 </body>
 </html>`,
   '/x-longpost': `<!DOCTYPE html>

@@ -80,6 +80,11 @@ export default defineUnlistedScript(() => {
     get noStructuralWrites() {
       return displayMode === 'replace'
     },
+    // Same reason: in-place text swaps can't break nav/footer layout, so
+    // replace mode translates page chrome and ignores include rules.
+    get translateChrome() {
+      return displayMode === 'replace'
+    },
     isRunProcessed: (nodes) => nodes.some((n) => runOfNode.get(n)?.processed === true),
   }
 

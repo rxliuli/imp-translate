@@ -307,3 +307,59 @@ for (const mode of ['replace', 'bilingual'] as const) {
     await stopTranslation(page)
   })
 }
+
+// Bilingual mode skips <nav>/<footer> to protect their layout; replace mode
+// only rewrites Text.data, so it translates them too.
+test('replace mode translates nav and footer in place', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await openPage(page, `${baseURL}/replace-mode`)
+  await configureMockProvider(page, baseURL)
+  await setDisplayMode(context, 'replace')
+
+  const before = await page.evaluate(() => {
+    const w = window as unknown as { __save: Element; __saveText: Node; __login: Element }
+    w.__save = document.getElementById('save')!
+    w.__saveText = w.__save.firstChild!
+    w.__login = document.getElementById('login')!
+    return document.body.innerHTML
+  })
+
+  await startTranslation(page)
+
+  await expect(page.locator('#login')).toHaveText('[翻译] Log in', { timeout: 15000 })
+  await expect(page.locator('#save')).toHaveText('[翻译] Save')
+  await expect(page.locator('#footer-note')).toHaveText('[翻译] Footer notice for this page')
+  await expect(page.locator(RESULT)).toHaveCount(0)
+  expect(
+    await page.evaluate(() => {
+      const w = window as unknown as { __save: Element; __saveText: Node; __login: Element }
+      const save = document.getElementById('save')!
+      return {
+        sameSave: save === w.__save,
+        sameSaveText: save.firstChild === w.__saveText && save.childNodes.length === 1,
+        sameLogin: document.getElementById('login') === w.__login,
+        navChildren: document.getElementById('nav')!.children.length,
+      }
+    }),
+  ).toEqual({ sameSave: true, sameSaveText: true, sameLogin: true, navChildren: 2 })
+
+  await stopTranslation(page)
+  await expect(page.locator('#save')).toHaveText('Save')
+  expect(await page.evaluate(() => document.body.innerHTML)).toBe(before)
+})
+
+test('bilingual mode still leaves nav and footer alone', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await openPage(page, `${baseURL}/replace-mode`)
+  await configureMockProvider(page, baseURL)
+  await setDisplayMode(context, 'bilingual')
+
+  await startTranslation(page)
+  await expect(page.locator(`#plain ${TRANSLATED}`)).toBeVisible({ timeout: 15000 })
+  await page.waitForTimeout(1000)
+  await expect(page.locator(`#nav ${RESULT}`)).toHaveCount(0)
+  await expect(page.locator(`#footer ${RESULT}`)).toHaveCount(0)
+  await expect(page.locator('#login')).toHaveText('Log in')
+  await expect(page.locator('#save')).toHaveText('Save')
+  await expect(page.locator('#footer-note')).toHaveText('Footer notice for this page')
+})

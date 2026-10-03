@@ -1251,3 +1251,122 @@ describe('extractBlocks with noStructuralWrites', () => {
     ])
   })
 })
+
+describe('extractBlocks with translateChrome', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  const chromeHtml = `
+    <nav>
+      <ul>
+        <li>Main page</li>
+        <li><a href="#">Talk</a></li>
+      </ul>
+      <a href="#">Log in</a>
+      <button>Save</button>
+    </nav>
+    <p>Main content</p>
+    <footer><p>Copyright notice</p><button>Read</button></footer>
+  `
+
+  it('skips nav and footer by default', () => {
+    document.body.innerHTML = chromeHtml
+    expect(extractBlocks(document.body).map((b) => b.text)).toEqual(['Main content'])
+    expect(
+      extractBlocks(document.body, { noStructuralWrites: true }).map((b) => b.text),
+    ).toEqual(['Main content'])
+  })
+
+  it('collects li, a and button inside nav and footer', () => {
+    document.body.innerHTML = chromeHtml
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true, translateChrome: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text, b.nodes])).toEqual([
+      ['LI', 'Main page', undefined],
+      ['LI', 'Talk', undefined],
+      ['A', 'Log in', undefined],
+      ['BUTTON', 'Save', undefined],
+      ['P', 'Main content', undefined],
+      ['P', 'Copyright notice', undefined],
+      ['BUTTON', 'Read', undefined],
+    ])
+  })
+
+  it('collects a nav whose only content is inline as one block', () => {
+    document.body.innerHTML = '<nav><a href="/">Home</a></nav><p>Main content</p>'
+    const blocks = extractBlocks(document.body, { translateChrome: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+      ['NAV', 'Home'],
+      ['P', 'Main content'],
+    ])
+  })
+
+  it('still skips 1-2 char ASCII and letterless labels', () => {
+    document.body.innerHTML = '<nav><button>OK</button><button>42</button><button>»</button><button>Menu</button></nav>'
+    const blocks = extractBlocks(document.body, { translateChrome: true })
+    expect(blocks.map((b) => b.text)).toEqual(['Menu'])
+  })
+
+  it('keeps a button inside body text as part of one block', () => {
+    document.body.innerHTML = '<p id="p">Click <button>here</button> to continue</p>'
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true, translateChrome: true })
+    expect(blocks.map((b) => [b.element.id, b.text, b.nodes])).toEqual([
+      ['p', 'Click here to continue', undefined],
+    ])
+  })
+
+  it('splits buttons inside nav into separate blocks', () => {
+    document.body.innerHTML =
+      '<nav><span>Signed in</span> <button>Settings</button> <button>Sign out</button></nav>'
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true, translateChrome: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text, b.nodes])).toEqual([
+      ['SPAN', 'Signed in', undefined],
+      ['BUTTON', 'Settings', undefined],
+      ['BUTTON', 'Sign out', undefined],
+    ])
+  })
+
+  it('splits buttons inside a role="toolbar" element', () => {
+    document.body.innerHTML =
+      '<div role="toolbar"><button>Bold</button><button>Italic</button></div>' +
+      '<div><button>Undo</button><button>Redo</button></div>'
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true, translateChrome: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+      ['BUTTON', 'Bold'],
+      ['BUTTON', 'Italic'],
+      ['DIV', 'UndoRedo'],
+    ])
+  })
+
+  it('splits buttons when re-walking a subtree inside nav', () => {
+    document.body.innerHTML = '<nav><div id="sub"><button>Settings</button><button>Sign out</button></div></nav>'
+    const blocks = extractBlocks(document.getElementById('sub')!, { translateChrome: true })
+    expect(blocks.map((b) => b.text)).toEqual(['Settings', 'Sign out'])
+  })
+
+  it('ignores includeSelectors but still honors skipSelectors', () => {
+    document.body.innerHTML = `
+      <nav><a href="#">Log in</a><button class="skip">Save</button></nav>
+      <div class="main"><p>Inside include</p><p class="skip">Excluded inside</p></div>
+      <p>Outside include</p>
+    `
+    const opts = { includeSelectors: ['.main'], skipSelectors: ['.skip'] }
+    expect(extractBlocks(document.body, opts).map((b) => b.text)).toEqual(['Inside include'])
+    expect(
+      extractBlocks(document.body, { ...opts, noStructuralWrites: true, translateChrome: true }).map(
+        (b) => b.text,
+      ),
+    ).toEqual(['Log in', 'Inside include', 'Outside include'])
+  })
+
+  it('ignores includeSelectors for virtual inline runs', () => {
+    document.body.innerHTML =
+      '<div>Loose <b>inline</b> run<p>Para outside</p></div><div class="main"><p>Inside</p></div>'
+    const blocks = extractBlocks(document.body, {
+      includeSelectors: ['.main'],
+      noStructuralWrites: true,
+      translateChrome: true,
+    })
+    expect(blocks.map((b) => b.text)).toEqual(['Loose inline run', 'Para outside', 'Inside'])
+  })
+})
