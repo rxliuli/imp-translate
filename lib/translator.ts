@@ -224,7 +224,7 @@ async function bingSegmentSlot<T>(fn: () => Promise<T>): Promise<T> {
 // input comes back unchanged (= declined, see guardSegmentTranslator).
 async function bingTranslateSegments(text: string, to: string): Promise<string> {
   if (text.length <= BING_TEXT_LIMIT) return bingSegmentSlot(() => bingTranslateOne(text, to))
-  const tags = text.match(/<i id="\d+">[\s\S]*?<\/i>/g) ?? []
+  const tags = text.match(/<i id=(?:"\d+"|\d+)>[\s\S]*?<\/i>/g) ?? []
   if (tags.join('') !== text || tags.some((t) => t.length > BING_TEXT_LIMIT)) return text
   const chunks: string[] = []
   let current = ''
@@ -349,7 +349,7 @@ export function chatCompletionsUrl(baseUrl: string): string {
 }
 
 const SEGMENTS_PROMPT =
-  '\nThe input contains inline <i id="N"> tags marking pieces of the text. Keep every <i> tag with its id in the translation and wrap each tag around the translation of the text it originally wrapped. Tags may be reordered to follow natural word order in the target language, but never drop, merge, or add tags, and put no text outside them.'
+  '\nThe input contains inline <i id=N> tags marking pieces of the text. Keep every <i> tag with its id in the translation and wrap each tag around the translation of the text it originally wrapped. Tags may be reordered to follow natural word order in the target language, but never drop, merge, or add tags, and put no text outside them.'
 
 async function translateOpenAI(
   texts: string[],

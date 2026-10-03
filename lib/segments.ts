@@ -6,7 +6,11 @@ import { decodeHTML } from './translator'
 //
 // Each segment is wrapped in a real inline tag carrying its index:
 //
-//   <i id="0">Click </i><i id="1">here</i><i id="2"> for details</i>
+//   <i id=0>Click </i><i id=1>here</i><i id=2> for details</i>
+//
+// The id is unquoted: Bing's "smart quotes" turn id="0" into id=“0” (or
+// id=”0“), which an exact parser no longer recognizes. The parser still
+// accepts straight, single and curly quotes for engines that add them back.
 //
 // Real HTML tags (rather than custom ones) matter: Google's translateHtml
 // endpoint moves `<i>`/`<a>`/`<b>` around to follow target-language word
@@ -29,12 +33,25 @@ export function unescapeSegmentText(text: string): string {
 }
 
 export function encodeSegments(segments: string[]): string {
-  return segments.map((s, i) => `<i id="${i}">${escapeSegmentText(s)}</i>`).join('')
+  return segments.map((s, i) => `<i id=${i}>${escapeSegmentText(s)}</i>`).join('')
 }
 
 // Tolerates the attribute-quoting / spacing / case variations translators
-// (mostly LLMs) produce, but the content may not contain another <i> or </i>.
-const SEGMENT_RE = /<i\s+id\s*=\s*(?:"(\d+)"|'(\d+)'|(\d+))\s*>((?:(?!<\/?i\b)[\s\S])*?)<\/i\s*>/gi
+// produce (unquoted, "…", '…', and curly quotes in any pairing — Bing's smart
+// quotes give id=“0” or id=”0“), but the content may not contain another
+// <i> or </i>. Group 1 is the id, group 2 the content.
+const SEGMENT_RE =
+  /<i\s+id\s*=\s*["'“”‘’]?(\d+)["'“”‘’]?\s*>((?:(?!<\/?i\b)[\s\S])*?)<\/i\s*>/gi
+
+/**
+ * Whether a segment translation may come back empty, clearing its node:
+ * sources with at most 2 letters (punctuation, a possessive "s", an article
+ * " a ") are often folded into a neighbour by the translator. Emptying a
+ * longer word-bearing segment means the mapping failed.
+ */
+export function mayClearSegment(source: string): boolean {
+  return (source.trim().match(/\p{L}/gu)?.length ?? 0) <= 2
+}
 
 /** Number of segment tags in an encoded string (no validation). */
 export function countSegments(encoded: string): number {
@@ -80,10 +97,10 @@ export function parseSegmentTokens(encoded: string): SegmentToken[] {
   for (const m of encoded.matchAll(SEGMENT_RE)) {
     pushOutside(encoded.slice(last, m.index))
     last = m.index + m[0].length
-    const id = Number(m[1] ?? m[2] ?? m[3])
+    const id = Number(m[1])
     tokens.push({
       id: Number.isInteger(id) ? id : null,
-      text: unescapeSegmentText(stripMarkup(m[4])),
+      text: unescapeSegmentText(stripMarkup(m[2])),
     })
   }
   pushOutside(encoded.slice(last))
@@ -96,7 +113,7 @@ export function parseSegmentTokens(encoded: string): SegmentToken[] {
  */
 export function segmentMismatchReason(encoded: string, count: number): string {
   encoded = stripCodeFence(encoded)
-  const ids = [...encoded.matchAll(SEGMENT_RE)].map((m) => Number(m[1] ?? m[2] ?? m[3]))
+  const ids = [...encoded.matchAll(SEGMENT_RE)].map((m) => Number(m[1]))
   const reasons: string[] = []
   const missing = [...Array(count).keys()].filter((i) => !ids.includes(i))
   const dup = [...new Set(ids.filter((id, k) => ids.indexOf(id) !== k))]
@@ -141,11 +158,11 @@ export function decodeSegments(encoded: string, count: number): string[] | null 
     if (inside.length === 0) leading = outside
     else after[inside.length - 1] = outside
     last = m.index + m[0].length
-    const id = Number(m[1] ?? m[2] ?? m[3])
+    const id = Number(m[1])
     if (!Number.isInteger(id) || id < 0 || id >= count) return null
     if (seen[id]) return null
     seen[id] = true
-    inside.push(m[4])
+    inside.push(m[2])
     after.push('')
   }
   const trailing = encoded.slice(last)

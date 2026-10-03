@@ -10,15 +10,15 @@ import {
 } from './segments'
 
 describe('encodeSegments', () => {
-  it('wraps each segment in <i id="N">', () => {
+  it('wraps each segment in <i id=N> (unquoted: Bing smart-quotes quoted ids)', () => {
     expect(encodeSegments(['Click ', 'here', ' for details'])).toBe(
-      '<i id="0">Click </i><i id="1">here</i><i id="2"> for details</i>',
+      '<i id=0>Click </i><i id=1>here</i><i id=2> for details</i>',
     )
   })
 
   it('escapes segment text but not the tags', () => {
     expect(encodeSegments(['a < b & c > d', '<i id="9">x</i>'])).toBe(
-      '<i id="0">a &lt; b &amp; c &gt; d</i><i id="1">&lt;i id="9"&gt;x&lt;/i&gt;</i>',
+      '<i id=0>a &lt; b &amp; c &gt; d</i><i id=1>&lt;i id="9"&gt;x&lt;/i&gt;</i>',
     )
   })
 
@@ -61,6 +61,17 @@ describe('decodeSegments', () => {
       ' A\n ',
       'B ',
     ])
+  })
+
+  it('accepts curly-quoted ids in any pairing (Bing smart quotes)', () => {
+    expect(decodeSegments('<i id=“1”>B</i><i id=”0“>A</i><i id=’2‘>C</i>', 3)).toEqual([
+      'B',
+      'A',
+      'C',
+    ])
+    expect(parseSegmentTokens('<i id=“0”>A</i>')).toEqual([{ id: 0, text: 'A' }])
+    expect(countSegments('<i id=”0“>A</i><i id=1>B</i>')).toBe(2)
+    expect(segmentMismatchReason('<i id=“0”>A</i>', 2)).toBe('missing ids 1')
   })
 
   it('tolerates attribute quoting/spacing/case variants', () => {

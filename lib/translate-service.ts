@@ -2,6 +2,7 @@ import {
   decodeSegments,
   parseSegmentTokens,
   encodeSegments,
+  mayClearSegment,
   segmentMismatchReason,
   stripCodeFence,
   unescapeSegmentText,
@@ -138,12 +139,14 @@ export function createTranslateService(config: TranslateServiceConfig): Translat
 
 /**
  * Segments that carry no translatable content and are kept verbatim: whitespace
- * and citation-style markers such as "[", "12", "]". Wikipedia-like pages split
- * every reference into three Text nodes; sending dozens of these as tagged
- * segments makes Google misalign the ids of the real words around them.
+ * citation-style markers such as "[", "12", "]", and bare quote marks.
+ * Wikipedia-like pages split every reference into three Text nodes; sending
+ * dozens of these as tagged segments makes Google misalign the ids of the
+ * real words around them. Quote-only nodes (a link wrapped in “…”) give the
+ * translator nothing to translate and tend to come back moved or dropped.
  */
 export function isPassthroughSegment(s: string): boolean {
-  return /^[\s\[\]\d]*$/.test(s)
+  return /^[\s\[\]\d"'“”‘’]*$/.test(s)
 }
 
 export interface SegmentsResult {
@@ -172,8 +175,9 @@ export interface SegmentsResult {
  * reorder tags), so they are written back into the non-passthrough positions
  * in DOM order rather than by tag id. `segments` is null when that mapping
  * fails: ids missing/duplicated, or a piece came back empty although its
- * source has letters (its node would go blank). A piece left empty whose
- * source is pure punctuation stays '' — the caller clears that node. The raw
+ * source has 3+ letters (its node would go blank). A piece left empty whose
+ * source has at most 2 letters (punctuation, "s", " a ") stays '' — the
+ * caller clears that node (see mayClearSegment). The raw
  * output is returned as `html` either way, unless the translation came back
  * unchanged (a failed/declined translation, see guardSegmentTranslator). An
  * output without any tag (the engine dropped them all but did translate) is
@@ -230,9 +234,10 @@ export async function translateSegmentsVia(
 }
 
 // Position of a decoded piece that came back empty although the source piece
-// written to that position has letters (its node would go blank), or -1.
+// written to that position has 3+ letters (its node would go blank), or -1.
+// See mayClearSegment.
 function emptiedPiece(decoded: string[], sources: string[]): number {
-  return decoded.findIndex((d, k) => d.trim() === '' && /\p{L}/u.test(sources[k]))
+  return decoded.findIndex((d, k) => d.trim() === '' && !mayClearSegment(sources[k]))
 }
 
 /**

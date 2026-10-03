@@ -13,6 +13,7 @@
 // records the restore/source-text functions here cover as well.
 
 import { getVisibleTextNodes, getVisibleTextNodesOf, type TranslatableBlock } from './dom'
+import { mayClearSegment } from './segments'
 import {
   getRewrite,
   pruneRewrites,
@@ -180,8 +181,9 @@ export interface ApplyOptions {
 }
 
 // Write one translation per entry into its Text node. An empty segment
-// translation clears the node when its source has no letters (punctuation the
-// translator folded into a neighbour); otherwise — and always for a
+// translation clears the node when its source has at most 2 letters
+// (punctuation, a possessive "s", an article the translator folded into a
+// neighbour; see mayClearSegment); otherwise — and always for a
 // single-node translation — an empty translation keeps the original
 // (links/buttons must not go blank; translateSegmentsVia already rejects
 // outputs that empty a word-bearing segment). All values are computed first
@@ -196,7 +198,7 @@ export function applyReplacement(
   const next: (string | null)[] = entries.map((entry, i) => {
     const raw = translations[i] ?? ''
     const tr = raw.trim()
-    if (!tr) return !opts.keepNodeWhitespace && !/\p{L}/u.test(entry.source) ? '' : null
+    if (!tr) return !opts.keepNodeWhitespace && mayClearSegment(entry.source) ? '' : null
     if (opts.keepNodeWhitespace) return entry.leading + tr + entry.trailing
     const lead = segmentEdge(entry.leading, raw.match(/^\s*/)![0], entry.node)
     const trail = segmentEdge(entry.trailing, raw.match(/\s*$/)![0], entry.node)

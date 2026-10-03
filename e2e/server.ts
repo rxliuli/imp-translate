@@ -380,30 +380,33 @@ function sleep(ms: number): Promise<void> {
 }
 
 // Segment-encoded text (replace mode's translateSegments, see
-// lib/segments.ts) keeps its <i id="N"> tags; only each piece gets the
+// lib/segments.ts) keeps its <i id=N> tags; only each piece gets the
 // prefix, so the result decodes back onto the same inline nodes. Two
 // triggers exercise the fallbacks: a piece that is just "," comes back empty
 // (the node is cleared), and text containing "REWRITE" comes back reordered
 // with tag 0's text moved out in front and tag 0 left empty — a word-bearing
 // node would go blank, so the block is rewritten structurally. Text
 // containing "DROPTAGS" comes back translated but with every tag dropped.
-const SEGMENT_RE = /(<i id="\d+">)([\s\S]*?)(<\/i>)/g
+// Accepts both id forms: the extension sends <i id=N>, older/other
+// encoders <i id="N">.
+const SEGMENT_RE = /(<i id=(?:"(\d+)"|(\d+))>)([\s\S]*?)(<\/i>)/g
+const HAS_SEGMENT_RE = /<i id=(?:"\d+"|\d+)>/
 function mockTranslate(text: string): string {
-  if (/<i id="\d+">/.test(text) && text.includes('DROPTAGS')) {
+  if (HAS_SEGMENT_RE.test(text) && text.includes('DROPTAGS')) {
     return '[翻译]' + text.replace(/<\/?i[^>]*>/g, '')
   }
-  if (/<i id="\d+">/.test(text) && text.includes('REWRITE')) {
+  if (HAS_SEGMENT_RE.test(text) && text.includes('REWRITE')) {
     const tags = [...text.matchAll(SEGMENT_RE)]
-    const first = tags.find((m) => m[1] === '<i id="0">')!
+    const first = tags.find((m) => (m[2] ?? m[3]) === '0')!
     const rest = tags.filter((m) => m !== first).reverse()
     return (
-      `[翻译]${first[2]}` +
-      rest.map((m) => `${m[1]}[翻译]${m[2]}${m[3]}`).join('') +
-      '<i id="0"></i>'
+      `[翻译]${first[4]}` +
+      rest.map((m) => `${m[1]}[翻译]${m[4]}${m[5]}`).join('') +
+      '<i id=0></i>'
     )
   }
-  if (/<i id="\d+">/.test(text)) {
-    return text.replace(SEGMENT_RE, (_, open, body, close) =>
+  if (HAS_SEGMENT_RE.test(text)) {
+    return text.replace(SEGMENT_RE, (_, open, _q, _u, body, close) =>
       body.trim() === ',' ? `${open}${close}` : `${open}[翻译]${body}${close}`,
     )
   }

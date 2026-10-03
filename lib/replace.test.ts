@@ -165,6 +165,20 @@ describe('replace mode', () => {
     expect(p.innerHTML).toBe(`<a href="#">Apples</a>, <a href="#">pears</a>`)
   })
 
+  it('clears a node with at most 2 letters, keeps one with 3+', () => {
+    document.body.innerHTML = `<p><a href="#">John</a>s <b>a</b> big <i>cat</i></p>`
+    const p = document.querySelector('p')!
+    const entries = collectReplaceableTextNodes(blockOf(p))!
+    expect(entries.map((e) => e.segment)).toEqual(['John', 's ', 'a', ' big ', 'cat'])
+    applyReplacement(p, entries, ['约翰的', '', '', '', '猫'])
+    expect(p.childNodes[1].textContent).toBe('')
+    expect(p.querySelector('b')!.textContent).toBe('')
+    // " big " has 3 letters: never blanked.
+    expect(p.childNodes[3].textContent).toBe(' big ')
+    restoreReplacements()
+    expect(p.innerHTML).toBe(`<a href="#">John</a>s <b>a</b> big <i>cat</i>`)
+  })
+
   it('never clears a single-node block', () => {
     document.body.innerHTML = `<p>...</p>`
     const p = document.querySelector('p')!
