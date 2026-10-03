@@ -38,6 +38,17 @@ import {
   blockOwner,
   type ReplaceEntry,
 } from '@/lib/replace'
+import {
+  getRewrite,
+  MAX_REWRITES,
+  noteRewrite,
+  onRewriteStale,
+  resetRewriteCounts,
+  restoreRewrite,
+  rewriteBlock,
+  rewriteIntact,
+  rewriteText,
+} from '@/lib/rewrite'
 import { getSettings, saveSettings, type DisplayMode } from '@/lib/storage'
 import { isUrlOnly, debugTime } from '@/lib/utils'
 
@@ -123,6 +134,9 @@ export default defineUnlistedScript(() => {
     noop: boolean
     // Bilingual fallback nodes inserted after the run's last node.
     inserted: HTMLElement[] | null
+    // Top-level nodes of a structural rewrite (lib/rewrite.ts) standing in
+    // for `nodes`, which are detached meanwhile.
+    rewritten: Node[] | null
   }
   let runStates = new WeakMap<Node, RunState>()
   let runOfNode = new WeakMap<Node, RunState>()
@@ -134,6 +148,8 @@ export default defineUnlistedScript(() => {
   const RETRY_BACKOFF_MS = 5000
   const MAX_AUTO_RETRIES = 3
   let failures = new WeakMap<Node, { at: number; count: number }>()
+  // Owners whose rewrite loop was given up on (warned once).
+  let rewriteGaveUp = new WeakSet<Node>()
 
   function isBlockProcessed(block: TranslatableBlock): boolean {
     if (block.nodes) return runStates.get(block.nodes[0])?.processed === true
@@ -180,6 +196,7 @@ export default defineUnlistedScript(() => {
       processed: true,
       noop: false,
       inserted: null,
+      rewritten: null,
     }
     runStates.set(block.nodes[0], state)
     for (const n of block.nodes) runOfNode.set(n, state)
@@ -195,6 +212,9 @@ export default defineUnlistedScript(() => {
   // in-place replacements are left to the caller.
   function unregisterRun(state: RunState) {
     if (runStates.get(state.nodes[0]) === state) runStates.delete(state.nodes[0])
+    for (const n of liveNodes(state)) {
+      if (runOfNode.get(n) === state) runOfNode.delete(n)
+    }
     for (const n of state.nodes) {
       if (runOfNode.get(n) === state) runOfNode.delete(n)
     }
@@ -203,6 +223,28 @@ export default defineUnlistedScript(() => {
       for (const n of state.inserted) n.remove()
       state.inserted = null
     }
+  }
+
+  // The nodes a run currently shows: its own, or the rewrite standing in.
+  function liveNodes(state: RunState): Node[] {
+    return state.rewritten ?? state.nodes
+  }
+
+  // Undo a structural rewrite of the block, if any (its in-place Text.data
+  // replacements are left alone).
+  function undoRewrite(block: TranslatableBlock): boolean {
+    const owner = blockOwner(block)
+    if (!getRewrite(owner)) return false
+    if (block.nodes) {
+      const state = runStates.get(block.nodes[0])
+      if (state?.rewritten) {
+        for (const n of state.rewritten) {
+          if (runOfNode.get(n) === state) runOfNode.delete(n)
+        }
+        state.rewritten = null
+      }
+    }
+    return restoreRewrite(owner)
   }
 
   function unmarkBlock(block: TranslatableBlock) {
@@ -218,6 +260,7 @@ export default defineUnlistedScript(() => {
   // Put the page's text back for this block only (a virtual block's
   // container may hold other translated runs).
   function restoreBlock(block: TranslatableBlock) {
+    undoRewrite(block)
     if (block.nodes) restoreOwner(block.nodes[0])
     else restoreReplacements(block.element)
   }
@@ -295,6 +338,22 @@ export default defineUnlistedScript(() => {
     t(`sent ${batch.length} translate messages`)
   }
 
+  // Short description of a block for logs: tag + start of its text.
+  function describeBlock(block: TranslatableBlock): string {
+    const tag = block.element.tagName.toLowerCase() + (block.nodes ? ' (run)' : '')
+    return `<${tag}> "${block.text.slice(0, 40)}"`
+  }
+
+  // Replace mode's remaining bilingual path: logged, and marked in developer
+  // mode (on the block element, or a virtual block's container).
+  function fallbackToBilingual(blocks: TranslatableBlock[], reason: string) {
+    for (const block of blocks) {
+      console.warn(`[imp-translate] replace mode: bilingual fallback for ${describeBlock(block)}: ${reason}`)
+      if (devMode) block.element.setAttribute('data-imp-fallback', 'bilingual')
+    }
+    translateAsBilingual(blocks)
+  }
+
   // Bilingual fallback for a replace-mode block that can't be (or turned out
   // not to be) replaceable in place.
   function translateAsBilingual(blocks: TranslatableBlock[]) {
@@ -349,21 +408,32 @@ export default defineUnlistedScript(() => {
 
   // Replace mode. Single-node blocks use the plain `translate` message; a
   // block spread over several Text nodes (inline <a>/<strong>/...) needs
-  // per-node aligned segments, and falls back to bilingual when the provider
-  // can't produce them. Failures leave the original text untouched — no
-  // error/retry UI, since that would have to be appended anyway.
+  // per-node aligned segments. When the segment output can't be mapped onto
+  // the nodes, the block is rebuilt from it (structural rewrite, see
+  // lib/rewrite.ts); only when there is no tagged output at all (provider
+  // without segment support, declined translation) does it fall back to
+  // bilingual. Failures leave the original text untouched — no error/retry
+  // UI, since that would have to be appended anyway.
   async function translateInPlace(block: TranslatableBlock, entries: ReplaceEntry[]) {
     const el = block.element
     const sid = sessionId
     let translations: string[] | null
+    let html: string | null = null
+    let sentIndices: number[] = []
+    let reason: string | null = null
     try {
-      translations =
-        entries.length === 1
-          ? [await messager.sendMessage('translate', { text: block.text, targetLang })]
-          : await messager.sendMessage('translateSegments', {
-              segments: entries.map((e) => e.segment),
-              targetLang,
-            })
+      if (entries.length === 1) {
+        translations = [await messager.sendMessage('translate', { text: block.text, targetLang })]
+      } else {
+        const res = await messager.sendMessage('translateSegments', {
+          segments: entries.map((e) => e.segment),
+          targetLang,
+        })
+        translations = res.segments
+        html = res.html
+        sentIndices = res.sentIndices
+        reason = res.reason
+      }
     } catch (err) {
       console.error('[imp-translate] translation error:', err)
       if (sid !== sessionId || !isTranslating || isStale(block)) return
@@ -376,10 +446,14 @@ export default defineUnlistedScript(() => {
     if (sid !== sessionId || !isTranslating || isStale(block)) return
     if (!block.nodes) unmarkLoading(el)
     if (!translations || translations.length !== entries.length) {
+      if (html) {
+        rewriteInPlace(block, entries, sentIndices, html, reason ?? 'unmappable output')
+        return
+      }
       // A retranslation may still show our older in-place translation; put
       // the page's text back before appending the bilingual one.
       restoreBlock(block)
-      translateAsBilingual([block])
+      fallbackToBilingual([block], reason ?? 'no segment translation')
       return
     }
     // The page edited one of the nodes while we waited: its mutation has
@@ -404,10 +478,82 @@ export default defineUnlistedScript(() => {
     discardSelfMutations()
   }
 
+  // Structural rewrite of a block whose segment translation can't be poured
+  // into its Text nodes.
+  function rewriteInPlace(
+    block: TranslatableBlock,
+    entries: ReplaceEntry[],
+    sentIndices: number[],
+    html: string,
+    reason: string,
+  ) {
+    // The page edited the block meanwhile: its recheck retranslates it.
+    if (!entriesIntact(entries)) {
+      discardSelfMutations()
+      return
+    }
+    // A retranslation may still show our older in-place translation: the
+    // detached originals must hold the page's text.
+    restoreBlock(block)
+    const owner = blockOwner(block)
+    const norm = (t: string) => t.replace(/\s+/g, ' ').trim().toLowerCase()
+    if (norm(rewriteText(html)) === norm(block.text)) {
+      // Nothing to show instead of the page's text.
+      setBlockNoop(block, true)
+      failures.delete(owner)
+      discardSelfMutations()
+      return
+    }
+    if (!noteRewrite(owner)) {
+      // The page keeps undoing our rewrites (each undo retranslates and
+      // rewrites again): give up and leave the page's text.
+      if (!rewriteGaveUp.has(owner)) {
+        rewriteGaveUp.add(owner)
+        console.warn(
+          `[imp-translate] replace mode: giving up on ${describeBlock(block)}: rewritten more than ${MAX_REWRITES} times, the page keeps changing it`,
+        )
+      }
+      if (devMode) block.element.setAttribute('data-imp-fallback', 'rewrite-loop')
+      discardSelfMutations()
+      return
+    }
+    const rec = rewriteBlock(block, owner, entries, sentIndices, html, {
+      debugReason: devMode ? reason : undefined,
+      skipSelectors: extractOpts.skipSelectors,
+    })
+    if (!rec) {
+      // The run's nodes moved meanwhile: keep the page's text, and let a
+      // later rescan/recheck pick the block up again.
+      console.warn(
+        `[imp-translate] replace mode: structural rewrite of ${describeBlock(block)} skipped: block structure changed`,
+      )
+      unmarkBlock(block)
+      discardSelfMutations()
+      return
+    }
+    console.warn(
+      `[imp-translate] replace mode: structural rewrite of ${describeBlock(block)}: ${reason} | engine html: ${html.slice(0, 200)}`,
+    )
+    if (block.nodes) {
+      const state = runStates.get(block.nodes[0])
+      if (state) {
+        state.rewritten = rec.insertedNodes
+        // Mutation lookups (findRun) and the walk's isRunProcessed must find
+        // the run through the nodes now on screen.
+        for (const n of rec.insertedNodes) runOfNode.set(n, state)
+      }
+    }
+    failures.delete(blockOwner(block))
+    discardSelfMutations()
+  }
+
   function translateBlocksInPlace(blocks: TranslatableBlock[]) {
     pruneDisconnected()
     const fallback: TranslatableBlock[] = []
     for (const block of blocks) {
+      // Not expected (a rewritten block stays marked), but its content would
+      // be our own clones.
+      undoRewrite(block)
       // reuseOwned: a block unmarked after a failed retranslation (see
       // translationFailed) may still show its own older translation.
       const entries = collectReplaceableTextNodes(block, extractOpts.skipSelectors, {
@@ -424,7 +570,9 @@ export default defineUnlistedScript(() => {
       translateInPlace(block, entries)
     }
     discardSelfMutations()
-    translateAsBilingual(fallback)
+    if (fallback.length > 0) {
+      fallbackToBilingual(fallback, 'text not mappable onto whole text nodes')
+    }
   }
 
   async function filterByLanguage(
@@ -635,6 +783,13 @@ export default defineUnlistedScript(() => {
   // place; the caller then re-extracts it.
   async function retranslateInPlace(block: TranslatableBlock): Promise<boolean> {
     const el = block.element
+    // A structurally rewritten block shows our clones, not the page's nodes:
+    // put the originals back and translate them afresh (the original text
+    // shows until the new translation lands).
+    if (undoRewrite(block)) {
+      const text = blockSourceText(block)
+      if (text) block.text = text
+    }
     const entries = collectReplaceableTextNodes(block, extractOpts.skipSelectors, {
       reuseOwned: true,
     })
@@ -684,7 +839,12 @@ export default defineUnlistedScript(() => {
   // The run's nodes are still consecutive children of its container (our own
   // inserted results aside).
   function runIntact(state: RunState): boolean {
-    const { nodes, container } = state
+    const { container } = state
+    if (state.rewritten) {
+      const rec = getRewrite(state.nodes[0])
+      return !!rec && rewriteIntact(rec)
+    }
+    const nodes = state.nodes
     if (nodes[0].parentNode !== container) return false
     for (let i = 1; i < nodes.length; i++) {
       let next = nodes[i - 1].nextSibling
@@ -788,7 +948,10 @@ export default defineUnlistedScript(() => {
       // our translation. Our own writes never change the source text, so
       // they can't trigger a retranslation loop.
       const currentText = getSourceText(el, extractOpts.skipSelectors).trim()
-      if (storedText === currentText) continue
+      // A structural rewrite the page changed (our clones, or the detached
+      // originals) is redone even when the source text is the same.
+      const rewrite = getRewrite(el)
+      if (storedText === currentText && (!rewrite || rewriteIntact(rewrite))) continue
       retranslateElement(el, currentText)
     }
     pendingRecheck.clear()
@@ -810,6 +973,19 @@ export default defineUnlistedScript(() => {
     }
     pendingRunRecheck.clear()
   }
+
+  // The page changed the detached originals of a rewritten block (e.g. a
+  // framework updated text it rendered): recheck it, which undoes the
+  // rewrite and translates the page's current content.
+  onRewriteStale((rec) => {
+    if (!isTranslating) return
+    const state = runStates.get(rec.owner)
+    if (state) pendingRunRecheck.add(state)
+    else if (rec.owner instanceof Element) pendingRecheck.add(rec.owner)
+    else return
+    if (recheckTimer) clearTimeout(recheckTimer)
+    recheckTimer = setTimeout(flushRecheck, 300)
+  })
 
   let delayedRescanTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -842,11 +1018,11 @@ export default defineUnlistedScript(() => {
             // Children added/removed in or right next to a run change what
             // the run is: re-extract it rather than patching its node list.
             for (const state of runs) {
+              const nodes = liveNodes(state)
               const touches =
-                changed.some((n) => state.nodes.includes(n)) ||
-                (mutation.previousSibling !== null &&
-                  state.nodes.includes(mutation.previousSibling)) ||
-                (mutation.nextSibling !== null && state.nodes.includes(mutation.nextSibling))
+                changed.some((n) => nodes.includes(n)) ||
+                (mutation.previousSibling !== null && nodes.includes(mutation.previousSibling)) ||
+                (mutation.nextSibling !== null && nodes.includes(mutation.nextSibling))
               if (touches) {
                 pendingRunReset.add(state)
                 resetContainer = target as Element
@@ -1018,13 +1194,13 @@ export default defineUnlistedScript(() => {
     })
   }
 
-  let debugMode = false
+  let devMode = false
 
   async function loadDeveloperSettings() {
     try {
       const result = await browser.storage.local.get('settings')
       const settings = result.settings as Record<string, unknown> | undefined
-      debugMode = settings?.debugMode === true
+      devMode = settings?.developerMode === true
     } catch {}
   }
 
@@ -1045,7 +1221,7 @@ export default defineUnlistedScript(() => {
     t('state set')
     await loadDeveloperSettings()
     t('loadDeveloperSettings done')
-    if (debugMode) injectDebugStyles()
+    if (devMode) injectDebugStyles()
     await waitForDOMReady()
     t('waitForDOMReady done')
     if (!isTranslating) { t('stopped mid-init'); return }
@@ -1126,6 +1302,8 @@ export default defineUnlistedScript(() => {
     runOfNode = new WeakMap()
     containerRuns = new WeakMap()
     failures = new WeakMap()
+    rewriteGaveUp = new WeakSet()
+    resetRewriteCounts()
     document.removeEventListener('toggle', onToggle, { capture: true })
     document.removeEventListener('click', onClick, { capture: true })
     document.removeEventListener('scroll', onScroll, { capture: true })
@@ -1133,7 +1311,7 @@ export default defineUnlistedScript(() => {
     clearTranslations(document.body)
     removeStyles()
     removeDebugStyles()
-    debugMode = false
+    devMode = false
     if (!keepToast) dismissToast()
   }
 

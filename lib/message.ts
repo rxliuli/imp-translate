@@ -19,6 +19,14 @@ export interface TranslateSegmentsRequest {
   targetLang: string
 }
 
+export interface TranslateSegmentsResult {
+  segments: string[] | null
+  html: string | null
+  sentIndices: number[]
+  // Why `segments` is null, for logs; null when it isn't.
+  reason: string | null
+}
+
 // One protocol for both directions: extension page/content script → background
 // with no target (runtime messaging), and background → content script with an
 // explicit target. `@webext-core/messaging` picks the API from the send
@@ -29,11 +37,16 @@ export interface TranslateSegmentsRequest {
 export const messager = defineExtensionMessaging<{
   translate(req: TranslateRequest): string
   translateBatch(req: TranslateBatchRequest): string[]
-  // Returns the translated segments aligned 1:1 by position with the input
-  // (not trimmed — whitespace handling is the caller's job), or null when the
-  // provider can't keep segment boundaries or its output can't be mapped back
-  // reliably; the caller then falls back to plain translation.
-  translateSegments(req: TranslateSegmentsRequest): string[] | null
+  // `segments`: the translations aligned 1:1 by position with the input (not
+  // trimmed — whitespace handling is the caller's job; '' means "clear this
+  // node", only for punctuation-only sources), or null when the output can't
+  // be poured into the existing nodes. `html`: the engine's raw tagged output
+  // (unescaped tags, escaped text) for the structural rewrite; null when there
+  // is none (provider without segment support, declined translation).
+  // `sentIndices`: input positions that were sent — tag id j is segment
+  // sentIndices[j]. `reason`: why segments is null (logged by the content
+  // script). Provider request failures reject.
+  translateSegments(req: TranslateSegmentsRequest): TranslateSegmentsResult
   // connect content script (imp-connect.content.ts) => background: exchanges
   // the one-time code read off the success page's <meta> tag for a persistent
   // Imp Credits api key (see imp-credits docs/extension-integration.md).

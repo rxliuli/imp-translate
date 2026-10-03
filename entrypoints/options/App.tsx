@@ -434,7 +434,10 @@ export function App() {
               Developer Mode
             </Label>
             <p className="text-xs text-muted-foreground">
-              Enables access to features suitable for technical users.
+              Unlocks custom skip rules and outlines translation issues on
+              pages: blocks whose translation matched the original, blocks
+              that needed a structural rewrite, and blocks that fell back to
+              bilingual.
             </p>
           </div>
         </div>
@@ -456,25 +459,6 @@ export function App() {
                 <code className="bg-muted px-1 rounded">domain##selector</code>{' '}
                 — elements matching the CSS selector will not be translated.
               </p>
-            </div>
-
-            <div className="flex items-start gap-2">
-              <Checkbox
-                id="debug-mode"
-                checked={settings.debugMode}
-                onCheckedChange={(checked) =>
-                  update({ debugMode: checked === true })
-                }
-              />
-              <div className="grid gap-0.5 leading-none">
-                <Label htmlFor="debug-mode" className="cursor-pointer">
-                  Debug Mode
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Outline blocks whose translation matched the original (likely
-                  false positives) so you can write skip rules for them.
-                </p>
-              </div>
             </div>
 
             <div className="space-y-2">

@@ -312,6 +312,39 @@ Collapsed tail paragraph that gets cut https://t.co/abc</span></div>
   <footer id="footer"><p id="footer-note">Footer notice for this page</p></footer>
 </body>
 </html>`,
+  // Replace mode fallbacks: #rewrite gets an output that can't be poured into
+  // its nodes (structural rewrite), #punct a comma segment that comes back
+  // empty (node cleared). See mockTranslate.
+  '/replace-rewrite': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Replace Rewrite</title></head>
+<body>
+  <p id="rewrite">REWRITE: please read <a href="/guide" id="guide-link" class="g">the guide</a> carefully.</p>
+  <p id="punct"><a href="/a">Apples</a>, <a href="/p">pears</a> and plums</p>
+  <p id="droptags">DROPTAGS: see <a href="/notes" id="notes-link">the notes</a><sup id="cite">[1]</sup> for more.</p>
+</body>
+</html>`,
+  // A page script that touches every rewrite of ours (appends a node to the
+  // block whenever it shows a translation): replace mode must stop
+  // rewriting it after a few rounds.
+  '/replace-rewrite-loop': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Replace Rewrite Loop</title></head>
+<body>
+  <p id="loop">REWRITE loop: the page keeps <b>changing</b> this block.</p>
+  <script>
+    setInterval(function () {
+      var p = document.getElementById('loop');
+      // Once per rewrite (a rewrite drops our earlier, whitespace-only node).
+      var touched = [].some.call(p.childNodes, function (n) { return n.__touch; });
+      if (touched || p.textContent.indexOf('[翻译]') === -1) return;
+      var t = document.createTextNode(' ');
+      t.__touch = true;
+      p.appendChild(t);
+    }, 200);
+  </script>
+</body>
+</html>`,
   '/x-longpost': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Long Post</title></head>
@@ -348,11 +381,31 @@ function sleep(ms: number): Promise<void> {
 
 // Segment-encoded text (replace mode's translateSegments, see
 // lib/segments.ts) keeps its <i id="N"> tags; only each piece gets the
-// prefix, so the result decodes back onto the same inline nodes.
+// prefix, so the result decodes back onto the same inline nodes. Two
+// triggers exercise the fallbacks: a piece that is just "," comes back empty
+// (the node is cleared), and text containing "REWRITE" comes back reordered
+// with tag 0's text moved out in front and tag 0 left empty — a word-bearing
+// node would go blank, so the block is rewritten structurally. Text
+// containing "DROPTAGS" comes back translated but with every tag dropped.
 const SEGMENT_RE = /(<i id="\d+">)([\s\S]*?)(<\/i>)/g
 function mockTranslate(text: string): string {
+  if (/<i id="\d+">/.test(text) && text.includes('DROPTAGS')) {
+    return '[翻译]' + text.replace(/<\/?i[^>]*>/g, '')
+  }
+  if (/<i id="\d+">/.test(text) && text.includes('REWRITE')) {
+    const tags = [...text.matchAll(SEGMENT_RE)]
+    const first = tags.find((m) => m[1] === '<i id="0">')!
+    const rest = tags.filter((m) => m !== first).reverse()
+    return (
+      `[翻译]${first[2]}` +
+      rest.map((m) => `${m[1]}[翻译]${m[2]}${m[3]}`).join('') +
+      '<i id="0"></i>'
+    )
+  }
   if (/<i id="\d+">/.test(text)) {
-    return text.replace(SEGMENT_RE, (_, open, body, close) => `${open}[翻译]${body}${close}`)
+    return text.replace(SEGMENT_RE, (_, open, body, close) =>
+      body.trim() === ',' ? `${open}${close}` : `${open}[翻译]${body}${close}`,
+    )
   }
   return `[翻译] ${text}`
 }

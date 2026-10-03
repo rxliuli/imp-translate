@@ -39,6 +39,18 @@ describe('storage', () => {
     expect((await getSettings()).displayMode).toBe('bilingual')
   })
 
+  it('drops the removed debugMode field (merged into developerMode)', async () => {
+    const { getSettings, saveSettings } = await import('./storage')
+    localStore.set('settings', { targetLang: 'ja', debugMode: true, developerMode: false })
+    const settings = await getSettings()
+    expect('debugMode' in settings).toBe(false)
+    expect(settings.developerMode).toBe(false)
+    // Reading doesn't rewrite storage; the next save drops it.
+    expect(localStore.get('settings')).toHaveProperty('debugMode', true)
+    await saveSettings({ targetLang: 'fr' })
+    expect(localStore.get('settings')).toEqual({ targetLang: 'fr', developerMode: false })
+  })
+
   it('saveSettings only persists provided fields', async () => {
     const { saveSettings } = await import('./storage')
     await saveSettings({ targetLang: 'ja' })

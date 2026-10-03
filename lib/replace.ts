@@ -7,9 +7,19 @@
 // pages (insertBefore reference node detached), makes Lit throw, and freezes
 // dynamic text everywhere else, while plain nodeValue writes are invisible to
 // all of them. Anything that cannot be mapped cleanly onto whole Text nodes is
-// reported as non-replaceable so the caller falls back to bilingual mode.
+// reported as non-replaceable so the caller falls back to bilingual mode —
+// or, when only the translation can't be mapped onto the nodes, to the
+// structural rewrite in rewrite.ts (the one exception to the rule), whose
+// records the restore/source-text functions here cover as well.
 
 import { getVisibleTextNodes, getVisibleTextNodesOf, type TranslatableBlock } from './dom'
+import {
+  getRewrite,
+  pruneRewrites,
+  restoreRewrite,
+  rewriteRecords,
+  rewriteSourceText,
+} from './rewrite'
 
 export const LOADING_ATTR = 'data-imp-loading'
 
@@ -69,6 +79,7 @@ export function pruneDisconnected() {
   for (const el of loading) {
     if (!el.isConnected) loading.delete(el)
   }
+  pruneRewrites()
 }
 
 export interface CollectOptions {
@@ -168,9 +179,13 @@ export interface ApplyOptions {
   keepNodeWhitespace?: boolean
 }
 
-// Write one translation per entry into its Text node. An empty translation
-// for a non-empty source keeps the original (links/buttons must not go
-// blank). All values are computed first (layout reads), then written.
+// Write one translation per entry into its Text node. An empty segment
+// translation clears the node when its source has no letters (punctuation the
+// translator folded into a neighbour); otherwise — and always for a
+// single-node translation — an empty translation keeps the original
+// (links/buttons must not go blank; translateSegmentsVia already rejects
+// outputs that empty a word-bearing segment). All values are computed first
+// (layout reads), then written.
 // Returns the number of nodes written. `owner` is blockOwner(block).
 export function applyReplacement(
   owner: Node,
@@ -181,7 +196,7 @@ export function applyReplacement(
   const next: (string | null)[] = entries.map((entry, i) => {
     const raw = translations[i] ?? ''
     const tr = raw.trim()
-    if (!tr) return null
+    if (!tr) return !opts.keepNodeWhitespace && !/\p{L}/u.test(entry.source) ? '' : null
     if (opts.keepNodeWhitespace) return entry.leading + tr + entry.trailing
     const lead = segmentEdge(entry.leading, raw.match(/^\s*/)![0], entry.node)
     const trail = segmentEdge(entry.trailing, raw.match(/\s*$/)![0], entry.node)
@@ -225,8 +240,13 @@ export function applyReplacement(
 // translation contribute their original instead. Equal to getVisibleText
 // when nothing was replaced, and unaffected by our own writes — so comparing
 // it against data-imp-text detects page edits without reacting to ourselves.
-// Takes an element, or a virtual block's nodes.
+// Takes an element, or a virtual block's nodes. A structurally rewritten
+// block reports the live text of the nodes it was rewritten from (whether
+// our content is still intact is rewriteIntact's question).
 export function getSourceText(target: Element | Node[], skipSelectors?: string[]): string {
+  const owner = Array.isArray(target) ? target[0] : target
+  const rewrite = owner ? getRewrite(owner) : undefined
+  if (rewrite) return rewriteSourceText(rewrite)
   const nodes = Array.isArray(target)
     ? getVisibleTextNodesOf(target, skipSelectors)
     : getVisibleTextNodes(target, skipSelectors)
@@ -283,6 +303,10 @@ export function restoreReplacements(root?: Node) {
     }
     restoreNodes(owner, nodes)
   }
+  for (const rec of [...rewriteRecords()]) {
+    if (root && !containsComposed(root, rec.container)) continue
+    restoreRewrite(rec.owner)
+  }
   for (const el of loading) {
     if (root && !containsComposed(root, el)) continue
     unmarkLoading(el)
@@ -304,4 +328,5 @@ function restoreNodes(owner: Node, nodes: Set<Text>) {
 export function restoreOwner(owner: Node) {
   const nodes = registry.get(owner)
   if (nodes) restoreNodes(owner, nodes)
+  restoreRewrite(owner)
 }

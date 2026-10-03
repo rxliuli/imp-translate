@@ -141,13 +141,36 @@ describe('replace mode', () => {
     expect(p.textContent).toBe('一 二')
   })
 
-  it('keeps the original when a segment translation is empty', () => {
+  it('keeps the original when a segment translation of a word-bearing source is empty', () => {
     document.body.innerHTML = `<p>Click <a href="#">here</a> now</p>`
     const p = document.querySelector('p')!
     const entries = collectReplaceableTextNodes(blockOf(p))!
     applyReplacement(p, entries, ['点击', '  ', '现在'])
     expect(p.querySelector('a')!.textContent).toBe('here')
     expect(p.textContent).toBe('点击here现在')
+  })
+
+  it('clears a punctuation-only node whose segment translation is empty, and restores it', () => {
+    document.body.innerHTML = `<p><a href="#">Apples</a>, <a href="#">pears</a></p>`
+    const p = document.querySelector('p')!
+    const comma = p.childNodes[1] as Text
+    const entries = collectReplaceableTextNodes(blockOf(p))!
+    expect(entries.map((e) => e.segment)).toEqual(['Apples', ', ', 'pears'])
+    applyReplacement(p, entries, ['苹果', '', '和梨'])
+    expect(comma.data).toBe('')
+    expect(p.textContent).toBe('苹果和梨')
+    expect(getSourceText(p)).toBe('Apples, pears')
+    restoreReplacements()
+    expect(comma.data).toBe(', ')
+    expect(p.innerHTML).toBe(`<a href="#">Apples</a>, <a href="#">pears</a>`)
+  })
+
+  it('never clears a single-node block', () => {
+    document.body.innerHTML = `<p>...</p>`
+    const p = document.querySelector('p')!
+    const entries = collectReplaceableTextNodes({ element: p, text: '...' })!
+    applyReplacement(p, entries, [''], { keepNodeWhitespace: true })
+    expect(p.textContent).toBe('...')
   })
 
   it('does not overwrite a node the page rewrote after translation', () => {

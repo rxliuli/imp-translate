@@ -4,6 +4,7 @@ import {
   configureMockProvider,
   getServiceWorker,
   openBackgroundPopup,
+  setCustomRules,
   setDisplayMode,
   startTranslation,
   stopTranslation,
@@ -263,7 +264,18 @@ for (const mode of ['replace', 'bilingual'] as const) {
     if (mode === 'replace') {
       // S5/S6 got translated in place...
       await expect(page.locator('#s5')).toContainText('[翻译]')
-      await expect(page.locator('#s6')).toContainText('[翻译]')
+      // S6's text keeps changing, so a single check can catch it between a
+      // change and its retranslation: it must show a translation at least
+      // once in a 6s window.
+      const s6Translated = await page.evaluate(async () => {
+        const end = performance.now() + 6000
+        while (performance.now() < end) {
+          if (document.getElementById('s6')!.textContent!.includes('[翻译]')) return true
+          await new Promise((r) => setTimeout(r, 50))
+        }
+        return false
+      })
+      expect(s6Translated).toBe(true)
       const structure = await page.evaluate(() => {
         const w = window as unknown as {
           __s5refs: { em: Element; a: Element }
@@ -362,4 +374,188 @@ test('bilingual mode still leaves nav and footer alone', async ({ context, baseU
   await expect(page.locator('#login')).toHaveText('Log in')
   await expect(page.locator('#save')).toHaveText('Save')
   await expect(page.locator('#footer-note')).toHaveText('Footer notice for this page')
+})
+
+test('replace mode rebuilds a paragraph whose segments cannot be mapped back', async ({
+  context,
+  baseURL,
+}) => {
+  const page = await context.newPage()
+  const warnings: string[] = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'warning') warnings.push(msg.text())
+  })
+  await openPage(page, `${baseURL}/replace-rewrite`)
+  await configureMockProvider(page, baseURL)
+  await setDisplayMode(context, 'replace')
+
+  const before = await page.evaluate(() => {
+    const p = document.getElementById('rewrite')!
+    ;(window as unknown as { __nodes: Node[] }).__nodes = [...p.childNodes]
+    return p.innerHTML
+  })
+
+  await startTranslation(page)
+
+  const p = page.locator('#rewrite')
+  // Mock output: tag 0's text moved in front, tags reversed, tag 0 empty.
+  await expect(p).toHaveText(
+    '[翻译]REWRITE: please read [翻译] carefully.[翻译]the guide',
+    { timeout: 15000 },
+  )
+  await expect(page.locator(RESULT)).toHaveCount(0)
+  // The link is a clone that keeps its attributes.
+  const link = p.locator('a')
+  await expect(link).toHaveCount(1)
+  await expect(link).toHaveAttribute('href', '/guide')
+  await expect(link).toHaveAttribute('class', 'g')
+  await expect(link).toHaveText('[翻译]the guide')
+  await expect
+    .poll(() =>
+      warnings.find(
+        (w) =>
+          w.includes('[imp-translate] replace mode: structural rewrite of <p> "REWRITE') &&
+          w.includes("empty segment for 'REWRITE: please read'") &&
+          w.includes('engine html: [翻译]REWRITE'),
+      ),
+    )
+    .toBeTruthy()
+  // Developer mode is off: no marker.
+  expect(await p.getAttribute('data-imp-rewritten')).toBeNull()
+
+  await stopTranslation(page)
+  await expect(p).toHaveText('REWRITE: please read the guide carefully.')
+  expect(await p.evaluate((el) => el.innerHTML)).toBe(before)
+  // The page's own nodes are back, not copies.
+  expect(
+    await p.evaluate((el) => {
+      const nodes = (window as unknown as { __nodes: Node[] }).__nodes
+      const now = [...el.childNodes]
+      return now.length === nodes.length && now.every((n, i) => n === nodes[i])
+    }),
+  ).toBe(true)
+})
+
+test('replace mode clears a punctuation node whose segment comes back empty', async ({
+  context,
+  baseURL,
+}) => {
+  const page = await context.newPage()
+  await openPage(page, `${baseURL}/replace-rewrite`)
+  await configureMockProvider(page, baseURL)
+  await setDisplayMode(context, 'replace')
+  const before = await page.locator('#punct').evaluate((el) => el.innerHTML)
+
+  await startTranslation(page)
+
+  const p = page.locator('#punct')
+  await expect(p).toHaveText('[翻译]Apples[翻译]pears[翻译] and plums', { timeout: 15000 })
+  // Written in place: same nodes, the comma's Text node is just empty.
+  expect(
+    await p.evaluate((el) => ({
+      count: el.childNodes.length,
+      comma: (el.childNodes[1] as Text).data,
+      elements: el.querySelectorAll('*').length,
+    })),
+  ).toEqual({ count: 4, comma: '', elements: 2 })
+  await expect(page.locator(RESULT)).toHaveCount(0)
+
+  await stopTranslation(page)
+  expect(await p.evaluate((el) => el.innerHTML)).toBe(before)
+})
+
+test('developer mode outlines structurally rewritten blocks', async ({ context, baseURL }) => {
+  const page = await context.newPage()
+  await openPage(page, `${baseURL}/replace-rewrite`)
+  await configureMockProvider(page, baseURL)
+  await setDisplayMode(context, 'replace')
+  await setCustomRules(context, '')
+
+  await startTranslation(page)
+
+  const p = page.locator('#rewrite')
+  await expect(p).toContainText('[翻译]the guide', { timeout: 15000 })
+  await expect(p).toHaveAttribute('data-imp-rewritten', "empty segment for 'REWRITE: please read'")
+  expect(
+    await page.evaluate(
+      () => document.getElementById('imp-translate-debug-style')?.textContent ?? '',
+    ),
+  ).toContain('[data-imp-rewritten]')
+  // Written in place: not marked.
+  await expect(page.locator('#punct')).toContainText('[翻译]pears')
+  expect(await page.locator('#punct').getAttribute('data-imp-rewritten')).toBeNull()
+
+  await stopTranslation(page)
+  await expect(p).toHaveText('REWRITE: please read the guide carefully.')
+  expect(await p.getAttribute('data-imp-rewritten')).toBeNull()
+})
+
+test('replace mode rewrites a block as plain text when the engine drops every tag', async ({
+  context,
+  baseURL,
+}) => {
+  const page = await context.newPage()
+  const warnings: string[] = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'warning') warnings.push(msg.text())
+  })
+  await openPage(page, `${baseURL}/replace-rewrite`)
+  await configureMockProvider(page, baseURL)
+  await setDisplayMode(context, 'replace')
+  const p = page.locator('#droptags')
+  const before = await p.evaluate((el) => el.innerHTML)
+
+  await startTranslation(page)
+
+  // The translation is plain text at block level; the citation (never sent)
+  // is kept, the link's text is part of the plain text.
+  await expect(p).toHaveText('[翻译]DROPTAGS: see the notes for more.[1]', { timeout: 15000 })
+  await expect(p.locator('a')).toHaveCount(0)
+  await expect(p.locator('sup#cite')).toHaveText('[1]')
+  await expect(page.locator(RESULT)).toHaveCount(0)
+  await expect
+    .poll(() =>
+      warnings.find(
+        (w) =>
+          w.includes('structural rewrite of <p> "DROPTAGS') &&
+          w.includes('engine dropped all tags'),
+      ),
+    )
+    .toBeTruthy()
+
+  await stopTranslation(page)
+  expect(await p.evaluate((el) => el.innerHTML)).toBe(before)
+})
+
+test('replace mode gives up on a block whose page keeps undoing the rewrite', async ({
+  context,
+  baseURL,
+}) => {
+  const page = await context.newPage()
+  const warnings: string[] = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'warning') warnings.push(msg.text())
+  })
+  await openPage(page, `${baseURL}/replace-rewrite-loop`)
+  await configureMockProvider(page, baseURL)
+  await setDisplayMode(context, 'replace')
+  await setCustomRules(context, '')
+
+  await startTranslation(page)
+
+  await expect
+    .poll(() => warnings.find((w) => w.includes('giving up on <p> "REWRITE loop')), {
+      timeout: 20000,
+    })
+    .toBeTruthy()
+  expect(
+    warnings.filter((w) => w.includes('structural rewrite of <p> "REWRITE loop')),
+  ).toHaveLength(3)
+  const p = page.locator('#loop')
+  await expect(p).toHaveAttribute('data-imp-fallback', 'rewrite-loop')
+  await expect(p).not.toContainText('[翻译]')
+  // And it stays that way.
+  await page.waitForTimeout(1500)
+  await expect(p).not.toContainText('[翻译]')
+  expect(warnings.filter((w) => w.includes('giving up'))).toHaveLength(1)
 })

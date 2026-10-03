@@ -2,7 +2,7 @@ import type { Settings, TranslationProvider } from './storage'
 import { applyRequestInterceptors, type OpenAIRequest } from './interceptors'
 
 const SHORT_TEXT_LIMIT = 20
-const EXPANSION_RATIO = 3
+export const EXPANSION_RATIO = 3
 
 function looksLikeExplanation(source: string, translated: string): boolean {
   return source.length < SHORT_TEXT_LIMIT && translated.length > source.length * EXPANSION_RATIO
@@ -53,16 +53,17 @@ export interface TranslateOptions {
 
 export interface ProviderCapabilities {
   /**
-   * Whether the provider keeps segment tags attached to the right pieces of
-   * text. Bing's ttranslatev3 keeps the tags but refills them in source
-   * order regardless of word order (e.g. "The red car of my friend" →
-   * id 0 "我朋友的", id 3 empty), so its output cannot be mapped back.
+   * Whether the provider keeps segment tags in its output. Bing's
+   * ttranslatev3 keeps the tags but refills them in source order regardless
+   * of word order (e.g. "The red car of my friend" → id 0 "我朋友的"), so
+   * ids don't match meaning — but segments are written back in output
+   * order, not by id, and Bing's linear output is the translation.
    */
   supportsSegments: boolean
 }
 
 export const PROVIDER_CAPABILITIES: Record<TranslationProvider, ProviderCapabilities> = {
-  microsoft: { supportsSegments: false },
+  microsoft: { supportsSegments: true },
   google: { supportsSegments: true },
   openai: { supportsSegments: true },
   imp: { supportsSegments: true },
@@ -194,11 +195,62 @@ async function bingTranslateLong(text: string, to: string): Promise<string> {
   return translated.join(' ')
 }
 
+// Segment requests go out one per paragraph (no packing, see below), so a
+// page full of mixed paragraphs would fire dozens at once; cap them.
+const BING_SEGMENT_CONCURRENCY = 4
+let bingSegmentActive = 0
+const bingSegmentQueue: (() => void)[] = []
+
+async function bingSegmentSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (bingSegmentActive >= BING_SEGMENT_CONCURRENCY) {
+    await new Promise<void>((resolve) => bingSegmentQueue.push(resolve))
+  } else {
+    bingSegmentActive++
+  }
+  try {
+    return await fn()
+  } finally {
+    // Hand the slot straight to the next waiter, or free it.
+    const next = bingSegmentQueue.shift()
+    if (next) next()
+    else bingSegmentActive--
+  }
+}
+
+// Segment-encoded texts (see lib/segments.ts) are sent one per request: the
+// newline packing below flattens newlines, which can sit inside the tags.
+// Over the request limit, the text is split between whole tags (each chunk
+// is still well-formed); a single tag over the limit can't be split, so the
+// input comes back unchanged (= declined, see guardSegmentTranslator).
+async function bingTranslateSegments(text: string, to: string): Promise<string> {
+  if (text.length <= BING_TEXT_LIMIT) return bingSegmentSlot(() => bingTranslateOne(text, to))
+  const tags = text.match(/<i id="\d+">[\s\S]*?<\/i>/g) ?? []
+  if (tags.join('') !== text || tags.some((t) => t.length > BING_TEXT_LIMIT)) return text
+  const chunks: string[] = []
+  let current = ''
+  for (const tag of tags) {
+    if (current && current.length + tag.length > BING_TEXT_LIMIT) {
+      chunks.push(current)
+      current = ''
+    }
+    current += tag
+  }
+  if (current) chunks.push(current)
+  const translated = await Promise.all(
+    chunks.map((c) => bingSegmentSlot(() => bingTranslateOne(c, to))),
+  )
+  return translated.join('')
+}
+
 async function translateMicrosoft(
   texts: string[],
   targetLang: string,
+  options: TranslateOptions = {},
 ): Promise<TranslationResult> {
   const to = BING_LANG_MAP[targetLang] ?? targetLang
+  if (options.segments) {
+    return { texts: await Promise.all(texts.map((t) => bingTranslateSegments(t, to))) }
+  }
   // ttranslatev3 takes one text per request, so pack the batch into
   // newline-joined groups within the request limit (Bing preserves newlines)
   // and split each result back. Text-internal newlines are flattened so they
@@ -463,7 +515,7 @@ export async function translate(
 
   switch (settings.provider) {
     case 'microsoft':
-      return translateMicrosoft(texts, targetLang)
+      return translateMicrosoft(texts, targetLang, options)
     case 'google':
       return translateGoogle(texts, targetLang, options)
     case 'openai':

@@ -64,7 +64,6 @@ const openaiSettings: Settings = {
   targetLang: 'zh',
   displayMode: 'bilingual',
   developerMode: false,
-  debugMode: false,
   customRules: '',
   openai: {
     apiKey: 'test-key',
@@ -213,7 +212,6 @@ const msSettings: Settings = {
   targetLang: 'zh',
   displayMode: 'bilingual',
   developerMode: false,
-  debugMode: false,
   customRules: '',
   openai: {
     apiKey: '',
@@ -515,7 +513,6 @@ const impSettings: Settings = {
   targetLang: 'zh',
   displayMode: 'bilingual',
   developerMode: false,
-  debugMode: false,
   customRules: '',
   openai: {
     apiKey: '',
@@ -653,11 +650,13 @@ describe('segment translation', () => {
       const result = await translate(texts, lang, settings, { segments: true })
       return result.texts
     })
-    return (segments: string[]) =>
+    const full = (segments: string[]) =>
       translateSegmentsVia(segments, 'zh', async (encoded, lang) => {
         const [out] = await translator([encoded], lang)
         return out
       })
+    const run = async (segments: string[]) => (await full(segments)).segments
+    return Object.assign(run, { full })
   }
 
   function mockGoogleResponse(texts: string[]) {
@@ -779,20 +778,97 @@ describe('segment translation', () => {
     expect(body.messages[0].content).toContain('<i id="N">')
   })
 
-  it('openai: merged tags return null', async () => {
+  it('openai: merged tags return null segments but keep the raw output', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    fetchMock.mockResolvedValue(mockOpenAIResponse('<i id="0">点击这里</i><i id="2">查看详情</i>'))
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse('```html\n<i id="0">点击这里</i><i id="2">查看详情</i>\n```'),
+    )
     const run = await setup(openaiSettings)
-    expect(await run(SEGMENTS)).toBeNull()
+    expect(await run.full(SEGMENTS)).toEqual({
+      segments: null,
+      html: '<i id="0">点击这里</i><i id="2">查看详情</i>',
+      sentIndices: [0, 1, 2],
+      reason: 'missing ids 1',
+    })
   })
 
-  it('openai: untranslated (echoed) input returns null', async () => {
+  it('openai: untranslated (echoed) input returns no segments and no html', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue(mockOpenAIResponse(ENCODED))
     const run = await setup(openaiSettings)
-    expect(await run(SEGMENTS)).toBeNull()
+    expect(await run.full(SEGMENTS)).toEqual({
+      segments: null,
+      html: null,
+      sentIndices: [0, 1, 2],
+      reason: 'translation declined (output unchanged)',
+    })
+  })
+
+  it('openai: a tagless translation is kept as html for a plain-text rewrite', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(mockOpenAIResponse('点击这里查看&lt;新&gt;详情'))
+    const run = await setup(openaiSettings)
+    expect(await run.full(SEGMENTS)).toEqual({
+      segments: null,
+      html: '点击这里查看&lt;新&gt;详情',
+      sentIndices: [0, 1, 2],
+      reason: 'engine dropped all tags',
+    })
+  })
+
+  it('openai: a tagless output over 3x a long source is treated as declined', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    // Source text is 34 characters: the length check applies at any length.
+    fetchMock.mockResolvedValue(mockOpenAIResponse('x'.repeat(110)))
+    const run = await setup(openaiSettings)
+    expect((await run.full(SEGMENTS)).html).toBeNull()
+  })
+
+  it('openai: a tagless explanation of a short source is treated as declined', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse('This text is a short UI label and cannot be translated meaningfully.'),
+    )
+    const run = await setup(openaiSettings)
+    expect(await run.full(['Go ', 'home'])).toEqual({
+      segments: null,
+      html: null,
+      sentIndices: [0, 1],
+      reason: 'translation declined (output unchanged)',
+    })
+  })
+
+  it('an emptied word-bearing segment rejects the mapping; an emptied punctuation one clears', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValueOnce(
+      mockGoogleResponse(['<i id="0">苹果</i><i id="1"></i><i id="2">梨</i>']),
+    )
+    const run = await setup(googleSettings)
+    // ", " has no letters: its node is cleared.
+    expect(await run.full(['Apples', ', ', 'pears'])).toEqual({
+      segments: ['苹果', '', '梨'],
+      html: '<i id="0">苹果</i><i id="1"></i><i id="2">梨</i>',
+      sentIndices: [0, 1, 2],
+      reason: null,
+    })
+    fetchMock.mockResolvedValueOnce(
+      mockGoogleResponse(['<i id="1">红色的</i><i id="2">汽车</i><i id="0"></i>']),
+    )
+    // Pieces are written back by position, so the third node (" car", which
+    // has letters) would go blank: the output can't be poured into the nodes.
+    // The reason names the source of the tag that came back empty (id 0).
+    expect(await run.full(['The ', 'red', ' car'])).toEqual({
+      segments: null,
+      html: '<i id="1">红色的</i><i id="2">汽车</i><i id="0"></i>',
+      sentIndices: [0, 1, 2],
+      reason: "empty segment for 'The'",
+    })
   })
 
   it('imp: sends the encoded string as-is and decodes', async () => {
@@ -807,7 +883,7 @@ describe('segment translation', () => {
     expect(body.texts).toEqual([ENCODED])
   })
 
-  it('imp: duplicate ids return null', async () => {
+  it('imp: duplicate ids return null segments', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue(
@@ -817,17 +893,183 @@ describe('segment translation', () => {
     expect(await run(SEGMENTS)).toBeNull()
   })
 
-  it('microsoft: does not support segments and never sends a request', async () => {
+  // The background's segment pipeline: translate service (with a cache) over
+  // the guarded provider translator, fed by translateSegmentsVia.
+  async function setupCached(settings: Settings) {
+    const { translate } = await import('./translator')
+    const { createTranslateService, translateSegmentsVia, guardSegmentTranslator } =
+      await import('./translate-service')
+    const cache = new Map<string, string>()
+    const service = createTranslateService({
+      getCached: async (text, lang) => cache.get(`${lang}:${text}`),
+      setCached: async (text, lang, out) => void cache.set(`${lang}:${text}`, out),
+      translator: guardSegmentTranslator(
+        async (texts, lang) => (await translate(texts, lang, settings, { segments: true })).texts,
+      ),
+      batchWindowMs: 1,
+      maxBatchSize: 20,
+    })
+    return {
+      cache,
+      run: (segments: string[]) =>
+        translateSegmentsVia(segments, 'zh', (encoded, lang) => service.translate(encoded, lang)),
+    }
+  }
+
+  const PARA = ['The ', 'red', ' car']
+  const PARA_ENCODED = '<i id="0">The </i><i id="1">red</i><i id="2"> car</i>'
+  // Outputs that need the structural rewrite must be cached too: a reload
+  // would otherwise re-request every such paragraph.
+  const REWRITE_OUTPUTS: [string, string][] = [
+    ['emptied piece', '<i id="1">红色的</i><i id="2">汽车</i><i id="0"></i>'],
+    ['missing id', '<i id="1">红色的</i><i id="2">汽车</i>'],
+    ['no tags', '红色的汽车'],
+  ]
+
+  for (const [label, output] of REWRITE_OUTPUTS) {
+    for (const provider of ['google', 'microsoft', 'imp'] as const) {
+      it(`${provider}: a rewrite-bound output (${label}) is cached and replays identically`, async () => {
+        const fetchMock = vi.fn()
+        vi.stubGlobal('fetch', fetchMock)
+        let requests = 0
+        fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+          const u = url.toString()
+          if (u === 'https://www.bing.com/translator') return mockBingPageResponse()()
+          requests++
+          if (provider === 'google') {
+            expect(JSON.parse(init!.body as string)[0][0]).toEqual([PARA_ENCODED])
+            return mockGoogleResponse([output])
+          }
+          if (provider === 'imp') {
+            expect(JSON.parse(init!.body as string).texts).toEqual([PARA_ENCODED])
+            return mockImpResponse([output])
+          }
+          expect(new URLSearchParams(init!.body as string).get('text')).toBe(PARA_ENCODED)
+          return { ok: true, json: async () => [{ translations: [{ text: output }] }] }
+        })
+        const settings =
+          provider === 'google' ? googleSettings : provider === 'imp' ? impSettings : msSettings
+        const { cache, run } = await setupCached(settings)
+        const first = await run(PARA)
+        expect(first.segments).toBeNull()
+        expect(first.html).toBe(output)
+        expect(cache.get(`zh:${PARA_ENCODED}`)).toBe(output)
+        const second = await run(PARA)
+        expect(requests).toBe(1)
+        expect(second).toEqual(first)
+      })
+    }
+  }
+
+  it('a mappable output is cached and replays identically', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    const { translate, PROVIDER_CAPABILITIES } = await import('./translator')
-    expect(PROVIDER_CAPABILITIES.microsoft.supportsSegments).toBe(false)
+    fetchMock.mockResolvedValue(
+      mockGoogleResponse(['<i id="1">红色的</i><i id="0">那</i><i id="2">汽车</i>']),
+    )
+    const { run } = await setupCached(googleSettings)
+    const first = await run(PARA)
+    expect(first.segments).toEqual(['红色的', '那', '汽车'])
+    expect(await run(PARA)).toEqual(first)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('an echoed or explanation output is not cached', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock
+      .mockResolvedValueOnce(mockGoogleResponse([PARA_ENCODED]))
+      .mockResolvedValueOnce(mockGoogleResponse(['This is a phrase about a car that is red.']))
+      .mockResolvedValueOnce(mockGoogleResponse(['红色的汽车']))
+    const { cache, run } = await setupCached(googleSettings)
+    expect((await run(PARA)).html).toBeNull()
+    expect((await run(PARA)).html).toBeNull()
+    expect(cache.size).toBe(0)
+    expect((await run(PARA)).html).toBe('红色的汽车')
+    expect(cache.size).toBe(1)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  function mockBing(reply: (text: string) => string) {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const sent: string[] = []
+    fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      if (url.toString() === 'https://www.bing.com/translator') return mockBingPageResponse()()
+      const text = new URLSearchParams(init?.body as string).get('text')!
+      sent.push(text)
+      return {
+        ok: true,
+        json: async () => [{ translations: [{ text: reply(text) }] }],
+      }
+    })
+    return sent
+  }
+
+  it('microsoft: supports segments, one request per text, no newline packing', async () => {
+    const { PROVIDER_CAPABILITIES } = await import('./translator')
+    expect(PROVIDER_CAPABILITIES.microsoft.supportsSegments).toBe(true)
     expect(PROVIDER_CAPABILITIES.google.supportsSegments).toBe(true)
     expect(PROVIDER_CAPABILITIES.openai.supportsSegments).toBe(true)
     expect(PROVIDER_CAPABILITIES.imp.supportsSegments).toBe(true)
-    await expect(
-      translate([ENCODED], 'zh', msSettings, { segments: true }),
-    ).rejects.toThrow(/does not support/)
-    expect(fetchMock).not.toHaveBeenCalled()
+    // Real ttranslatev3 output for this input: tags refilled in source order.
+    const sent = mockBing((text) =>
+      text === '<i id="0">The </i><i id="1">red</i><i id="2"> car of my friend is fast.</i>'
+        ? '<i id="0">我朋友的</i><i id="1">红色</i><i id="2">汽车很快。</i>'
+        : text,
+    )
+    const run = await setup(msSettings)
+    expect(await run(['The ', 'red', ' car of my friend is fast.'])).toEqual([
+      '我朋友的',
+      '红色',
+      '汽车很快。',
+    ])
+    const { translate } = await import('./translator')
+    const multi = ['<i id="0">a\nb</i>', '<i id="0">c</i>']
+    expect((await translate(multi, 'zh', msSettings, { segments: true })).texts).toEqual(multi)
+    expect(sent.slice(1)).toEqual(multi)
+  })
+
+  it('microsoft: at most 4 segment requests in flight', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    let inFlight = 0
+    let maxInFlight = 0
+    let calls = 0
+    fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      if (url.toString() === 'https://www.bing.com/translator') return mockBingPageResponse()()
+      calls++
+      inFlight++
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await new Promise((r) => setTimeout(r, 5))
+      inFlight--
+      const text = new URLSearchParams(init?.body as string).get('text')!
+      return { ok: true, json: async () => [{ translations: [{ text }] }] }
+    })
+    const { translate } = await import('./translator')
+    const texts = Array.from({ length: 10 }, (_, i) => `<i id="0">t${i}</i>`)
+    const long = Array.from({ length: 6 }, (_, i) => `<i id="${i}">${'x'.repeat(400)}</i>`).join('')
+    const [a, b] = await Promise.all([
+      translate(texts, 'zh', msSettings, { segments: true }),
+      translate([long], 'zh', msSettings, { segments: true }),
+    ])
+    expect(a.texts).toEqual(texts)
+    expect(b.texts).toEqual([long])
+    expect(calls).toBe(13)
+    expect(maxInFlight).toBe(4)
+  })
+
+  it('microsoft: splits an over-limit segment text between whole tags', async () => {
+    const sent = mockBing((text) => text.replace(/<i id="(\d+)">/g, '<i id="$1">译'))
+    const { translate } = await import('./translator')
+    const long = Array.from({ length: 4 }, (_, i) => `<i id="${i}">${'x'.repeat(400)}</i>`).join('')
+    const result = await translate([long], 'zh', msSettings, { segments: true })
+    expect(sent).toHaveLength(2)
+    expect(sent.every((t) => t.length <= 950 && /^(<i id="\d+">x+<\/i>)+$/.test(t))).toBe(true)
+    expect(result.texts[0]).toBe(long.replace(/<i id="(\d+)">/g, '<i id="$1">译'))
+    // A single tag over the limit can't be split: declined (input returned).
+    const huge = `<i id="0">${'y'.repeat(1000)}</i>`
+    expect((await translate([huge], 'zh', msSettings, { segments: true })).texts).toEqual([huge])
+    expect(sent).toHaveLength(2)
   })
 })

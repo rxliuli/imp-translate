@@ -436,6 +436,16 @@ export function injectDebugStyles() {
       z-index: 2147483647;
       pointer-events: none;
     }
+    /* Replace mode: block rebuilt from the engine output (lib/rewrite.ts). */
+    [data-imp-rewritten] {
+      outline: 2px dashed orange !important;
+      outline-offset: -2px !important;
+    }
+    /* Replace mode: block that still fell back to a bilingual append. */
+    [data-imp-fallback] {
+      outline: 2px dashed rgba(80, 120, 255, 0.8) !important;
+      outline-offset: -2px !important;
+    }
   `
   document.head.appendChild(style)
 }

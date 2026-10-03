@@ -43,9 +43,69 @@ export function countSegments(encoded: string): number {
 
 const CODE_FENCE_RE = /^\s*```[\w-]*[^\S\n]*\n?([\s\S]*?)\s*```\s*$/
 
-function stripCodeFence(text: string): string {
+/** Strips a markdown code fence around the whole output (LLMs like to answer ```html … ```). */
+export function stripCodeFence(text: string): string {
   const m = CODE_FENCE_RE.exec(text)
   return m ? m[1] : text
+}
+
+export interface SegmentToken {
+  // The tag's id, or null for text outside the tags.
+  id: number | null
+  // Unescaped text; markup other than the segment tags is dropped.
+  text: string
+}
+
+// Our input is escaped, so any raw tag left in the output is markup the
+// translator added (or a stray/unmatched segment tag): drop it.
+function stripMarkup(text: string): string {
+  return text.replace(/<\/?[a-zA-Z][^>]*>/g, '')
+}
+
+/**
+ * Splits a (translated) encoded string into its tags and the text between
+ * them, in output order. Unlike decodeSegments this never fails: ids are
+ * reported as found (the caller decides what unknown/duplicate ids mean), a
+ * code fence around the whole output is stripped, and any other markup is
+ * dropped. Empty outside text is omitted.
+ */
+export function parseSegmentTokens(encoded: string): SegmentToken[] {
+  encoded = stripCodeFence(encoded)
+  const tokens: SegmentToken[] = []
+  const pushOutside = (raw: string) => {
+    const text = unescapeSegmentText(stripMarkup(raw))
+    if (text) tokens.push({ id: null, text })
+  }
+  let last = 0
+  for (const m of encoded.matchAll(SEGMENT_RE)) {
+    pushOutside(encoded.slice(last, m.index))
+    last = m.index + m[0].length
+    const id = Number(m[1] ?? m[2] ?? m[3])
+    tokens.push({
+      id: Number.isInteger(id) ? id : null,
+      text: unescapeSegmentText(stripMarkup(m[4])),
+    })
+  }
+  pushOutside(encoded.slice(last))
+  return tokens
+}
+
+/**
+ * Why decodeSegments rejects `encoded` (for logs): missing / duplicate /
+ * unknown ids and nested or unclosed tags, joined with "; ".
+ */
+export function segmentMismatchReason(encoded: string, count: number): string {
+  encoded = stripCodeFence(encoded)
+  const ids = [...encoded.matchAll(SEGMENT_RE)].map((m) => Number(m[1] ?? m[2] ?? m[3]))
+  const reasons: string[] = []
+  const missing = [...Array(count).keys()].filter((i) => !ids.includes(i))
+  const dup = [...new Set(ids.filter((id, k) => ids.indexOf(id) !== k))]
+  const unknown = ids.filter((id) => !(id >= 0 && id < count))
+  if (missing.length) reasons.push(`missing ids ${missing.join(',')}`)
+  if (dup.length) reasons.push(`duplicate ids ${dup.join(',')}`)
+  if (unknown.length) reasons.push(`unknown ids ${unknown.join(',')}`)
+  if (/<\/?i\b/i.test(encoded.replace(SEGMENT_RE, ''))) reasons.push('nested tags')
+  return reasons.join('; ') || 'unmappable output'
 }
 
 /**
@@ -56,16 +116,15 @@ function stripCodeFence(text: string): string {
  * correct reading order — so callers write the k-th segment into the k-th
  * text node in DOM order. Ids are only used for validation: returns null
  * unless ids 0..count-1 each appear exactly once and there are no other ids.
+ * Empty segments are returned as such; whether one is acceptable depends on
+ * its source (see translateSegmentsVia).
  *
  * Translators often push text out of the tags (Google moves inter-segment
  * spaces and Japanese sentence-final "。" outside), so text outside the tags
  * is merged onto the end of the preceding segment (in output order) — or the
  * start of the first one when it precedes every tag. How much text ends up
  * outside the tags is not a failure signal: the merged linear output still
- * reads correctly, only the inline styling boundaries drift. The one output
- * that cannot be poured into existing nodes is a segment left empty after
- * merging (the node would have to show nothing, or its untranslated source),
- * so that returns null and the caller falls back. A markdown code fence
+ * reads correctly, only the inline styling boundaries drift. A markdown code fence
  * around the whole output (LLMs like to answer ```html … ```) is stripped
  * first. Segment text is HTML-unescaped and NOT trimmed.
  */
@@ -103,6 +162,5 @@ export function decodeSegments(encoded: string, count: number): string[] | null 
   after.forEach((text, k) => {
     segments[k] += unescapeSegmentText(text)
   })
-  if (segments.some((s) => s.trim() === '')) return null
   return segments
 }

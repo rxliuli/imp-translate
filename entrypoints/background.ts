@@ -270,7 +270,14 @@ export default defineBackground(() => {
 
   messager.onMessage('translateSegments', async ({ data }) => {
     const settings = await getSettings()
-    if (!PROVIDER_CAPABILITIES[settings.provider]?.supportsSegments) return null
+    if (!PROVIDER_CAPABILITIES[settings.provider]?.supportsSegments) {
+      return {
+        segments: null,
+        html: null,
+        sentIndices: [],
+        reason: `provider ${settings.provider} does not support segments`,
+      }
+    }
     const service = getSegmentService(settings.provider)
     return await translateSegmentsVia(data.segments, data.targetLang, (encoded, lang) =>
       service.translate(encoded, lang),

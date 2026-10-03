@@ -64,7 +64,9 @@ function App() {
     })
   }, 900)
   useInterval(() => setW5((i) => (i + 1) % WORDS5.length), 600)
-  useInterval(() => setW6((i) => (i + 1) % WORDS6.length), 800)
+  // Slow on purpose: S6 checks that the pre-wrap block isn't split and that
+  // its text follows state, not how fast a translation can catch up.
+  useInterval(() => setW6((i) => (i + 1) % WORDS6.length), 2500)
 
   useEffect(() => {
     const s5 = document.getElementById('s5')

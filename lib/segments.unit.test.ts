@@ -4,6 +4,8 @@ import {
   decodeSegments,
   encodeSegments,
   escapeSegmentText,
+  parseSegmentTokens,
+  segmentMismatchReason,
   unescapeSegmentText,
 } from './segments'
 
@@ -67,8 +69,8 @@ describe('decodeSegments', () => {
     ).toEqual(['A', 'B', 'C'])
   })
 
-  it('rejects empty segments (blank segments are never sent, see isPassthroughSegment)', () => {
-    expect(decodeSegments('<i id="0"></i><i id="1">B</i>', 2)).toBeNull()
+  it('returns empty segments as such (the caller judges them by their source)', () => {
+    expect(decodeSegments('<i id="0"></i><i id="1">B</i>', 2)).toEqual(['', 'B'])
   })
 
   it('rejects a missing id', () => {
@@ -113,7 +115,7 @@ describe('decodeSegments', () => {
     ).toEqual([' Lesen Sie jetzt', ' die Doku '])
   })
 
-  it('accepts any amount of outside text as long as every segment ends up non-empty', () => {
+  it('accepts any amount of outside text', () => {
     expect(decodeSegments('<i id="0">AB</i>xyz<i id="1">CD</i>', 2)).toEqual(['ABxyz', 'CD'])
     // Google on Wikipedia #42: most of the sentence outside, link texts inside.
     expect(
@@ -124,13 +126,11 @@ describe('decodeSegments', () => {
     ).toEqual(['2024年，知识共享组织与新加坡政府和', '联合国开发计划署的合作伙伴'])
   })
 
-  it('returns null when a segment is empty after merging outside text', () => {
-    // The last tag is empty and nothing follows it: that node would show nothing.
-    expect(decodeSegments('<i id="0">text</i><i id="1"></i>', 2)).toBeNull()
-    expect(decodeSegments('<i id="0"></i>text<i id="1"></i>', 2)).toBeNull()
-    // Whitespace-only is empty too.
-    expect(decodeSegments('<i id="0">A</i><i id="1"> </i>', 2)).toBeNull()
-    // An empty tag followed by outside text is fine: the text merges into it.
+  it('keeps a segment empty after merging outside text', () => {
+    expect(decodeSegments('<i id="0">text</i><i id="1"></i>', 2)).toEqual(['text', ''])
+    expect(decodeSegments('<i id="0"></i>text<i id="1"></i>', 2)).toEqual(['text', ''])
+    expect(decodeSegments('<i id="0">A</i><i id="1"> </i>', 2)).toEqual(['A', ' '])
+    // An empty tag followed by outside text: the text merges into it.
     expect(decodeSegments('<i id="0">A</i><i id="1"></i>B', 2)).toEqual(['A', 'B'])
   })
 
@@ -182,6 +182,51 @@ describe('decodeSegments safety valves', () => {
       long + outside,
       long,
     ])
+  })
+})
+
+describe('parseSegmentTokens', () => {
+  it('returns tags and outside text in output order, unescaped', () => {
+    expect(parseSegmentTokens('« <i id="1">B &amp; b</i><i id="0">A</i>.')).toEqual([
+      { id: null, text: '« ' },
+      { id: 1, text: 'B & b' },
+      { id: 0, text: 'A' },
+      { id: null, text: '.' },
+    ])
+  })
+
+  it('reports unknown and duplicate ids as found, and keeps empty tags', () => {
+    expect(parseSegmentTokens('<i id="7">X</i><i id="0"></i><i id="0">Y</i>')).toEqual([
+      { id: 7, text: 'X' },
+      { id: 0, text: '' },
+      { id: 0, text: 'Y' },
+    ])
+  })
+
+  it('strips a code fence and drops other or stray markup', () => {
+    expect(parseSegmentTokens('```html\n<i id="0">a <b>b</b></i></i> c\n```')).toEqual([
+      { id: 0, text: 'a b' },
+      { id: null, text: ' c' },
+    ])
+    // Nested tags: the inner pair matches, the outer open tag is dropped.
+    expect(parseSegmentTokens('<i id="0">A<i id="1">B</i></i>')).toEqual([
+      { id: null, text: 'A' },
+      { id: 1, text: 'B' },
+    ])
+  })
+})
+
+describe('segmentMismatchReason', () => {
+  it('names missing, duplicate and unknown ids and nested tags', () => {
+    expect(segmentMismatchReason('<i id="0">A</i><i id="2">C</i>', 4)).toBe(
+      'missing ids 1,3',
+    )
+    expect(segmentMismatchReason('<i id="0">A</i><i id="0">B</i><i id="5">C</i>', 2)).toBe(
+      'missing ids 1; duplicate ids 0; unknown ids 5',
+    )
+    expect(segmentMismatchReason('<i id="0">A<i id="1">B</i></i>', 2)).toBe(
+      'missing ids 0; nested tags',
+    )
   })
 })
 

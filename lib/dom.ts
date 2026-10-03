@@ -785,6 +785,10 @@ export function clearTranslations(root: Element = document.body) {
       el.removeAttribute('data-imp-text')
       el.removeAttribute('data-imp-noop')
     })
+    // Replace mode's debug marker for bilingual fallbacks.
+    scope.querySelectorAll('[data-imp-fallback]').forEach((el) => {
+      el.removeAttribute('data-imp-fallback')
+    })
     scope.querySelectorAll(`[${WRAP_ATTR}]`).forEach((wrapper) => {
       const parent = wrapper.parentNode
       if (!parent) return
@@ -802,6 +806,7 @@ export function clearTranslations(root: Element = document.body) {
   root.removeAttribute(PROCESSED_ATTR)
   root.removeAttribute('data-imp-text')
   root.removeAttribute('data-imp-noop')
+  root.removeAttribute('data-imp-fallback')
 }
 
 export { RESULT_CLASS, PROCESSED_ATTR, getVisibleText }
