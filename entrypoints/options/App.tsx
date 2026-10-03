@@ -221,15 +221,16 @@ export function App() {
           </Select>
         </div>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="grid gap-0.5 leading-none">
-            <Label htmlFor="replace-mode" className="cursor-pointer">
-              Replace original text
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Off: show the translation below the original text. On: replace
-              the text in place, like Google Translate.
-            </p>
+        <label
+          htmlFor="replace-mode"
+          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border cursor-pointer transition-colors hover:border-primary/50"
+        >
+          <div>
+            <div className="text-sm font-medium">Replace original text</div>
+            <div className="text-xs text-muted-foreground">
+              Like Google Translate. Off shows the translation below the
+              original text instead.
+            </div>
           </div>
           <Switch
             id="replace-mode"
@@ -238,7 +239,7 @@ export function App() {
               update({ displayMode: checked ? 'replace' : 'bilingual' })
             }
           />
-        </div>
+        </label>
 
         <div className="space-y-1.5">
           <Label>Translation Provider</Label>
