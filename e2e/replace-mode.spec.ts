@@ -29,11 +29,8 @@ test('options page switches to replace mode and the page is translated in place'
 
   const options = await context.newPage()
   await options.goto(`chrome-extension://${extensionId}/options.html`)
-  await options.getByText('Replace', { exact: true }).click()
-  await expect(options.locator('button[role="radio"][value="replace"]')).toHaveAttribute(
-    'data-state',
-    'checked',
-  )
+  await options.locator('#replace-mode').click()
+  await expect(options.locator('#replace-mode')).toHaveAttribute('data-state', 'checked')
   const sw = await getServiceWorker(context)
   await expect
     .poll(() =>
