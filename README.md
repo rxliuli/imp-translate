@@ -5,7 +5,7 @@ An open-source, cross-platform browser extension for full-page web translation. 
 ## Goals
 
 - Full-page translation, two display modes: bilingual (translation below the original) or replace (original text swapped in place, like Google Translate)
-- Replace mode never breaks the page — it rewrites text nodes only, so React, Vue, Svelte and other framework-driven pages keep working and keep updating after translation
+- Replace mode is framework-safe by default — it rewrites text nodes only, so React, Vue, Svelte and other framework-driven pages keep working and keep updating after translation
 - Zero overhead by default — no code is injected into any page until you ask for translation
 - Minimal — do one thing well, resist feature creep
 - Cross-platform — Chrome, Edge, Firefox, Safari, including mobile
