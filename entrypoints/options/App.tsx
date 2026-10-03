@@ -3,6 +3,7 @@ import {
   getSettings,
   saveSettings,
   type Settings,
+  type DisplayMode,
   type TranslationProvider,
 } from '@/lib/storage'
 import { chatCompletionsUrl, translate } from '@/lib/translator'
@@ -13,7 +14,6 @@ import { LANGUAGES_SORTED } from '@/lib/languages'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { FaDiscord } from 'react-icons/fa'
 import { ExternalLink } from 'lucide-react'
@@ -65,6 +65,23 @@ const PROVIDERS: {
     value: 'openai',
     label: 'OpenAI Compatible',
     description: 'Requires API key',
+  },
+]
+
+const DISPLAY_MODES: {
+  value: DisplayMode
+  label: string
+  description: string
+}[] = [
+  {
+    value: 'bilingual',
+    label: 'Bilingual',
+    description: 'Show the translation below the original text',
+  },
+  {
+    value: 'replace',
+    label: 'Replace',
+    description: 'Replace the original text in place, like Google Translate',
   },
 ]
 
@@ -222,29 +239,6 @@ export function App() {
         </div>
 
         <div className="space-y-1.5">
-          <Label>Display</Label>
-          <label
-            htmlFor="replace-mode"
-            className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border cursor-pointer transition-colors hover:border-primary/50"
-          >
-          <div>
-            <div className="text-sm font-medium">Replace original text</div>
-            <div className="text-xs text-muted-foreground">
-              Like Google Translate. Off shows the translation below the
-              original text instead.
-            </div>
-          </div>
-            <Switch
-              id="replace-mode"
-              checked={settings.displayMode === 'replace'}
-              onCheckedChange={(checked) =>
-                update({ displayMode: checked ? 'replace' : 'bilingual' })
-              }
-            />
-          </label>
-        </div>
-
-        <div className="space-y-1.5">
           <Label>Translation Provider</Label>
           <RadioGroup
             value={settings.provider}
@@ -398,6 +392,35 @@ export function App() {
           </div>
         </section>
       )}
+
+      <section className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Display Mode</Label>
+          <RadioGroup
+            value={settings.displayMode}
+            onValueChange={(v) => update({ displayMode: v as DisplayMode })}
+          >
+            {DISPLAY_MODES.map((m) => (
+              <label
+                key={m.value}
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  settings.displayMode === m.value
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <RadioGroupItem value={m.value} className="mt-0.5" />
+                <div>
+                  <div className="text-sm font-medium">{m.label}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {m.description}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </RadioGroup>
+        </div>
+      </section>
 
       <section className="space-y-4">
         <div className="flex items-start gap-2">
