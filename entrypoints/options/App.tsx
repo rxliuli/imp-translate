@@ -221,10 +221,12 @@ export function App() {
           </Select>
         </div>
 
-        <label
-          htmlFor="replace-mode"
-          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border cursor-pointer transition-colors hover:border-primary/50"
-        >
+        <div className="space-y-1.5">
+          <Label>Display</Label>
+          <label
+            htmlFor="replace-mode"
+            className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border cursor-pointer transition-colors hover:border-primary/50"
+          >
           <div>
             <div className="text-sm font-medium">Replace original text</div>
             <div className="text-xs text-muted-foreground">
@@ -232,14 +234,15 @@ export function App() {
               original text instead.
             </div>
           </div>
-          <Switch
-            id="replace-mode"
-            checked={settings.displayMode === 'replace'}
-            onCheckedChange={(checked) =>
-              update({ displayMode: checked ? 'replace' : 'bilingual' })
-            }
-          />
-        </label>
+            <Switch
+              id="replace-mode"
+              checked={settings.displayMode === 'replace'}
+              onCheckedChange={(checked) =>
+                update({ displayMode: checked ? 'replace' : 'bilingual' })
+              }
+            />
+          </label>
+        </div>
 
         <div className="space-y-1.5">
           <Label>Translation Provider</Label>
