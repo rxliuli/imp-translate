@@ -14,6 +14,11 @@ import { decodeHTML } from './translator'
 // deliberately not `t`, which the OpenAI batch packing uses as its outer
 // wrapper. Segment text is HTML-escaped so the string can be sent to an HTML
 // endpoint verbatim; the tags themselves are not.
+//
+// Because the translator may reorder tags, decoding returns the pieces in
+// OUTPUT order (reading order of the translation), not id order; the ids only
+// validate that every piece came back exactly once. Callers write the pieces
+// back into the paragraph's text nodes in DOM order.
 
 export function escapeSegmentText(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -36,12 +41,6 @@ export function countSegments(encoded: string): number {
   return [...encoded.matchAll(SEGMENT_RE)].length
 }
 
-// Absolute cap on non-whitespace text outside the tags. Stray punctuation and
-// particles are expected; a whole sentence out there means the translator
-// rewrote the structure (commentary, dropped tags) and the per-node mapping
-// can't be trusted, however long the paragraph is.
-const MAX_OUTSIDE_CHARS = 40
-
 const CODE_FENCE_RE = /^\s*```[\w-]*[^\S\n]*\n?([\s\S]*?)\s*```\s*$/
 
 function stripCodeFence(text: string): string {
@@ -50,56 +49,61 @@ function stripCodeFence(text: string): string {
 }
 
 /**
- * Decodes a (translated) encoded string back into `count` segments, ordered
- * by id. Returns null unless ids 0..count-1 each appear exactly once and
- * there are no other ids. Translators often push text out of the tags (Google
- * moves inter-segment spaces and Japanese sentence-final "。" outside), so
- * text outside the tags is merged, in output order, onto the end of the
- * preceding segment — or the start of the first one when it precedes every
- * tag. As a safety valve, if the non-whitespace text outside the tags exceeds
- * half the total segment length, or MAX_OUTSIDE_CHARS outright, the mapping
- * is considered unreliable (null). A markdown code fence around the whole
- * output (LLMs like to answer ```html … ```) is stripped first.
+ * Decodes a (translated) encoded string back into `count` segments, in OUTPUT
+ * order: the k-th returned segment is the content of the k-th tag in the
+ * output, regardless of its id. Translators like Google reorder the tags to
+ * follow target-language word order, and the output's linear order is the
+ * correct reading order — so callers write the k-th segment into the k-th
+ * text node in DOM order. Ids are only used for validation: returns null
+ * unless ids 0..count-1 each appear exactly once and there are no other ids.
+ *
+ * Translators often push text out of the tags (Google moves inter-segment
+ * spaces and Japanese sentence-final "。" outside), so text outside the tags
+ * is merged onto the end of the preceding segment (in output order) — or the
+ * start of the first one when it precedes every tag. As a safety valve, if
+ * the non-whitespace text outside the tags exceeds half the total segment
+ * length, the translator likely pushed the content out of the tags and the
+ * output is rejected (null). A markdown code fence around the whole output
+ * (LLMs like to answer ```html … ```) is stripped first.
  * Segment text is HTML-unescaped and NOT trimmed.
  */
 export function decodeSegments(encoded: string, count: number): string[] | null {
   encoded = stripCodeFence(encoded)
-  const result = new Array<string | undefined>(count).fill(undefined)
-  // Output order of ids, plus the outside text that follows each tag.
-  const order: number[] = []
+  const seen = new Array<boolean>(count).fill(false)
+  // Tag contents in output order, plus the outside text that follows each tag.
+  const inside: string[] = []
   const after: string[] = []
   let leading = ''
   let last = 0
   for (const m of encoded.matchAll(SEGMENT_RE)) {
     const outside = encoded.slice(last, m.index)
-    if (order.length === 0) leading = outside
-    else after[order.length - 1] = outside
+    if (inside.length === 0) leading = outside
+    else after[inside.length - 1] = outside
     last = m.index + m[0].length
     const id = Number(m[1] ?? m[2] ?? m[3])
     if (!Number.isInteger(id) || id < 0 || id >= count) return null
-    if (result[id] !== undefined) return null
-    result[id] = m[4]
-    order.push(id)
+    if (seen[id]) return null
+    seen[id] = true
+    inside.push(m[4])
     after.push('')
   }
   const trailing = encoded.slice(last)
-  if (order.length !== count) return null
+  if (inside.length !== count) return null
   if (count === 0) return trailing.trim() === '' ? [] : null
-  after[order.length - 1] = trailing
+  after[count - 1] = trailing
 
   // A stray <i ...> or </i> outside the matched tags means broken structure.
   const outsideRaw = [leading, ...after].join('')
   if (/<\/?i\b/i.test(outsideRaw)) return null
 
-  const segments = result.map((r) => unescapeSegmentText(r!))
+  const segments = inside.map((r) => unescapeSegmentText(r))
   const outsideText = unescapeSegmentText(outsideRaw).replace(/\s+/g, '')
   const insideLength = segments.reduce((n, s) => n + s.length, 0)
   if (outsideText.length > insideLength * 0.5) return null
-  if (outsideText.length > MAX_OUTSIDE_CHARS) return null
 
-  segments[order[0]] = unescapeSegmentText(leading) + segments[order[0]]
-  order.forEach((id, k) => {
-    segments[id] += unescapeSegmentText(after[k])
+  segments[0] = unescapeSegmentText(leading) + segments[0]
+  after.forEach((text, k) => {
+    segments[k] += unescapeSegmentText(text)
   })
   return segments
 }

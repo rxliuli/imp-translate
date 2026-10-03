@@ -129,14 +129,6 @@ export function createTranslateService(config: TranslateServiceConfig): Translat
 }
 
 /**
- * Translates one paragraph's inline segments as a single unit. Blank segments
- * are passed through untouched and left out of the request (translators tend
- * to push neighbouring text out of empty tags). `translateEncoded` receives
- * the segment-encoded string and must return the raw encoded translation;
- * returns null when that translation can't be mapped back onto the segments,
- * including when it comes back unchanged (a failed/declined translation).
- */
-/**
  * Segments that carry no translatable content and are kept verbatim: whitespace
  * and citation-style markers such as "[", "12", "]". Wikipedia-like pages split
  * every reference into three Text nodes; sending dozens of these as tagged
@@ -146,6 +138,17 @@ export function isPassthroughSegment(s: string): boolean {
   return /^[\s\[\]\d]*$/.test(s)
 }
 
+/**
+ * Translates one paragraph's inline segments as a single unit. Blank segments
+ * are passed through untouched and left out of the request (translators tend
+ * to push neighbouring text out of empty tags). `translateEncoded` receives
+ * the segment-encoded string and must return the raw encoded translation;
+ * returns null when that translation can't be mapped back onto the segments,
+ * including when it comes back unchanged (a failed/declined translation).
+ * Decoded pieces are in the translation's reading order (translators may
+ * reorder tags), so they are written back into the non-passthrough positions
+ * in DOM order rather than by tag id.
+ */
 export async function translateSegmentsVia(
   segments: string[],
   lang: string,

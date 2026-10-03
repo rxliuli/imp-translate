@@ -43,10 +43,15 @@ describe('decodeSegments', () => {
     expect(decodeSegments(encodeSegments(segs), segs.length)).toEqual(segs)
   })
 
-  it('accepts reordered tags and orders by id', () => {
+  it('returns segments in output order, not id order', () => {
+    expect(decodeSegments('<i id="1">B</i><i id="0">A</i>', 2)).toEqual(['B', 'A'])
     expect(
       decodeSegments('<i id="2">C</i><i id="0">A</i><i id="1">B</i>', 3),
-    ).toEqual(['A', 'B', 'C'])
+    ).toEqual(['C', 'A', 'B'])
+  })
+
+  it('merges outside text by output order when tags are reordered', () => {
+    expect(decodeSegments('<i id="1">Bb</i>, <i id="0">Aa</i>.', 2)).toEqual(['Bb, ', 'Aa.'])
   })
 
   it('allows whitespace between and around tags', () => {
@@ -85,7 +90,7 @@ describe('decodeSegments', () => {
         '<i id="2">&lt;新&gt;リリースの詳細などについては、</i><i id="1">こちらを</i><i id="0">クリックしてください</i>。',
         3,
       ),
-    ).toEqual(['クリックしてください。', 'こちらを', '<新>リリースの詳細などについては、'])
+    ).toEqual(['<新>リリースの詳細などについては、', 'こちらを', 'クリックしてください。'])
   })
 
   it('keeps whitespace pushed between tags on the preceding segment', () => {
@@ -99,7 +104,7 @@ describe('decodeSegments', () => {
   })
 
   it('merges text before the first tag onto the start of the first output segment', () => {
-    expect(decodeSegments('« <i id="1">B</i><i id="0">A</i>', 2)).toEqual(['A', '« B'])
+    expect(decodeSegments('« <i id="1">B</i><i id="0">A</i>', 2)).toEqual(['« B', 'A'])
   })
 
   it('merges a few stray words and keeps segment whitespace untrimmed', () => {
@@ -158,15 +163,11 @@ describe('decodeSegments safety valves', () => {
     ])
   })
 
-  it('rejects more than 40 non-whitespace characters outside the tags, however long the segments', () => {
+  it('accepts long outside text on long paragraphs as long as it stays under 50%', () => {
     const long = 'x'.repeat(500)
     const outside = 'This sentence was moved out of the tags by the model!'
-    expect(outside.replace(/\s+/g, '').length).toBeGreaterThan(40)
-    expect(decodeSegments(`<i id="0">${long}</i>${outside}<i id="1">${long}</i>`, 2)).toBeNull()
-    // Up to the cap is still merged.
-    const short = 'a'.repeat(40)
-    expect(decodeSegments(`<i id="0">${long}</i>${short}<i id="1">${long}</i>`, 2)).toEqual([
-      long + short,
+    expect(decodeSegments(`<i id="0">${long}</i>${outside}<i id="1">${long}</i>`, 2)).toEqual([
+      long + outside,
       long,
     ])
   })

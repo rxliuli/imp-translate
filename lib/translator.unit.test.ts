@@ -666,7 +666,7 @@ describe('segment translation', () => {
 
   const googleSettings: Settings = { ...openaiSettings, provider: 'google' }
 
-  it('google: sends the encoded HTML unescaped and maps reordered tags back', async () => {
+  it('google: sends the encoded HTML unescaped and keeps reordered tags in output order', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValue(
@@ -675,8 +675,9 @@ describe('segment translation', () => {
       ]),
     )
     const run = await setup(googleSettings)
-    // Text outside the tags (space, trailing 。) merges onto the preceding segment.
-    expect(await run(SEGMENTS)).toEqual(['点击', '这里。', '有关<新>详情&更多， '])
+    // Segments come back in output (reading) order; text outside the tags
+    // (space, trailing 。) merges onto the preceding segment.
+    expect(await run(SEGMENTS)).toEqual(['有关<新>详情&更多， ', '点击', '这里。'])
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body[0][0]).toEqual([ENCODED])
   })
@@ -748,7 +749,7 @@ describe('segment translation', () => {
       mockOpenAIResponse('<i id="1">这里</i><i id="0">点击</i><i id="2">查看详情</i>'),
     )
     const run = await setup(openaiSettings)
-    expect(await run(SEGMENTS)).toEqual(['点击', '这里', '查看详情'])
+    expect(await run(SEGMENTS)).toEqual(['这里', '点击', '查看详情'])
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.messages[0].content).toContain('<i id="N">')
     expect(body.messages[1].content).toBe(ENCODED)
