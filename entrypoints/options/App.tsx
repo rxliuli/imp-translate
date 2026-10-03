@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   getSettings,
   saveSettings,
+  type DisplayMode,
   type Settings,
   type TranslationProvider,
 } from '@/lib/storage'
@@ -64,6 +65,23 @@ const PROVIDERS: {
     value: 'openai',
     label: 'OpenAI Compatible',
     description: 'Requires API key',
+  },
+]
+
+const DISPLAY_MODES: {
+  value: DisplayMode
+  label: string
+  description: string
+}[] = [
+  {
+    value: 'bilingual',
+    label: 'Bilingual',
+    description: 'Show the translation below the original text',
+  },
+  {
+    value: 'replace',
+    label: 'Replace',
+    description: 'Replace the original text in place, like Google Translate',
   },
 ]
 
@@ -218,6 +236,33 @@ export function App() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Display Mode</Label>
+          <RadioGroup
+            value={settings.displayMode}
+            onValueChange={(v) => update({ displayMode: v as DisplayMode })}
+          >
+            {DISPLAY_MODES.map((m) => (
+              <label
+                key={m.value}
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  settings.displayMode === m.value
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <RadioGroupItem value={m.value} className="mt-0.5" />
+                <div>
+                  <div className="text-sm font-medium">{m.label}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {m.description}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </RadioGroup>
         </div>
 
         <div className="space-y-1.5">

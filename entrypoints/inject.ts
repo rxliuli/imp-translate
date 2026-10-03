@@ -10,7 +10,6 @@ import {
   type ExtractOptions,
   PROCESSED_ATTR,
   RESULT_CLASS,
-  getVisibleText,
   needsBlankLineSplit,
 } from '@/lib/dom'
 import {
@@ -23,8 +22,23 @@ import {
   removeDebugStyles,
   showToastBar,
   hideToastBar,
+  ensureStylesFor,
+  injectRunLoading,
 } from '@/lib/render'
-import { saveSettings } from '@/lib/storage'
+import {
+  collectReplaceableTextNodes,
+  applyReplacement,
+  entriesIntact,
+  getSourceText,
+  markLoading,
+  unmarkLoading,
+  restoreReplacements,
+  restoreOwner,
+  pruneDisconnected,
+  blockOwner,
+  type ReplaceEntry,
+} from '@/lib/replace'
+import { getSettings, saveSettings, type DisplayMode } from '@/lib/storage'
 import { isUrlOnly, debugTime } from '@/lib/utils'
 
 export default defineUnlistedScript(() => {
@@ -62,19 +76,182 @@ export default defineUnlistedScript(() => {
       return getActiveSelectors().includeSelectors
     },
     onShadowRoot: (r) => attachShadowObserver(r),
+    // Replace mode only writes Text.data — the walk itself included.
+    get noStructuralWrites() {
+      return displayMode === 'replace'
+    },
+    isRunProcessed: (nodes) => nodes.some((n) => runOfNode.get(n)?.processed === true),
   }
 
   let isTranslating = false
   let targetLang = ''
+  let displayMode: DisplayMode = 'bilingual'
   let observer: MutationObserver | null = null
   const shadowObservers = new Map<ShadowRoot, MutationObserver>()
   let clickRescanTimer: ReturnType<typeof setTimeout> | null = null
   let visibilityObserver: IntersectionObserver | null = null
-  const blockMap = new Map<Element, TranslatableBlock>()
+  // Observed element -> its pending blocks: one for an element block, or the
+  // virtual blocks (runs) of a mixed container.
+  const blockMap = new Map<Element, TranslatableBlock[]>()
   let downBatch: TranslatableBlock[] = []
   let downTimer: ReturnType<typeof setTimeout> | null = null
   let upBatch: TranslatableBlock[] = []
   let upTimer: ReturnType<typeof setTimeout> | null = null
+  // Bumped by every start/stop. Responses carry the id they were sent under
+  // and are dropped when it no longer matches: after a language switch the
+  // old session's requests are still in flight with the same source text, so
+  // the data-imp-text token alone can't tell them apart.
+  let sessionId = 0
+
+  // Replace-mode virtual blocks (a run of nodes inside a mixed container, see
+  // TranslatableBlock.nodes). Their container may hold several runs and block
+  // children, so their state can't live in attributes on it: it is keyed by
+  // the run's first node (runStates), with reverse lookups from every top-level
+  // node of the run (runOfNode, for mutation rechecks) and from the container
+  // (containerRuns, for childList changes directly in it). Reassigned on stop.
+  interface RunState {
+    nodes: Node[]
+    container: HTMLElement
+    // data-imp-text equivalent: the ownership token for in-flight requests.
+    text: string
+    processed: boolean
+    noop: boolean
+    // Bilingual fallback nodes inserted after the run's last node.
+    inserted: HTMLElement[] | null
+  }
+  let runStates = new WeakMap<Node, RunState>()
+  let runOfNode = new WeakMap<Node, RunState>()
+  let containerRuns = new WeakMap<Element, Set<RunState>>()
+
+  // Replace-mode request failures, keyed by blockOwner: the block is
+  // unmarked so a rescan/recheck picks it up again, but not within
+  // RETRY_BACKOFF_MS of the last failure.
+  const RETRY_BACKOFF_MS = 5000
+  const MAX_AUTO_RETRIES = 3
+  let failures = new WeakMap<Node, { at: number; count: number }>()
+
+  function isBlockProcessed(block: TranslatableBlock): boolean {
+    if (block.nodes) return runStates.get(block.nodes[0])?.processed === true
+    return block.element.hasAttribute(PROCESSED_ATTR)
+  }
+
+  function getBlockText(block: TranslatableBlock): string | null {
+    if (block.nodes) return runStates.get(block.nodes[0])?.text ?? null
+    return block.element.getAttribute('data-imp-text')
+  }
+
+  function setBlockText(block: TranslatableBlock, text: string) {
+    if (block.nodes) {
+      const state = runStates.get(block.nodes[0])
+      if (state) state.text = text
+      return
+    }
+    block.element.setAttribute('data-imp-text', text)
+  }
+
+  function setBlockNoop(block: TranslatableBlock, noop: boolean) {
+    if (block.nodes) {
+      const state = runStates.get(block.nodes[0])
+      if (state) state.noop = noop
+      return
+    }
+    if (noop) block.element.setAttribute('data-imp-noop', '')
+    else block.element.removeAttribute('data-imp-noop')
+  }
+
+  // markTranslated + data-imp-text, or the virtual-block equivalent.
+  function markBlock(block: TranslatableBlock) {
+    if (!block.nodes) {
+      markTranslated(block.element)
+      block.element.setAttribute('data-imp-text', block.text)
+      return
+    }
+    const prev = runStates.get(block.nodes[0])
+    if (prev) unregisterRun(prev)
+    const state: RunState = {
+      nodes: block.nodes,
+      container: block.element,
+      text: block.text,
+      processed: true,
+      noop: false,
+      inserted: null,
+    }
+    runStates.set(block.nodes[0], state)
+    for (const n of block.nodes) runOfNode.set(n, state)
+    let runs = containerRuns.get(block.element)
+    if (!runs) {
+      runs = new Set()
+      containerRuns.set(block.element, runs)
+    }
+    runs.add(state)
+  }
+
+  // Forget a run (and remove its bilingual fallback nodes, if any). Its
+  // in-place replacements are left to the caller.
+  function unregisterRun(state: RunState) {
+    if (runStates.get(state.nodes[0]) === state) runStates.delete(state.nodes[0])
+    for (const n of state.nodes) {
+      if (runOfNode.get(n) === state) runOfNode.delete(n)
+    }
+    containerRuns.get(state.container)?.delete(state)
+    if (state.inserted) {
+      for (const n of state.inserted) n.remove()
+      state.inserted = null
+    }
+  }
+
+  function unmarkBlock(block: TranslatableBlock) {
+    if (block.nodes) {
+      const state = runStates.get(block.nodes[0])
+      if (state) unregisterRun(state)
+      return
+    }
+    block.element.removeAttribute(PROCESSED_ATTR)
+    block.element.removeAttribute('data-imp-text')
+  }
+
+  // Put the page's text back for this block only (a virtual block's
+  // container may hold other translated runs).
+  function restoreBlock(block: TranslatableBlock) {
+    if (block.nodes) restoreOwner(block.nodes[0])
+    else restoreReplacements(block.element)
+  }
+
+  function blockSourceText(block: TranslatableBlock): string {
+    return getSourceText(block.nodes ?? block.element, extractOpts.skipSelectors).trim()
+  }
+
+  // `o` already covers `b`'s text.
+  function blockContains(o: TranslatableBlock, b: TranslatableBlock): boolean {
+    const target = b.nodes ? b.nodes[0] : b.element
+    if (o.nodes) return o.nodes.some((n) => n.contains(target))
+    return o.element.contains(target)
+  }
+
+  function inBackoff(block: TranslatableBlock): boolean {
+    const f = failures.get(blockOwner(block))
+    return !!f && Date.now() - f.at < RETRY_BACKOFF_MS
+  }
+
+  // A replace-mode request failed: unmark the block so a later rescan or
+  // recheck translates it again (after the backoff), and schedule a few
+  // automatic retries.
+  function translationFailed(block: TranslatableBlock) {
+    const owner = blockOwner(block)
+    const count = (failures.get(owner)?.count ?? 0) + 1
+    failures.set(owner, { at: Date.now(), count })
+    if (!block.nodes) unmarkLoading(block.element)
+    unmarkBlock(block)
+    if (count > MAX_AUTO_RETRIES) return
+    const sid = sessionId
+    setTimeout(() => {
+      if (sid !== sessionId || !isTranslating) return
+      if (!owner.isConnected || isBlockProcessed(block)) return
+      const newBlocks = extractBlocks(block.element, extractOpts)
+      discardSelfMutations()
+      observeBlocks(newBlocks)
+    }, RETRY_BACKOFF_MS + 50)
+  }
 
   function discardSelfMutations() {
     observer?.takeRecords()
@@ -87,22 +264,23 @@ export default defineUnlistedScript(() => {
   // arrive out of order. A response may only be applied if its source text
   // still matches the element's current data-imp-text.
   function isStale(block: TranslatableBlock): boolean {
-    return block.element.getAttribute('data-imp-text') !== block.text
+    return getBlockText(block) !== block.text
   }
 
   function translateBatch(batch: TranslatableBlock[]) {
     const t = debugTime(`translateBatch(n=${batch.length})`)
+    const sid = sessionId
     for (const block of batch) {
       messager
         .sendMessage('translate', { text: block.text, targetLang })
         .then((translated) => {
-          if (!isTranslating || isStale(block)) return
+          if (sid !== sessionId || !isTranslating || isStale(block)) return
           replaceWithTranslation([block], [translated])
           discardSelfMutations()
         })
         .catch((err) => {
           console.error('[imp-translate] translation error:', err)
-          if (!isTranslating || isStale(block)) return
+          if (sid !== sessionId || !isTranslating || isStale(block)) return
           replaceWithError([block], (retryBlocks) => {
             translateBatch(retryBlocks)
           })
@@ -110,6 +288,138 @@ export default defineUnlistedScript(() => {
         })
     }
     t(`sent ${batch.length} translate messages`)
+  }
+
+  // Bilingual fallback for a replace-mode block that can't be (or turned out
+  // not to be) replaceable in place.
+  function translateAsBilingual(blocks: TranslatableBlock[]) {
+    const plain: TranslatableBlock[] = []
+    for (const block of blocks) {
+      if (block.nodes) translateRunAsBilingual(block)
+      else plain.push(block)
+    }
+    if (plain.length === 0) return
+    injectLoading(plain)
+    discardSelfMutations()
+    translateBatch(plain)
+  }
+
+  // Bilingual fallback for a virtual block: nothing can be wrapped, so the
+  // result is inserted after the run's last node (insert-only).
+  function translateRunAsBilingual(block: TranslatableBlock) {
+    const state = runStates.get(block.nodes![0])
+    if (!state || state.text !== block.text) return
+    const last = block.nodes![block.nodes!.length - 1]
+    // The page restructured the run meanwhile; its recheck re-extracts it.
+    if (last.parentNode !== block.element) return
+    if (state.inserted) for (const n of state.inserted) n.remove()
+    const { inserted, wrapper } = injectRunLoading(block.element, last, block.text)
+    state.inserted = inserted
+    discardSelfMutations()
+    const sid = sessionId
+    const current = () =>
+      sid === sessionId && isTranslating && !isStale(block) && state.inserted === inserted
+    messager
+      .sendMessage('translate', { text: block.text, targetLang })
+      .then((translated) => {
+        if (!current()) return
+        if (!translated || translated.toLowerCase() === block.text.toLowerCase()) {
+          for (const n of inserted) n.remove()
+          state.inserted = null
+          state.noop = true
+        } else {
+          wrapper.className = RESULT_CLASS
+          wrapper.textContent = translated
+          failures.delete(blockOwner(block))
+        }
+        discardSelfMutations()
+      })
+      .catch((err) => {
+        console.error('[imp-translate] translation error:', err)
+        if (!current()) return
+        translationFailed(block)
+        discardSelfMutations()
+      })
+  }
+
+  // Replace mode. Single-node blocks use the plain `translate` message; a
+  // block spread over several Text nodes (inline <a>/<strong>/...) needs
+  // per-node aligned segments, and falls back to bilingual when the provider
+  // can't produce them. Failures leave the original text untouched — no
+  // error/retry UI, since that would have to be appended anyway.
+  async function translateInPlace(block: TranslatableBlock, entries: ReplaceEntry[]) {
+    const el = block.element
+    const sid = sessionId
+    let translations: string[] | null
+    try {
+      translations =
+        entries.length === 1
+          ? [await messager.sendMessage('translate', { text: block.text, targetLang })]
+          : await messager.sendMessage('translateSegments', {
+              segments: entries.map((e) => e.segment),
+              targetLang,
+            })
+    } catch (err) {
+      console.error('[imp-translate] translation error:', err)
+      if (sid !== sessionId || !isTranslating || isStale(block)) return
+      // An older in-place translation (retranslation) stays on screen; the
+      // block itself is unmarked so it is picked up again after the backoff.
+      translationFailed(block)
+      discardSelfMutations()
+      return
+    }
+    if (sid !== sessionId || !isTranslating || isStale(block)) return
+    if (!block.nodes) unmarkLoading(el)
+    if (!translations || translations.length !== entries.length) {
+      // A retranslation may still show our older in-place translation; put
+      // the page's text back before appending the bilingual one.
+      restoreBlock(block)
+      translateAsBilingual([block])
+      return
+    }
+    // The page edited one of the nodes while we waited: its mutation has
+    // already queued a recheck, which will retranslate from the new text.
+    if (!entriesIntact(entries)) {
+      discardSelfMutations()
+      return
+    }
+    const joined = entries.map((e, i) => translations[i]?.trim() || e.source.trim()).join(' ')
+    const source = entries.map((e) => e.source.trim()).join(' ')
+    if (!translations.some((tr) => tr.trim()) || joined.toLowerCase() === source.toLowerCase()) {
+      // Nothing to show instead of the page's text (drops an older
+      // translation on retranslation).
+      restoreBlock(block)
+      setBlockNoop(block, true)
+    } else {
+      applyReplacement(blockOwner(block), entries, translations, {
+        keepNodeWhitespace: entries.length === 1,
+      })
+    }
+    failures.delete(blockOwner(block))
+    discardSelfMutations()
+  }
+
+  function translateBlocksInPlace(blocks: TranslatableBlock[]) {
+    pruneDisconnected()
+    const fallback: TranslatableBlock[] = []
+    for (const block of blocks) {
+      // reuseOwned: a block unmarked after a failed retranslation (see
+      // translationFailed) may still show its own older translation.
+      const entries = collectReplaceableTextNodes(block, extractOpts.skipSelectors, {
+        reuseOwned: true,
+      })
+      if (!entries) {
+        fallback.push(block)
+        continue
+      }
+      ensureStylesFor(block.element)
+      // Loading styles apply to the whole element; a virtual block's
+      // container holds other content too.
+      if (!block.nodes) markLoading(block.element)
+      translateInPlace(block, entries)
+    }
+    discardSelfMutations()
+    translateAsBilingual(fallback)
   }
 
   async function filterByLanguage(
@@ -124,26 +434,29 @@ export default defineUnlistedScript(() => {
 
   async function translateBlocks(blocks: TranslatableBlock[]) {
     if (blocks.length === 0) return
+    const sid = sessionId
 
     blocks = blocks.filter((b) => !isUrlOnly(b.text))
     if (blocks.length === 0) return
 
-    const seen = new Set<Element>()
+    const seen = new Set<Node>()
     blocks = blocks.filter((b) => {
-      if (b.element.hasAttribute(PROCESSED_ATTR)) return false
+      if (isBlockProcessed(b)) return false
       // An already-translated ancestor owns this text — its translation
       // covers it, and a nested mark would race it for the result element.
-      if (b.element.parentElement?.closest(`[${PROCESSED_ATTR}]`)) return false
-      if (seen.has(b.element)) return false
-      seen.add(b.element)
+      // (A virtual block's element is its container: check it too.)
+      const above = b.nodes ? b.element : b.element.parentElement
+      if (above?.closest(`[${PROCESSED_ATTR}]`)) return false
+      if (inBackoff(b)) return false
+      const key = blockOwner(b)
+      if (seen.has(key)) return false
+      seen.add(key)
       return true
     })
     // Streaming re-renders can queue both an element and a descendant added
     // later (e.g. React swapping the inner span of a pending <li>). Keep the
     // outermost block; its text includes the descendant's.
-    blocks = blocks.filter(
-      (b) => !blocks.some((o) => o !== b && o.element.contains(b.element)),
-    )
+    blocks = blocks.filter((b) => !blocks.some((o) => o !== b && blockContains(o, b)))
     if (blocks.length === 0) return
 
     for (const block of blocks) {
@@ -152,15 +465,19 @@ export default defineUnlistedScript(() => {
       // Translate what is in the DOM now, not the stale snapshot — without
       // this, the growth mutation predates the mark, so no recheck would
       // ever repair the truncated translation.
-      const current = getVisibleText(block.element, extractOpts.skipSelectors).trim()
+      const current = blockSourceText(block)
       if (current && current !== block.text) block.text = current
-      markTranslated(block.element)
-      block.element.setAttribute('data-imp-text', block.text)
+      markBlock(block)
     }
 
     blocks = await filterByLanguage(blocks)
     if (blocks.length === 0) return
+    if (sid !== sessionId || !isTranslating) return
 
+    if (displayMode === 'replace') {
+      translateBlocksInPlace(blocks)
+      return
+    }
     injectLoading(blocks)
     discardSelfMutations()
     translateBatch(blocks)
@@ -169,7 +486,7 @@ export default defineUnlistedScript(() => {
   function flushDownBatch() {
     downTimer = null
     if (!isTranslating || downBatch.length === 0) return
-    const batch = downBatch.filter((b) => !b.element.hasAttribute(PROCESSED_ATTR))
+    const batch = downBatch.filter((b) => !isBlockProcessed(b))
     downBatch = []
     if (batch.length > 0) translateBlocks(batch)
   }
@@ -177,7 +494,7 @@ export default defineUnlistedScript(() => {
   function flushUpBatch() {
     upTimer = null
     if (!isTranslating || upBatch.length === 0) return
-    const batch = upBatch.filter((b) => !b.element.hasAttribute(PROCESSED_ATTR))
+    const batch = upBatch.filter((b) => !isBlockProcessed(b))
     upBatch = []
     if (batch.length > 0) translateBlocks(batch)
   }
@@ -226,20 +543,18 @@ export default defineUnlistedScript(() => {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue
       const el = entry.target
-      if (el.hasAttribute(PROCESSED_ATTR)) {
-        visibilityObserver?.unobserve(el)
-        blockMap.delete(el)
-        continue
-      }
-      const block = blockMap.get(el)
-      if (block) {
+      // Several virtual blocks can share one observed container.
+      const list = blockMap.get(el)
+      visibilityObserver?.unobserve(el)
+      blockMap.delete(el)
+      if (!list) continue
+      for (const block of list) {
+        if (isBlockProcessed(block)) continue
         if (scrollDirection === 'up') {
           upBatch.push(block)
         } else {
           downBatch.push(block)
         }
-        visibilityObserver?.unobserve(el)
-        blockMap.delete(el)
       }
     }
     if (downBatch.length > 0 && !downTimer) {
@@ -262,9 +577,14 @@ export default defineUnlistedScript(() => {
   function observeBlocks(blocks: TranslatableBlock[]) {
     if (!visibilityObserver) return
     for (const block of blocks) {
-      if (block.element.hasAttribute(PROCESSED_ATTR)) continue
-      if (blockMap.has(block.element)) continue
-      blockMap.set(block.element, block)
+      if (isBlockProcessed(block)) continue
+      const list = blockMap.get(block.element)
+      if (list) {
+        const key = blockOwner(block)
+        if (!list.some((b) => blockOwner(b) === key)) list.push(block)
+        continue
+      }
+      blockMap.set(block.element, [block])
       visibilityObserver.observe(block.element)
     }
   }
@@ -297,14 +617,107 @@ export default defineUnlistedScript(() => {
 
   let recheckTimer: ReturnType<typeof setTimeout> | null = null
   const pendingRecheck = new Set<Element>()
+  // Virtual runs whose text may have changed, and runs whose node list the
+  // page changed (children added/removed in or next to the run).
+  const pendingRunRecheck = new Set<RunState>()
+  const pendingRunReset = new Set<RunState>()
+
+  // Replace-mode retranslation of a block whose page text changed. Nodes the
+  // page didn't touch keep showing our old translation until the new one
+  // lands (like bilingual mode keeps the old result) — restoring them first
+  // made partially-dynamic paragraphs flash between original and translation
+  // on every update. Returns false when the block can't be remapped in
+  // place; the caller then re-extracts it.
+  async function retranslateInPlace(block: TranslatableBlock): Promise<boolean> {
+    const el = block.element
+    const entries = collectReplaceableTextNodes(block, extractOpts.skipSelectors, {
+      reuseOwned: true,
+    })
+    if (!entries) return false
+    setBlockText(block, block.text)
+    setBlockNoop(block, false)
+    ensureStylesFor(el)
+    if (!block.nodes) markLoading(el)
+    discardSelfMutations()
+    const sid = sessionId
+    const filtered = await filterByLanguage([block])
+    if (sid !== sessionId || !isTranslating || isStale(block)) return true
+    if (filtered.length === 0) {
+      // Now already in the target language: show the page's own text.
+      restoreBlock(block)
+      setBlockNoop(block, true)
+      discardSelfMutations()
+      return true
+    }
+    translateInPlace(block, entries)
+    return true
+  }
+
+  // Throw a run's translation away and re-extract its container: the run's
+  // node list no longer matches the page, or it can't be remapped in place.
+  // Other runs of the container stay processed and are skipped by the walk.
+  function resetRun(state: RunState) {
+    restoreOwner(state.nodes[0])
+    unregisterRun(state)
+    if (!state.container.isConnected) return
+    const newBlocks = extractBlocks(state.container, extractOpts)
+    discardSelfMutations()
+    observeBlocks(newBlocks)
+  }
+
+  async function retranslateRun(state: RunState, newText: string) {
+    const block: TranslatableBlock = {
+      element: state.container,
+      text: newText,
+      nodes: state.nodes,
+    }
+    if (!state.inserted && (await retranslateInPlace(block))) return
+    if (runStates.get(state.nodes[0]) !== state) return
+    resetRun(state)
+  }
+
+  // The run's nodes are still consecutive children of its container (our own
+  // inserted results aside).
+  function runIntact(state: RunState): boolean {
+    const { nodes, container } = state
+    if (nodes[0].parentNode !== container) return false
+    for (let i = 1; i < nodes.length; i++) {
+      let next = nodes[i - 1].nextSibling
+      while (next && isOurInjectedNode(next)) next = next.nextSibling
+      if (next !== nodes[i]) return false
+    }
+    return true
+  }
+
+  function isOurInjectedNode(n: Node): boolean {
+    if (n.nodeType !== Node.ELEMENT_NODE) return false
+    const cl = (n as Element).classList
+    return cl.contains(RESULT_CLASS) || cl.contains('imp-translate-br')
+  }
+
+  // The virtual run `node` belongs to (the node itself or an ancestor is one
+  // of the run's top-level nodes).
+  function findRun(node: Node | null): RunState | undefined {
+    for (let cur = node; cur && cur !== document.body; cur = cur.parentNode) {
+      const state = runOfNode.get(cur)
+      if (state) return state
+    }
+    return undefined
+  }
 
   async function retranslateElement(el: Element, newText: string) {
+    const sid = sessionId
     // The element was translated as one block, but its new text has blank-line
     // paragraph breaks in a pre-wrap context (x.com "Show more" on a tweet
     // whose truncated text had none). The walker would have segmented it, so
     // re-walk it instead of retranslating the whole thing as a single block —
     // clearing the mark first, otherwise shouldSkip hides it from the walk.
-    if (needsBlankLineSplit(el)) {
+    // Replace mode never splits (no structural writes): the block is simply
+    // retranslated as a whole below.
+    if (displayMode !== 'replace' && needsBlankLineSplit(el)) {
+      // Put our in-place translations back first: the split works on the
+      // page's text, and clearTranslations only undoes bilingual markup.
+      restoreReplacements(el)
       clearTranslations(el)
       const newBlocks = extractBlocks(el, extractOpts)
       discardSelfMutations()
@@ -312,7 +725,19 @@ export default defineUnlistedScript(() => {
       return
     }
     const wrapper = el.querySelector(`.${RESULT_CLASS}`)
+    if (
+      !wrapper &&
+      displayMode === 'replace' &&
+      (await retranslateInPlace({ element: el as HTMLElement, text: newText }))
+    ) {
+      return
+    }
     if (!wrapper) {
+      // A noop block, or a replace-mode block that can no longer be mapped
+      // in place: restore the nodes that still carry our translation, so
+      // the re-extracted block sees only the page's current text, then
+      // translate it from scratch.
+      restoreReplacements(el)
       el.removeAttribute(PROCESSED_ATTR)
       el.removeAttribute('data-imp-text')
       const newBlocks = extractBlocks(el, extractOpts)
@@ -325,13 +750,13 @@ export default defineUnlistedScript(() => {
     discardSelfMutations()
     const block: TranslatableBlock = { element: el as HTMLElement, text: newText }
     const filtered = await filterByLanguage([block])
-    if (filtered.length === 0) return
+    if (sid !== sessionId || filtered.length === 0) return
     try {
       const translated = await messager.sendMessage('translate', {
         text: newText,
         targetLang,
       })
-      if (!isTranslating) return
+      if (sid !== sessionId || !isTranslating) return
       // A newer recheck may have superseded this one while awaiting.
       if (el.getAttribute('data-imp-text') !== newText) return
       if (wrapper.parentElement) {
@@ -354,11 +779,31 @@ export default defineUnlistedScript(() => {
       if (!el.hasAttribute(PROCESSED_ATTR)) continue
       const storedText = el.getAttribute('data-imp-text')
       if (!storedText) continue
-      const currentText = getVisibleText(el, extractOpts.skipSelectors).trim()
+      // Source text, not visible text: in replace mode the visible text is
+      // our translation. Our own writes never change the source text, so
+      // they can't trigger a retranslation loop.
+      const currentText = getSourceText(el, extractOpts.skipSelectors).trim()
       if (storedText === currentText) continue
       retranslateElement(el, currentText)
     }
     pendingRecheck.clear()
+    for (const state of pendingRunReset) {
+      if (runStates.get(state.nodes[0]) !== state) continue
+      pendingRunRecheck.delete(state)
+      resetRun(state)
+    }
+    pendingRunReset.clear()
+    for (const state of pendingRunRecheck) {
+      if (runStates.get(state.nodes[0]) !== state || !state.processed) continue
+      if (!runIntact(state)) {
+        resetRun(state)
+        continue
+      }
+      const currentText = getSourceText(state.nodes, extractOpts.skipSelectors).trim()
+      if (currentText === state.text) continue
+      retranslateRun(state, currentText)
+    }
+    pendingRunRecheck.clear()
   }
 
   let delayedRescanTimer: ReturnType<typeof setTimeout> | null = null
@@ -375,6 +820,36 @@ export default defineUnlistedScript(() => {
       if (translated) {
         pendingRecheck.add(translated as Element)
       }
+      // Virtual runs (replace mode) carry no attribute to find them by.
+      let resetContainer: Element | null = null
+      if (displayMode === 'replace') {
+        const run = findRun(target)
+        if (run) pendingRunRecheck.add(run)
+        const runs =
+          mutation.type === 'childList' && target instanceof Element
+            ? containerRuns.get(target)
+            : undefined
+        if (runs && runs.size > 0) {
+          const changed = [...mutation.addedNodes, ...mutation.removedNodes].filter(
+            (n) => !isOurInjectedNode(n),
+          )
+          if (changed.length > 0) {
+            // Children added/removed in or right next to a run change what
+            // the run is: re-extract it rather than patching its node list.
+            for (const state of runs) {
+              const touches =
+                changed.some((n) => state.nodes.includes(n)) ||
+                (mutation.previousSibling !== null &&
+                  state.nodes.includes(mutation.previousSibling)) ||
+                (mutation.nextSibling !== null && state.nodes.includes(mutation.nextSibling))
+              if (touches) {
+                pendingRunReset.add(state)
+                resetContainer = target as Element
+              }
+            }
+          }
+        }
+      }
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue
         const addedEl = node as Element
@@ -383,6 +858,10 @@ export default defineUnlistedScript(() => {
         if (addedEl.hasAttribute('data-imp-wrap')) continue
         if (addedEl.hasAttribute(PROCESSED_ATTR)) continue
         if (addedEl.closest(`[${PROCESSED_ATTR}]`)) continue
+        // Covered by the run reset (which re-extracts the container) or by
+        // the recheck of the run it was added into.
+        if (resetContainer && addedEl.parentNode === resetContainer) continue
+        if (displayMode === 'replace' && findRun(addedEl.parentNode)) continue
         const extracted = extractBlocks(addedEl, extractOpts)
         if (extracted.length > 0) {
           newBlocks.push(...extracted)
@@ -397,7 +876,7 @@ export default defineUnlistedScript(() => {
         }
       }
     }
-    if (pendingRecheck.size > 0) {
+    if (pendingRecheck.size > 0 || pendingRunRecheck.size > 0 || pendingRunReset.size > 0) {
       if (recheckTimer) clearTimeout(recheckTimer)
       recheckTimer = setTimeout(flushRecheck, 300)
     }
@@ -480,7 +959,10 @@ export default defineUnlistedScript(() => {
     const rules = hostRules
     stopTranslation(true)
     messager.sendMessage('startSelfTab', { targetLang: lang })
-    await startTranslation(lang, showToast, rules)
+    // The display mode may have changed in the options page since this
+    // session started.
+    const { displayMode: mode } = await getSettings()
+    await startTranslation(lang, showToast, rules, mode)
   }
 
   async function maybeShowToast() {
@@ -545,11 +1027,14 @@ export default defineUnlistedScript(() => {
     lang: string,
     showToast = false,
     rules: SiteRule[] = [],
+    mode: DisplayMode = 'bilingual',
   ) {
     const t = debugTime('content:startTranslation')
     if (isTranslating) { t('skipped — already translating'); return }
     isTranslating = true
+    sessionId++
     targetLang = lang
+    displayMode = mode
     hostRules = rules
     cachedPathname = null
     t('state set')
@@ -593,6 +1078,7 @@ export default defineUnlistedScript(() => {
 
   function stopTranslation(keepToast = false) {
     isTranslating = false
+    sessionId++
     if (observer) {
       observer.disconnect()
       observer = null
@@ -629,9 +1115,16 @@ export default defineUnlistedScript(() => {
       clickRescanTimer = null
     }
     pendingRecheck.clear()
+    pendingRunRecheck.clear()
+    pendingRunReset.clear()
+    runStates = new WeakMap()
+    runOfNode = new WeakMap()
+    containerRuns = new WeakMap()
+    failures = new WeakMap()
     document.removeEventListener('toggle', onToggle, { capture: true })
     document.removeEventListener('click', onClick, { capture: true })
     document.removeEventListener('scroll', onScroll, { capture: true })
+    restoreReplacements()
     clearTranslations(document.body)
     removeStyles()
     removeDebugStyles()
@@ -646,7 +1139,7 @@ export default defineUnlistedScript(() => {
   // not the translation to finish, and waiting here would keep the sender's
   // response channel (and the SW) busy for the whole first scan.
   messager.onMessage('startTranslation', ({ data }) => {
-    startTranslation(data.targetLang, data.showToast, data.rules)
+    startTranslation(data.targetLang, data.showToast, data.rules, data.displayMode)
   })
   messager.onMessage('stopTranslation', () => {
     stopTranslation()
@@ -691,9 +1184,13 @@ export default defineUnlistedScript(() => {
     const lang = await messager.sendMessage('getSelfTabState')
     if (!lang) return
     if (isTranslating) return
-    const rules = await messager.sendMessage('getMatchedRulesForHostname', {
-      hostname: location.hostname,
-    })
-    startTranslation(lang, false, rules)
+    const [rules, settings] = await Promise.all([
+      messager.sendMessage('getMatchedRulesForHostname', {
+        hostname: location.hostname,
+      }),
+      getSettings(),
+    ])
+    if (isTranslating) return
+    startTranslation(lang, false, rules, settings.displayMode)
   })()
 })

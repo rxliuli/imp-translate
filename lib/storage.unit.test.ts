@@ -32,6 +32,13 @@ describe('storage', () => {
     expect(settings.openai.model).toBe('gpt-4o-mini')
   })
 
+  it('displayMode defaults to bilingual, including for older stored settings', async () => {
+    const { getSettings } = await import('./storage')
+    expect((await getSettings()).displayMode).toBe('bilingual')
+    localStore.set('settings', { targetLang: 'ja' })
+    expect((await getSettings()).displayMode).toBe('bilingual')
+  })
+
   it('saveSettings only persists provided fields', async () => {
     const { saveSettings } = await import('./storage')
     await saveSettings({ targetLang: 'ja' })

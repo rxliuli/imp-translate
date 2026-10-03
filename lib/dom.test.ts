@@ -1136,3 +1136,118 @@ describe('extractBlocks', () => {
     })
   })
 })
+
+describe('extractBlocks with noStructuralWrites', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  function childListRecords(fn: () => void): MutationRecord[] {
+    const obs = new MutationObserver(() => {})
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true })
+    fn()
+    const records = obs.takeRecords()
+    obs.disconnect()
+    return records
+  }
+
+  it('reports mixed-container inline runs as virtual blocks instead of wrapping them', () => {
+    document.body.innerHTML =
+      '<div id="c">Intro <em>text</em> here <a href="#">link</a> tail<p>Para graph</p>Second <b>run</b> after</div>'
+    const c = document.getElementById('c')!
+    const before = Array.from(c.childNodes)
+    let blocks: ReturnType<typeof extractBlocks> = []
+    const records = childListRecords(() => {
+      blocks = extractBlocks(document.body, { noStructuralWrites: true })
+    })
+    expect(records).toEqual([])
+    expect(document.querySelector('[data-imp-wrap]')).toBeNull()
+    expect(Array.from(c.childNodes)).toEqual(before)
+
+    expect(blocks.map((b) => b.text)).toEqual([
+      'Intro text here link tail',
+      'Para graph',
+      'Second run after',
+    ])
+    const [first, para, second] = blocks
+    expect(first.element).toBe(c)
+    expect(first.nodes).toEqual(before.slice(0, 5))
+    expect(para.element).toBe(c.querySelector('p'))
+    expect(para.nodes).toBeUndefined()
+    expect(second.element).toBe(c)
+    expect(second.nodes).toEqual(before.slice(6))
+  })
+
+  it('still uses a single-element run as an element block', () => {
+    document.body.innerHTML = '<div><span>Lonely span text</span><p>Paragraph</p></div>'
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text, b.nodes])).toEqual([
+      ['SPAN', 'Lonely span text', undefined],
+      ['P', 'Paragraph', undefined],
+    ])
+  })
+
+  it('skips runs the caller reports as processed', () => {
+    document.body.innerHTML = '<div>Intro <em>text</em> here<p>Para graph</p>Tail <b>run</b></div>'
+    const first = extractBlocks(document.body, { noStructuralWrites: true })
+    const done = new Set<Node>([first[0].nodes![0]])
+    const again = extractBlocks(document.body, {
+      noStructuralWrites: true,
+      isRunProcessed: (nodes) => nodes.some((n) => done.has(n)),
+    })
+    expect(again.map((b) => b.text)).toEqual(['Para graph', 'Tail run'])
+  })
+
+  it('ignores our own inserted results between runs', () => {
+    document.body.innerHTML = '<div>Intro <em>text</em> here<p>Para graph</p></div>'
+    const div = document.querySelector('div')!
+    const [run] = extractBlocks(document.body, { noStructuralWrites: true })
+    const font = document.createElement('font')
+    font.className = 'imp-translate-result'
+    font.textContent = 'translated'
+    div.insertBefore(font, run.nodes![run.nodes!.length - 1].nextSibling)
+    const again = extractBlocks(document.body, { noStructuralWrites: true })
+    expect(again[0].nodes).toEqual(run.nodes)
+    expect(again[0].text).toBe('Intro text here')
+  })
+
+  it('does not split pre-wrap blocks on blank lines', () => {
+    document.body.innerHTML =
+      '<div style="white-space: pre-wrap"><span>First paragraph of the post.\n\nSecond </span><a href="#">link</a><span> paragraph.\n\nThird paragraph.</span></div>' +
+      '<p style="white-space: pre-wrap">One paragraph.\n\nAnother paragraph.</p>'
+    const div = document.querySelector('div')!
+    const p = document.querySelector('p')!
+    const divHtml = div.innerHTML
+    const pText = p.firstChild
+    let blocks: ReturnType<typeof extractBlocks> = []
+    const records = childListRecords(() => {
+      blocks = extractBlocks(document.body, { noStructuralWrites: true })
+    })
+    expect(records).toEqual([])
+    expect(div.innerHTML).toBe(divHtml)
+    expect(p.childNodes.length).toBe(1)
+    expect(p.firstChild).toBe(pText)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].element).toBe(div)
+    expect(blocks[0].text).toBe(
+      'First paragraph of the post.\n\nSecond link paragraph.\n\nThird paragraph.',
+    )
+    expect(blocks[1].element).toBe(p)
+    expect(blocks[1].text).toBe('One paragraph.\n\nAnother paragraph.')
+  })
+
+  it('splits fake <br><br> paragraphs into separate virtual blocks without writes', () => {
+    document.body.innerHTML =
+      '<div>First <b>para</b> here<br><br>Second <i>para</i> here<p>Block child</p></div>'
+    let blocks: ReturnType<typeof extractBlocks> = []
+    const records = childListRecords(() => {
+      blocks = extractBlocks(document.body, { noStructuralWrites: true })
+    })
+    expect(records).toEqual([])
+    expect(blocks.map((b) => [b.text, !!b.nodes])).toEqual([
+      ['First para here', true],
+      ['Second para here', true],
+      ['Block child', false],
+    ])
+  })
+})

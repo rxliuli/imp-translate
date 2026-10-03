@@ -1,3 +1,5 @@
+import { countSegments, decodeSegments, encodeSegments } from './segments'
+
 export interface TranslateServiceConfig {
   getCached: (text: string, lang: string) => Promise<string | undefined>
   setCached: (text: string, lang: string, translated: string) => Promise<void>
@@ -123,5 +125,52 @@ export function createTranslateService(config: TranslateServiceConfig): Translat
       if (cached !== undefined) return cached
       return enqueue(text, lang)
     },
+  }
+}
+
+/**
+ * Translates one paragraph's inline segments as a single unit. Blank segments
+ * are passed through untouched and left out of the request (translators tend
+ * to push neighbouring text out of empty tags). `translateEncoded` receives
+ * the segment-encoded string and must return the raw encoded translation;
+ * returns null when that translation can't be mapped back onto the segments,
+ * including when it comes back unchanged (a failed/declined translation).
+ */
+export async function translateSegmentsVia(
+  segments: string[],
+  lang: string,
+  translateEncoded: (encoded: string, lang: string) => Promise<string>,
+): Promise<string[] | null> {
+  const indices: number[] = []
+  segments.forEach((s, i) => {
+    if (s.trim() !== '') indices.push(i)
+  })
+  if (indices.length === 0) return [...segments]
+  const encoded = encodeSegments(indices.map((i) => segments[i]))
+  const translated = await translateEncoded(encoded, lang)
+  if (translated === encoded) return null
+  const decoded = decodeSegments(translated, indices.length)
+  if (!decoded) return null
+  const result = [...segments]
+  indices.forEach((idx, j) => {
+    result[idx] = decoded[j]
+  })
+  return result
+}
+
+/**
+ * Wraps a segment translator so outputs that can't be decoded are replaced by
+ * their input. The translate service never caches an output equal to its
+ * input, so a bad translation isn't cached, and translateSegmentsVia turns
+ * it into null.
+ */
+export function guardSegmentTranslator(
+  translator: (texts: string[], lang: string) => Promise<string[]>,
+): (texts: string[], lang: string) => Promise<string[]> {
+  return async (texts, lang) => {
+    const out = await translator(texts, lang)
+    return out.map((t, i) =>
+      typeof t === 'string' && decodeSegments(t, countSegments(texts[i])) ? t : texts[i],
+    )
   }
 }

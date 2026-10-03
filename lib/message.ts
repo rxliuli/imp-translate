@@ -1,5 +1,6 @@
 import { defineExtensionMessaging } from '@webext-core/messaging'
 import type { SiteRule } from './rules'
+import type { DisplayMode } from './storage'
 
 export interface TranslateRequest {
   text: string
@@ -8,6 +9,13 @@ export interface TranslateRequest {
 
 export interface TranslateBatchRequest {
   texts: string[]
+  targetLang: string
+}
+
+// One paragraph split on inline boundaries (e.g. ["Click ", "here", " for
+// details"]), translated as a single unit for context.
+export interface TranslateSegmentsRequest {
+  segments: string[]
   targetLang: string
 }
 
@@ -21,6 +29,11 @@ export interface TranslateBatchRequest {
 export const messager = defineExtensionMessaging<{
   translate(req: TranslateRequest): string
   translateBatch(req: TranslateBatchRequest): string[]
+  // Returns the translated segments aligned 1:1 by position with the input
+  // (not trimmed — whitespace handling is the caller's job), or null when the
+  // provider can't keep segment boundaries or its output can't be mapped back
+  // reliably; the caller then falls back to plain translation.
+  translateSegments(req: TranslateSegmentsRequest): string[] | null
   // connect content script (imp-connect.content.ts) => background: exchanges
   // the one-time code read off the success page's <meta> tag for a persistent
   // Imp Credits api key (see imp-credits docs/extension-integration.md).
@@ -54,6 +67,7 @@ export const messager = defineExtensionMessaging<{
   // at walk time, so SPA navigation needs no extra round-trip.
   startTranslation(data: {
     targetLang: string
+    displayMode: DisplayMode
     showToast?: boolean
     rules: SiteRule[]
   }): void

@@ -2,13 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   hideToastBar,
   injectLoading,
+  injectRunLoading,
   replaceWithError,
   replaceWithTranslation,
   repositionTranslation,
   showToastBar,
   type ToastBarOptions,
 } from './render'
-import { extractBlocks, markTranslated, type TranslatableBlock } from './dom'
+import { clearTranslations, extractBlocks, markTranslated, type TranslatableBlock } from './dom'
 
 describe('render', () => {
   it('should inject inside innermost inline element', () => {
@@ -627,5 +628,48 @@ describe('toast bar', () => {
     showToastBar(baseOptions({ translating: false }))
     expect(document.querySelectorAll('#imp-translate-toast')).toHaveLength(1)
     expect(document.querySelector('.imp-toast-restore')!.textContent).toBe('Translate')
+  })
+})
+
+describe('injectRunLoading', () => {
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  function runBlock() {
+    document.body.innerHTML =
+      '<div id="c">Intro <em>text</em> here<p>Para graph</p>Tail <b>run</b></div>'
+    const c = document.getElementById('c')!
+    const [run] = extractBlocks(document.body, { noStructuralWrites: true })
+    return { c, run, children: Array.from(c.childNodes), html: c.innerHTML }
+  }
+
+  it('only inserts after the run, and clearTranslations removes exactly that', () => {
+    const { c, run, children, html } = runBlock()
+    const last = run.nodes![run.nodes!.length - 1]
+    const long = 'A long enough paragraph text to need its own line here.'
+    const { inserted, wrapper } = injectRunLoading(c, last, long)
+    expect(inserted.map((n) => n.className)).toEqual([
+      'imp-translate-br',
+      'imp-translate-result imp-translate-loading',
+    ])
+    expect(inserted[1]).toBe(wrapper)
+    expect(last.nextSibling).toBe(inserted[0])
+    expect(inserted[1].nextSibling).toBe(c.querySelector('p'))
+    // The page's own nodes are untouched and in order.
+    expect(Array.from(c.childNodes).filter((n) => !inserted.includes(n as HTMLElement))).toEqual(
+      children,
+    )
+
+    clearTranslations(document.body)
+    expect(c.innerHTML).toBe(html)
+    expect(Array.from(c.childNodes)).toEqual(children)
+  })
+
+  it('short text gets no <br>', () => {
+    const { c, run } = runBlock()
+    const { inserted } = injectRunLoading(c, run.nodes![run.nodes!.length - 1], 'Intro text here')
+    expect(inserted).toHaveLength(1)
+    expect(inserted[0].classList.contains('imp-translate-result')).toBe(true)
   })
 })

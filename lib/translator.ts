@@ -1,4 +1,4 @@
-import type { Settings } from './storage'
+import type { Settings, TranslationProvider } from './storage'
 import { applyRequestInterceptors, type OpenAIRequest } from './interceptors'
 
 const SHORT_TEXT_LIMIT = 20
@@ -41,6 +41,31 @@ export function decodeHTML(input: string): string {
 export interface TranslationResult {
   texts: string[]
   detectedLang?: string
+}
+
+export interface TranslateOptions {
+  /**
+   * Each text is a segment-encoded string (see lib/segments.ts): send the
+   * markup as-is and return the raw (still encoded) translation.
+   */
+  segments?: boolean
+}
+
+export interface ProviderCapabilities {
+  /**
+   * Whether the provider keeps segment tags attached to the right pieces of
+   * text. Bing's ttranslatev3 keeps the tags but refills them in source
+   * order regardless of word order (e.g. "The red car of my friend" →
+   * id 0 "我朋友的", id 3 empty), so its output cannot be mapped back.
+   */
+  supportsSegments: boolean
+}
+
+export const PROVIDER_CAPABILITIES: Record<TranslationProvider, ProviderCapabilities> = {
+  microsoft: { supportsSegments: false },
+  google: { supportsSegments: true },
+  openai: { supportsSegments: true },
+  imp: { supportsSegments: true },
 }
 
 // Microsoft retired the legacy Edge translation pipeline
@@ -239,8 +264,10 @@ function escapeHtml(s: string): string {
 async function translateGoogle(
   texts: string[],
   targetLang: string,
+  options: TranslateOptions = {},
 ): Promise<TranslationResult> {
-  const escaped = texts.map(escapeHtml)
+  // Segment-encoded texts are already HTML (escaped text inside real tags).
+  const escaped = options.segments ? texts : texts.map(escapeHtml)
   const resp = await fetch(
     'https://translate-pa.googleapis.com/v1/translateHtml',
     {
@@ -260,7 +287,7 @@ async function translateGoogle(
   const detectedLangs = data[1] as string[] | undefined
 
   return {
-    texts: translated.map((t) => decodeHTML(t)),
+    texts: options.segments ? translated : translated.map((t) => decodeHTML(t)),
     detectedLang: detectedLangs?.[0],
   }
 }
@@ -269,10 +296,14 @@ export function chatCompletionsUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '') + '/chat/completions'
 }
 
+const SEGMENTS_PROMPT =
+  '\nThe input contains inline <i id="N"> tags marking pieces of the text. Keep every <i> tag with its id in the translation and wrap each tag around the translation of the text it originally wrapped. Tags may be reordered to follow natural word order in the target language, but never drop, merge, or add tags, and put no text outside them.'
+
 async function translateOpenAI(
   texts: string[],
   targetLang: string,
   settings: Settings,
+  options: TranslateOptions = {},
 ): Promise<TranslationResult> {
   const { apiKey, baseUrl, model, systemPrompt } = settings.openai
   if (!apiKey) throw new Error('OpenAI API key is not configured')
@@ -283,9 +314,11 @@ async function translateOpenAI(
   const userContent = single
     ? texts[0]
     : texts.map((t, i) => `<t id="${i}">${t}</t>`).join('\n')
-  const sysContent = single
-    ? prompt
-    : prompt + '\nThe input contains multiple texts wrapped in <t id="N"> tags. Return translations in the same format with matching ids. Keep the XML tags intact.'
+  const sysContent =
+    (single
+      ? prompt
+      : prompt + '\nThe input contains multiple texts wrapped in <t id="N"> tags. Return translations in the same format with matching ids. Keep the XML tags intact.') +
+    (options.segments ? SEGMENTS_PROMPT : '')
 
   const req: OpenAIRequest = {
     endpoint: chatCompletionsUrl(baseUrl),
@@ -421,16 +454,20 @@ export async function translate(
   texts: string[],
   targetLang: string,
   settings: Settings,
+  options: TranslateOptions = {},
 ): Promise<TranslationResult> {
   if (texts.length === 0) return { texts: [] }
+  if (options.segments && !PROVIDER_CAPABILITIES[settings.provider]?.supportsSegments) {
+    throw new Error(`Provider ${settings.provider} does not support segment translation`)
+  }
 
   switch (settings.provider) {
     case 'microsoft':
       return translateMicrosoft(texts, targetLang)
     case 'google':
-      return translateGoogle(texts, targetLang)
+      return translateGoogle(texts, targetLang, options)
     case 'openai':
-      return translateOpenAI(texts, targetLang, settings)
+      return translateOpenAI(texts, targetLang, settings, options)
     case 'imp':
       return translateImp(texts, targetLang, settings)
     default:

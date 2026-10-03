@@ -121,12 +121,25 @@ function segmentRunByBrBr(run: Node[], splitOnBlankLines = false): Node[][] {
 export interface TranslatableBlock {
   element: HTMLElement
   text: string
+  // Virtual block (noStructuralWrites only): a multi-node inline run inside a
+  // mixed container that bilingual mode would wrap in a <font>. These are the
+  // run's top-level nodes in document order; `element` is their parent.
+  nodes?: Node[]
 }
 
 export interface ExtractOptions {
   skipSelectors?: string[]
   includeSelectors?: string[]
   onShadowRoot?: (root: ShadowRoot) => void
+  // Replace display mode: the walk must not create, move, split or remove a
+  // single page node. Inline runs become virtual blocks (see
+  // TranslatableBlock.nodes) instead of being wrapped, and pre-wrap blank-line
+  // blocks are not split.
+  noStructuralWrites?: boolean
+  // Virtual runs already handled by the caller. Receives every top-level node
+  // of the candidate run so a run that grew at its head still counts as
+  // processed — skipped like elements carrying PROCESSED_ATTR.
+  isRunProcessed?: (nodes: Node[]) => boolean
 }
 
 function hasShadowDescendant(el: Element): boolean {
@@ -183,8 +196,14 @@ function isHidden(el: HTMLElement): boolean {
   return getComputedStyle(el).visibility === 'hidden'
 }
 
-function visibleTextOfChild(child: Node, skipSelectors?: string[]): string {
-  if (child.nodeType === Node.TEXT_NODE) return child.textContent ?? ''
+// `out`, when given, collects the Text nodes that contribute to the returned
+// string, in order — the replace display mode needs the exact nodes behind a
+// block's text, under the same visibility rules.
+function visibleTextOfChild(child: Node, skipSelectors?: string[], out?: Text[]): string {
+  if (child.nodeType === Node.TEXT_NODE) {
+    out?.push(child as Text)
+    return child.textContent ?? ''
+  }
   if (child.nodeType !== Node.ELEMENT_NODE) return ''
   const childEl = child as HTMLElement
   if (SKIP_TAGS.has(childEl.tagName.toLowerCase())) return ''
@@ -194,13 +213,31 @@ function visibleTextOfChild(child: Node, skipSelectors?: string[]): string {
   if (childEl.isContentEditable) return ''
   if (isHidden(childEl)) return ''
   if (skipSelectors && skipSelectors.some((s) => childEl.matches(s))) return ''
-  return getVisibleText(childEl, skipSelectors)
+  return visibleTextOf(childEl, skipSelectors, out)
+}
+
+function visibleTextOf(el: Element, skipSelectors?: string[], out?: Text[]): string {
+  let text = ''
+  for (const child of el.childNodes) text += visibleTextOfChild(child, skipSelectors, out)
+  return text
 }
 
 function getVisibleText(el: Element, skipSelectors?: string[]): string {
-  let text = ''
-  for (const child of el.childNodes) text += visibleTextOfChild(child, skipSelectors)
-  return text
+  return visibleTextOf(el, skipSelectors)
+}
+
+// The Text nodes whose concatenated data is exactly getVisibleText(el).
+export function getVisibleTextNodes(el: Element, skipSelectors?: string[]): Text[] {
+  const out: Text[] = []
+  visibleTextOf(el, skipSelectors, out)
+  return out
+}
+
+// Visible-text counterpart of getVisibleTextNodes for a virtual block's nodes.
+export function getVisibleTextNodesOf(nodes: Node[], skipSelectors?: string[]): Text[] {
+  const out: Text[] = []
+  for (const n of nodes) visibleTextOfChild(n, skipSelectors, out)
+  return out
 }
 
 // Same as getVisibleText but over an arbitrary node list rather than an
@@ -498,6 +535,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
   // on `parent` rather than the wrapper — equivalent, since the wrapper is a
   // plain <font> directly under `parent` that never matches an include selector.
   function deferWrap(parent: Element, seg: Node[]) {
+    if (opts?.noStructuralWrites && opts.isRunProcessed?.(seg)) return
     if (opts?.includeSelectors && opts.includeSelectors.length > 0) {
       const inside = opts.includeSelectors.some((s) => closestThroughShadow(parent, s))
       if (!inside) {
@@ -512,6 +550,11 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
         `[imp-translate] oversized block (${text.length} chars) — likely a walker bug. Parent:`,
         parent,
       )
+    }
+    if (opts?.noStructuralWrites) {
+      // Pure read: the run is reported as a virtual block, nothing is wrapped.
+      blocks.push({ element: parent as HTMLElement, text, nodes: seg })
+      return
     }
     const wrapper = parent.ownerDocument!.createElement('font')
     wrapper.setAttribute(WRAP_ATTR, 'true')
@@ -582,6 +625,9 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     }
 
     for (const child of children) {
+      // Our own bilingual results (and their <br>) can sit right after a
+      // virtual run in the same parent; they are never part of a run.
+      if (isOurInjectedNode(child)) continue
       if (isInlineish(child)) {
         run.push(child)
       } else if (child.nodeType === Node.ELEMENT_NODE) {
@@ -603,7 +649,7 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     // (x.com long posts): normalize the separators to direct children, then
     // segment the run like br-br fake paragraphs. Checked before the leaf
     // paths so a leaf block or flat div with blank lines splits too.
-    if (hasBlankLineSeparator(node)) {
+    if (!opts?.noStructuralWrites && hasBlankLineSeparator(node)) {
       segmentPreservedNewlines(node)
       walkMixed(node, true)
       walkShadow(node)

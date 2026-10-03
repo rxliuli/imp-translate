@@ -10,6 +10,10 @@ const appleRejectionBrFixture = readFileSync(
   resolve(__dirname, '../lib/__fixtures__/apple-rejection-br.html'),
   'utf-8',
 )
+// React 19 page for replace-mode regressions; react-app.js is a prebuilt
+// bundle of react-app.src.jsx (rebuild command in that file).
+const reactAppHtml = readFileSync(resolve(__dirname, 'static/react-app.html'), 'utf-8')
+const reactAppJs = readFileSync(resolve(__dirname, 'static/react-app.js'), 'utf-8')
 
 const pages: Record<string, string> = {
   '/': `<!DOCTYPE html>
@@ -295,6 +299,17 @@ Collapsed tail paragraph that gets cut https://t.co/abc</span></div>
 </script>
 </body>
 </html>`,
+  '/react-app': reactAppHtml,
+  // Replace mode: paragraphs with inline elements are translated as segments.
+  '/replace-mode': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Replace Mode</title></head>
+<body>
+  <h1 id="title">Replace mode test page</h1>
+  <p id="plain">This is a plain paragraph that should be replaced in place.</p>
+  <p id="linked">Please read <a href="/docs" id="docs-link">the documentation</a> before you start.</p>
+</body>
+</html>`,
   '/x-longpost': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Long Post</title></head>
@@ -329,6 +344,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+// Segment-encoded text (replace mode's translateSegments, see
+// lib/segments.ts) keeps its <i id="N"> tags; only each piece gets the
+// prefix, so the result decodes back onto the same inline nodes.
+const SEGMENT_RE = /(<i id="\d+">)([\s\S]*?)(<\/i>)/g
+function mockTranslate(text: string): string {
+  if (/<i id="\d+">/.test(text)) {
+    return text.replace(SEGMENT_RE, (_, open, body, close) => `${open}[翻译]${body}${close}`)
+  }
+  return `[翻译] ${text}`
+}
+
 const app = new Hono()
 
 app.use('/v1/*', cors())
@@ -342,11 +368,11 @@ app.post('/v1/chat/completions', async (c) => {
   let match
   while ((match = tagRegex.exec(userMsg)) !== null) {
     sourceTexts.push(match[2])
-    translated += `<t id="${match[1]}">[翻译] ${match[2]}</t>\n`
+    translated += `<t id="${match[1]}">${mockTranslate(match[2])}</t>\n`
   }
   if (!translated) {
     sourceTexts.push(userMsg)
-    translated = `[翻译] ${userMsg}`
+    translated = mockTranslate(userMsg)
   }
 
   const entry: MockLogEntry = { texts: sourceTexts, receivedAt: Date.now(), completedAt: null }
@@ -372,6 +398,10 @@ app.post('/mock/delays', async (c) => {
 })
 
 app.get('/mock/log', (c) => c.json(mockState.log))
+
+app.get('/react-app.js', (c) =>
+  c.body(reactAppJs, 200, { 'Content-Type': 'text/javascript; charset=utf-8' }),
+)
 
 app.get('/sample.pdf', (c) => {
   return c.html(`<!DOCTYPE html>

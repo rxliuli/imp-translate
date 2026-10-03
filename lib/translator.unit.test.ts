@@ -62,6 +62,7 @@ describe('decodeHTML', () => {
 const openaiSettings: Settings = {
   provider: 'openai',
   targetLang: 'zh',
+  displayMode: 'bilingual',
   developerMode: false,
   debugMode: false,
   customRules: '',
@@ -210,6 +211,7 @@ vi.mock('./cache', () => ({
 const msSettings: Settings = {
   provider: 'microsoft',
   targetLang: 'zh',
+  displayMode: 'bilingual',
   developerMode: false,
   debugMode: false,
   customRules: '',
@@ -511,6 +513,7 @@ describe('chunked concurrent translation', () => {
 const impSettings: Settings = {
   provider: 'imp',
   targetLang: 'zh',
+  displayMode: 'bilingual',
   developerMode: false,
   debugMode: false,
   customRules: '',
@@ -628,5 +631,185 @@ describe('Imp Credits translate', () => {
     await expect(translate(['Hello'], 'zh', impSettings)).rejects.toThrow(
       'Rate limited',
     )
+  })
+})
+
+describe('segment translation', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  const SEGMENTS = ['Click ', 'here', ' for <new> details & more']
+  const ENCODED =
+    '<i id="0">Click </i><i id="1">here</i><i id="2"> for &lt;new&gt; details &amp; more</i>'
+
+  async function setup(settings: Settings) {
+    const { translate } = await import('./translator')
+    const { translateSegmentsVia, guardSegmentTranslator } = await import(
+      './translate-service'
+    )
+    const translator = guardSegmentTranslator(async (texts, lang) => {
+      const result = await translate(texts, lang, settings, { segments: true })
+      return result.texts
+    })
+    return (segments: string[]) =>
+      translateSegmentsVia(segments, 'zh', async (encoded, lang) => {
+        const [out] = await translator([encoded], lang)
+        return out
+      })
+  }
+
+  function mockGoogleResponse(texts: string[]) {
+    return { ok: true, json: async () => [texts, ['en']] }
+  }
+
+  const googleSettings: Settings = { ...openaiSettings, provider: 'google' }
+
+  it('google: sends the encoded HTML unescaped and maps reordered tags back', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockGoogleResponse([
+        '<i id="2">有关&lt;新&gt;详情&amp;更多，</i> <i id="0">点击</i><i id="1">这里</i>。',
+      ]),
+    )
+    const run = await setup(googleSettings)
+    // Text outside the tags (space, trailing 。) merges onto the preceding segment.
+    expect(await run(SEGMENTS)).toEqual(['点击', '这里。', '有关<新>详情&更多， '])
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body[0][0]).toEqual([ENCODED])
+  })
+
+  it('google: decodes a well-formed response', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockGoogleResponse([
+        '<i id="0">点击</i><i id="1">这里</i> <i id="2">查看&lt;新&gt;详情&amp;更多</i>',
+      ]),
+    )
+    const run = await setup(googleSettings)
+    expect(await run(SEGMENTS)).toEqual(['点击', '这里 ', '查看<新>详情&更多'])
+  })
+
+  it('google: plain translate path still escapes and decodes', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(mockGoogleResponse(['&lt;b&gt; 你好']))
+    const { translate } = await import('./translator')
+    const result = await translate(['<b> hi'], 'zh', googleSettings)
+    expect(result.texts).toEqual(['<b> 你好'])
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body[0][0]).toEqual(['&lt;b&gt; hi'])
+  })
+
+  it('blank segments are passed through and left out of the request', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockGoogleResponse(['<i id="0">你好</i><i id="1">世界</i>']),
+    )
+    const run = await setup(googleSettings)
+    expect(await run(['Hello', ' ', 'world', ''])).toEqual(['你好', ' ', '世界', ''])
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body[0][0]).toEqual(['<i id="0">Hello</i><i id="1">world</i>'])
+  })
+
+  it('all-blank segments return without a request', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const run = await setup(googleSettings)
+    expect(await run([' ', ''])).toEqual([' ', ''])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('openai: appends the segment instructions and decodes', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse('<i id="1">这里</i><i id="0">点击</i><i id="2">查看详情</i>'),
+    )
+    const run = await setup(openaiSettings)
+    expect(await run(SEGMENTS)).toEqual(['点击', '这里', '查看详情'])
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.messages[0].content).toContain('<i id="N">')
+    expect(body.messages[1].content).toBe(ENCODED)
+  })
+
+  it('openai: batched segment texts survive the outer <t> packing', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockOpenAIResponse(
+        '<t id="0"><i id="0">你好</i><i id="1">世界</i></t>\n<t id="1"><i id="0">再见</i></t>',
+      ),
+    )
+    const { translate } = await import('./translator')
+    const result = await translate(
+      ['<i id="0">Hello</i><i id="1">world</i>', '<i id="0">Bye</i>'],
+      'zh',
+      openaiSettings,
+      { segments: true },
+    )
+    expect(result.texts).toEqual([
+      '<i id="0">你好</i><i id="1">世界</i>',
+      '<i id="0">再见</i>',
+    ])
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.messages[0].content).toContain('<t id="N">')
+    expect(body.messages[0].content).toContain('<i id="N">')
+  })
+
+  it('openai: merged tags return null', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(mockOpenAIResponse('<i id="0">点击这里</i><i id="2">查看详情</i>'))
+    const run = await setup(openaiSettings)
+    expect(await run(SEGMENTS)).toBeNull()
+  })
+
+  it('openai: untranslated (echoed) input returns null', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(mockOpenAIResponse(ENCODED))
+    const run = await setup(openaiSettings)
+    expect(await run(SEGMENTS)).toBeNull()
+  })
+
+  it('imp: sends the encoded string as-is and decodes', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockImpResponse(['<i id="0">点击</i><i id="1">这里</i><i id="2">查看详情</i>']),
+    )
+    const run = await setup(impSettings)
+    expect(await run(SEGMENTS)).toEqual(['点击', '这里', '查看详情'])
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.texts).toEqual([ENCODED])
+  })
+
+  it('imp: duplicate ids return null', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue(
+      mockImpResponse(['<i id="0">点击</i><i id="0">这里</i><i id="2">查看详情</i>']),
+    )
+    const run = await setup(impSettings)
+    expect(await run(SEGMENTS)).toBeNull()
+  })
+
+  it('microsoft: does not support segments and never sends a request', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { translate, PROVIDER_CAPABILITIES } = await import('./translator')
+    expect(PROVIDER_CAPABILITIES.microsoft.supportsSegments).toBe(false)
+    expect(PROVIDER_CAPABILITIES.google.supportsSegments).toBe(true)
+    expect(PROVIDER_CAPABILITIES.openai.supportsSegments).toBe(true)
+    expect(PROVIDER_CAPABILITIES.imp.supportsSegments).toBe(true)
+    await expect(
+      translate([ENCODED], 'zh', msSettings, { segments: true }),
+    ).rejects.toThrow(/does not support/)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

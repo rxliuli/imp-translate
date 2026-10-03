@@ -1,5 +1,9 @@
 export type TranslationProvider = 'microsoft' | 'google' | 'openai' | 'imp'
 
+// bilingual: append the translation below the original text.
+// replace: swap the original text for the translation in place.
+export type DisplayMode = 'bilingual' | 'replace'
+
 export interface ImpProvider {
   apiKey: string
   baseUrl: string
@@ -16,6 +20,7 @@ export interface OpenAIConfig {
 export interface Settings {
   provider: TranslationProvider
   targetLang: string
+  displayMode: DisplayMode
   openai: OpenAIConfig
   imp?: ImpProvider // filled in automatically by the connect flow
   developerMode: boolean
@@ -26,6 +31,7 @@ export interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   provider: 'google',
   targetLang: navigator.language.split('-')[0] || 'zh',
+  displayMode: 'bilingual',
   developerMode: false,
   debugMode: false,
   customRules: '',
