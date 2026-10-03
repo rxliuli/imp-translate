@@ -60,12 +60,14 @@ function stripCodeFence(text: string): string {
  * Translators often push text out of the tags (Google moves inter-segment
  * spaces and Japanese sentence-final "。" outside), so text outside the tags
  * is merged onto the end of the preceding segment (in output order) — or the
- * start of the first one when it precedes every tag. As a safety valve, if
- * the non-whitespace text outside the tags exceeds half the total segment
- * length, the translator likely pushed the content out of the tags and the
- * output is rejected (null). A markdown code fence around the whole output
- * (LLMs like to answer ```html … ```) is stripped first.
- * Segment text is HTML-unescaped and NOT trimmed.
+ * start of the first one when it precedes every tag. How much text ends up
+ * outside the tags is not a failure signal: the merged linear output still
+ * reads correctly, only the inline styling boundaries drift. The one output
+ * that cannot be poured into existing nodes is a segment left empty after
+ * merging (the node would have to show nothing, or its untranslated source),
+ * so that returns null and the caller falls back. A markdown code fence
+ * around the whole output (LLMs like to answer ```html … ```) is stripped
+ * first. Segment text is HTML-unescaped and NOT trimmed.
  */
 export function decodeSegments(encoded: string, count: number): string[] | null {
   encoded = stripCodeFence(encoded)
@@ -97,13 +99,10 @@ export function decodeSegments(encoded: string, count: number): string[] | null 
   if (/<\/?i\b/i.test(outsideRaw)) return null
 
   const segments = inside.map((r) => unescapeSegmentText(r))
-  const outsideText = unescapeSegmentText(outsideRaw).replace(/\s+/g, '')
-  const insideLength = segments.reduce((n, s) => n + s.length, 0)
-  if (outsideText.length > insideLength * 0.5) return null
-
   segments[0] = unescapeSegmentText(leading) + segments[0]
   after.forEach((text, k) => {
     segments[k] += unescapeSegmentText(text)
   })
+  if (segments.some((s) => s.trim() === '')) return null
   return segments
 }

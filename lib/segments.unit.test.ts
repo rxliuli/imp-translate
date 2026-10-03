@@ -39,7 +39,7 @@ describe('escape/unescape', () => {
 
 describe('decodeSegments', () => {
   it('round-trips without trimming', () => {
-    const segs = ['  Click ', 'here', ' for <details> & more\n', '']
+    const segs = ['  Click ', 'here', ' for <details> & more\n']
     expect(decodeSegments(encodeSegments(segs), segs.length)).toEqual(segs)
   })
 
@@ -67,8 +67,8 @@ describe('decodeSegments', () => {
     ).toEqual(['A', 'B', 'C'])
   })
 
-  it('accepts empty segments', () => {
-    expect(decodeSegments('<i id="0"></i><i id="1">B</i>', 2)).toEqual(['', 'B'])
+  it('rejects empty segments (blank segments are never sent, see isPassthroughSegment)', () => {
+    expect(decodeSegments('<i id="0"></i><i id="1">B</i>', 2)).toBeNull()
   })
 
   it('rejects a missing id', () => {
@@ -113,16 +113,28 @@ describe('decodeSegments', () => {
     ).toEqual([' Lesen Sie jetzt', ' die Doku '])
   })
 
-  it('returns null when outside text exceeds half the segment length', () => {
-    // 4 chars inside, 3 non-whitespace chars outside (> 50%).
-    expect(decodeSegments('<i id="0">AB</i>xyz<i id="1">CD</i>', 2)).toBeNull()
-    // Exactly 50% is still accepted.
-    expect(decodeSegments('<i id="0">AB</i>xy<i id="1">CD</i>', 2)).toEqual(['ABxy', 'CD'])
-    // Everything pushed out of (empty) tags.
-    expect(decodeSegments('<i id="0"></i>text<i id="1"></i>', 2)).toBeNull()
+  it('accepts any amount of outside text as long as every segment ends up non-empty', () => {
+    expect(decodeSegments('<i id="0">AB</i>xyz<i id="1">CD</i>', 2)).toEqual(['ABxyz', 'CD'])
+    // Google on Wikipedia #42: most of the sentence outside, link texts inside.
+    expect(
+      decodeSegments(
+        '2024年，知识共享组织与<i id="0">新加坡政府</i>和<i id="1">联合国开发计划署</i>的合作伙伴',
+        2,
+      ),
+    ).toEqual(['2024年，知识共享组织与新加坡政府和', '联合国开发计划署的合作伙伴'])
   })
 
-  it('does not count outside whitespace against the safety valve', () => {
+  it('returns null when a segment is empty after merging outside text', () => {
+    // The last tag is empty and nothing follows it: that node would show nothing.
+    expect(decodeSegments('<i id="0">text</i><i id="1"></i>', 2)).toBeNull()
+    expect(decodeSegments('<i id="0"></i>text<i id="1"></i>', 2)).toBeNull()
+    // Whitespace-only is empty too.
+    expect(decodeSegments('<i id="0">A</i><i id="1"> </i>', 2)).toBeNull()
+    // An empty tag followed by outside text is fine: the text merges into it.
+    expect(decodeSegments('<i id="0">A</i><i id="1"></i>B', 2)).toEqual(['A', 'B'])
+  })
+
+  it('keeps outside whitespace on the preceding segment', () => {
     expect(decodeSegments('<i id="0">A</i>\n   \n<i id="1">B</i>', 2)).toEqual([
       'A\n   \n',
       'B',
@@ -163,7 +175,7 @@ describe('decodeSegments safety valves', () => {
     ])
   })
 
-  it('accepts long outside text on long paragraphs as long as it stays under 50%', () => {
+  it('accepts long outside text on long paragraphs', () => {
     const long = 'x'.repeat(500)
     const outside = 'This sentence was moved out of the tags by the model!'
     expect(decodeSegments(`<i id="0">${long}</i>${outside}<i id="1">${long}</i>`, 2)).toEqual([
