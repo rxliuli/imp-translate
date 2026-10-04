@@ -1,8 +1,8 @@
-import type { Settings } from './storage'
+import type { Settings, TranslationProvider } from './storage'
 import { applyRequestInterceptors, type OpenAIRequest } from './interceptors'
 
 const SHORT_TEXT_LIMIT = 20
-const EXPANSION_RATIO = 3
+export const EXPANSION_RATIO = 3
 
 function looksLikeExplanation(source: string, translated: string): boolean {
   return source.length < SHORT_TEXT_LIMIT && translated.length > source.length * EXPANSION_RATIO
@@ -41,6 +41,32 @@ export function decodeHTML(input: string): string {
 export interface TranslationResult {
   texts: string[]
   detectedLang?: string
+}
+
+export interface TranslateOptions {
+  /**
+   * Each text is a segment-encoded string (see lib/segments.ts): send the
+   * markup as-is and return the raw (still encoded) translation.
+   */
+  segments?: boolean
+}
+
+export interface ProviderCapabilities {
+  /**
+   * Whether the provider keeps segment tags in its output. Bing's
+   * ttranslatev3 keeps the tags but refills them in source order regardless
+   * of word order (e.g. "The red car of my friend" → id 0 "我朋友的"), so
+   * ids don't match meaning — but segments are written back in output
+   * order, not by id, and Bing's linear output is the translation.
+   */
+  supportsSegments: boolean
+}
+
+export const PROVIDER_CAPABILITIES: Record<TranslationProvider, ProviderCapabilities> = {
+  microsoft: { supportsSegments: true },
+  google: { supportsSegments: true },
+  openai: { supportsSegments: true },
+  imp: { supportsSegments: true },
 }
 
 // Microsoft retired the legacy Edge translation pipeline
@@ -169,11 +195,62 @@ async function bingTranslateLong(text: string, to: string): Promise<string> {
   return translated.join(' ')
 }
 
+// Segment requests go out one per paragraph (no packing, see below), so a
+// page full of mixed paragraphs would fire dozens at once; cap them.
+const BING_SEGMENT_CONCURRENCY = 4
+let bingSegmentActive = 0
+const bingSegmentQueue: (() => void)[] = []
+
+async function bingSegmentSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (bingSegmentActive >= BING_SEGMENT_CONCURRENCY) {
+    await new Promise<void>((resolve) => bingSegmentQueue.push(resolve))
+  } else {
+    bingSegmentActive++
+  }
+  try {
+    return await fn()
+  } finally {
+    // Hand the slot straight to the next waiter, or free it.
+    const next = bingSegmentQueue.shift()
+    if (next) next()
+    else bingSegmentActive--
+  }
+}
+
+// Segment-encoded texts (see lib/segments.ts) are sent one per request: the
+// newline packing below flattens newlines, which can sit inside the tags.
+// Over the request limit, the text is split between whole tags (each chunk
+// is still well-formed); a single tag over the limit can't be split, so the
+// input comes back unchanged (= declined, see guardSegmentTranslator).
+async function bingTranslateSegments(text: string, to: string): Promise<string> {
+  if (text.length <= BING_TEXT_LIMIT) return bingSegmentSlot(() => bingTranslateOne(text, to))
+  const tags = text.match(/<i id=(?:"\d+"|\d+)>[\s\S]*?<\/i>/g) ?? []
+  if (tags.join('') !== text || tags.some((t) => t.length > BING_TEXT_LIMIT)) return text
+  const chunks: string[] = []
+  let current = ''
+  for (const tag of tags) {
+    if (current && current.length + tag.length > BING_TEXT_LIMIT) {
+      chunks.push(current)
+      current = ''
+    }
+    current += tag
+  }
+  if (current) chunks.push(current)
+  const translated = await Promise.all(
+    chunks.map((c) => bingSegmentSlot(() => bingTranslateOne(c, to))),
+  )
+  return translated.join('')
+}
+
 async function translateMicrosoft(
   texts: string[],
   targetLang: string,
+  options: TranslateOptions = {},
 ): Promise<TranslationResult> {
   const to = BING_LANG_MAP[targetLang] ?? targetLang
+  if (options.segments) {
+    return { texts: await Promise.all(texts.map((t) => bingTranslateSegments(t, to))) }
+  }
   // ttranslatev3 takes one text per request, so pack the batch into
   // newline-joined groups within the request limit (Bing preserves newlines)
   // and split each result back. Text-internal newlines are flattened so they
@@ -239,8 +316,10 @@ function escapeHtml(s: string): string {
 async function translateGoogle(
   texts: string[],
   targetLang: string,
+  options: TranslateOptions = {},
 ): Promise<TranslationResult> {
-  const escaped = texts.map(escapeHtml)
+  // Segment-encoded texts are already HTML (escaped text inside real tags).
+  const escaped = options.segments ? texts : texts.map(escapeHtml)
   const resp = await fetch(
     'https://translate-pa.googleapis.com/v1/translateHtml',
     {
@@ -260,7 +339,7 @@ async function translateGoogle(
   const detectedLangs = data[1] as string[] | undefined
 
   return {
-    texts: translated.map((t) => decodeHTML(t)),
+    texts: options.segments ? translated : translated.map((t) => decodeHTML(t)),
     detectedLang: detectedLangs?.[0],
   }
 }
@@ -269,10 +348,14 @@ export function chatCompletionsUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '') + '/chat/completions'
 }
 
+const SEGMENTS_PROMPT =
+  '\nThe input contains inline <i id=N> tags marking pieces of the text. Keep every <i> tag with its id in the translation and wrap each tag around the translation of the text it originally wrapped. Tags may be reordered to follow natural word order in the target language, but never drop, merge, or add tags, and put no text outside them.'
+
 async function translateOpenAI(
   texts: string[],
   targetLang: string,
   settings: Settings,
+  options: TranslateOptions = {},
 ): Promise<TranslationResult> {
   const { apiKey, baseUrl, model, systemPrompt } = settings.openai
   if (!apiKey) throw new Error('OpenAI API key is not configured')
@@ -283,9 +366,11 @@ async function translateOpenAI(
   const userContent = single
     ? texts[0]
     : texts.map((t, i) => `<t id="${i}">${t}</t>`).join('\n')
-  const sysContent = single
-    ? prompt
-    : prompt + '\nThe input contains multiple texts wrapped in <t id="N"> tags. Return translations in the same format with matching ids. Keep the XML tags intact.'
+  const sysContent =
+    (single
+      ? prompt
+      : prompt + '\nThe input contains multiple texts wrapped in <t id="N"> tags. Return translations in the same format with matching ids. Keep the XML tags intact.') +
+    (options.segments ? SEGMENTS_PROMPT : '')
 
   const req: OpenAIRequest = {
     endpoint: chatCompletionsUrl(baseUrl),
@@ -421,16 +506,20 @@ export async function translate(
   texts: string[],
   targetLang: string,
   settings: Settings,
+  options: TranslateOptions = {},
 ): Promise<TranslationResult> {
   if (texts.length === 0) return { texts: [] }
+  if (options.segments && !PROVIDER_CAPABILITIES[settings.provider]?.supportsSegments) {
+    throw new Error(`Provider ${settings.provider} does not support segment translation`)
+  }
 
   switch (settings.provider) {
     case 'microsoft':
-      return translateMicrosoft(texts, targetLang)
+      return translateMicrosoft(texts, targetLang, options)
     case 'google':
-      return translateGoogle(texts, targetLang)
+      return translateGoogle(texts, targetLang, options)
     case 'openai':
-      return translateOpenAI(texts, targetLang, settings)
+      return translateOpenAI(texts, targetLang, settings, options)
     case 'imp':
       return translateImp(texts, targetLang, settings)
     default:

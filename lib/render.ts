@@ -88,6 +88,10 @@ const STYLES_TEXT = `
     .${RETRY_CLASS}:hover {
       opacity: 1;
     }
+    [data-imp-loading] {
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
   `
 
 let sharedSheet: CSSStyleSheet | null = null
@@ -125,6 +129,15 @@ export function ensureShadowStyles(root: ShadowRoot) {
   style.id = STYLE_ID
   style.textContent = STYLES_TEXT
   root.appendChild(style)
+}
+
+// Make our stylesheet available where `el` renders (document or its shadow
+// root). Used by the replace display mode, which never goes through
+// injectLoading but still styles [data-imp-loading].
+export function ensureStylesFor(el: Element) {
+  ensureStyles()
+  const root = el.getRootNode()
+  if (root instanceof ShadowRoot) ensureShadowStyles(root)
 }
 
 function hasLineClamp(el: HTMLElement): boolean {
@@ -269,6 +282,35 @@ export function injectLoading(blocks: TranslatableBlock[]) {
   }
 }
 
+// Bilingual result for a virtual block (a run of nodes inside a mixed
+// container, see TranslatableBlock.nodes) in replace mode, where nothing may
+// be wrapped or moved: the result element — plus a <br> for long text, as in
+// injectLoading — is only inserted right after the run's last node. Returns
+// the inserted nodes (for removal) and the result element, in loading state.
+export function injectRunLoading(
+  parent: HTMLElement,
+  lastNode: Node,
+  text: string,
+): { inserted: HTMLElement[]; wrapper: HTMLElement } {
+  ensureStylesFor(parent)
+  const wrapper = document.createElement('font')
+  wrapper.className = `${RESULT_CLASS} ${LOADING_CLASS}`
+  wrapper.setAttribute('translate', 'no')
+  const inserted: HTMLElement[] = []
+  if (text.length <= SHORT_TEXT_THRESHOLD) {
+    // A separating space without a page-level Text node.
+    wrapper.style.marginInlineStart = '0.25em'
+  } else {
+    const br = document.createElement('br')
+    br.className = BR_CLASS
+    inserted.push(br)
+  }
+  inserted.push(wrapper)
+  const ref = lastNode.nextSibling
+  for (const n of inserted) parent.insertBefore(n, ref)
+  return { inserted, wrapper }
+}
+
 export function repositionTranslation(element: HTMLElement, expectedText: string): void {
   const wrapper = element.querySelector(`.${RESULT_CLASS}`) as HTMLElement | null
   if (!wrapper) return
@@ -393,6 +435,16 @@ export function injectDebugStyles() {
       border-radius: 0 0 0 3px;
       z-index: 2147483647;
       pointer-events: none;
+    }
+    /* Replace mode: block rebuilt from the engine output (lib/rewrite.ts). */
+    [data-imp-rewritten] {
+      outline: 2px dashed orange !important;
+      outline-offset: -2px !important;
+    }
+    /* Replace mode: block that still fell back to a bilingual append. */
+    [data-imp-fallback] {
+      outline: 2px dashed rgba(80, 120, 255, 0.8) !important;
+      outline-offset: -2px !important;
     }
   `
   document.head.appendChild(style)

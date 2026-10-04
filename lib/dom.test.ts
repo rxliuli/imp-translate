@@ -1136,3 +1136,237 @@ describe('extractBlocks', () => {
     })
   })
 })
+
+describe('extractBlocks with noStructuralWrites', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  function childListRecords(fn: () => void): MutationRecord[] {
+    const obs = new MutationObserver(() => {})
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true })
+    fn()
+    const records = obs.takeRecords()
+    obs.disconnect()
+    return records
+  }
+
+  it('reports mixed-container inline runs as virtual blocks instead of wrapping them', () => {
+    document.body.innerHTML =
+      '<div id="c">Intro <em>text</em> here <a href="#">link</a> tail<p>Para graph</p>Second <b>run</b> after</div>'
+    const c = document.getElementById('c')!
+    const before = Array.from(c.childNodes)
+    let blocks: ReturnType<typeof extractBlocks> = []
+    const records = childListRecords(() => {
+      blocks = extractBlocks(document.body, { noStructuralWrites: true })
+    })
+    expect(records).toEqual([])
+    expect(document.querySelector('[data-imp-wrap]')).toBeNull()
+    expect(Array.from(c.childNodes)).toEqual(before)
+
+    expect(blocks.map((b) => b.text)).toEqual([
+      'Intro text here link tail',
+      'Para graph',
+      'Second run after',
+    ])
+    const [first, para, second] = blocks
+    expect(first.element).toBe(c)
+    expect(first.nodes).toEqual(before.slice(0, 5))
+    expect(para.element).toBe(c.querySelector('p'))
+    expect(para.nodes).toBeUndefined()
+    expect(second.element).toBe(c)
+    expect(second.nodes).toEqual(before.slice(6))
+  })
+
+  it('still uses a single-element run as an element block', () => {
+    document.body.innerHTML = '<div><span>Lonely span text</span><p>Paragraph</p></div>'
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text, b.nodes])).toEqual([
+      ['SPAN', 'Lonely span text', undefined],
+      ['P', 'Paragraph', undefined],
+    ])
+  })
+
+  it('skips runs the caller reports as processed', () => {
+    document.body.innerHTML = '<div>Intro <em>text</em> here<p>Para graph</p>Tail <b>run</b></div>'
+    const first = extractBlocks(document.body, { noStructuralWrites: true })
+    const done = new Set<Node>([first[0].nodes![0]])
+    const again = extractBlocks(document.body, {
+      noStructuralWrites: true,
+      isRunProcessed: (nodes) => nodes.some((n) => done.has(n)),
+    })
+    expect(again.map((b) => b.text)).toEqual(['Para graph', 'Tail run'])
+  })
+
+  it('ignores our own inserted results between runs', () => {
+    document.body.innerHTML = '<div>Intro <em>text</em> here<p>Para graph</p></div>'
+    const div = document.querySelector('div')!
+    const [run] = extractBlocks(document.body, { noStructuralWrites: true })
+    const font = document.createElement('font')
+    font.className = 'imp-translate-result'
+    font.textContent = 'translated'
+    div.insertBefore(font, run.nodes![run.nodes!.length - 1].nextSibling)
+    const again = extractBlocks(document.body, { noStructuralWrites: true })
+    expect(again[0].nodes).toEqual(run.nodes)
+    expect(again[0].text).toBe('Intro text here')
+  })
+
+  it('does not split pre-wrap blocks on blank lines', () => {
+    document.body.innerHTML =
+      '<div style="white-space: pre-wrap"><span>First paragraph of the post.\n\nSecond </span><a href="#">link</a><span> paragraph.\n\nThird paragraph.</span></div>' +
+      '<p style="white-space: pre-wrap">One paragraph.\n\nAnother paragraph.</p>'
+    const div = document.querySelector('div')!
+    const p = document.querySelector('p')!
+    const divHtml = div.innerHTML
+    const pText = p.firstChild
+    let blocks: ReturnType<typeof extractBlocks> = []
+    const records = childListRecords(() => {
+      blocks = extractBlocks(document.body, { noStructuralWrites: true })
+    })
+    expect(records).toEqual([])
+    expect(div.innerHTML).toBe(divHtml)
+    expect(p.childNodes.length).toBe(1)
+    expect(p.firstChild).toBe(pText)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].element).toBe(div)
+    expect(blocks[0].text).toBe(
+      'First paragraph of the post.\n\nSecond link paragraph.\n\nThird paragraph.',
+    )
+    expect(blocks[1].element).toBe(p)
+    expect(blocks[1].text).toBe('One paragraph.\n\nAnother paragraph.')
+  })
+
+  it('splits fake <br><br> paragraphs into separate virtual blocks without writes', () => {
+    document.body.innerHTML =
+      '<div>First <b>para</b> here<br><br>Second <i>para</i> here<p>Block child</p></div>'
+    let blocks: ReturnType<typeof extractBlocks> = []
+    const records = childListRecords(() => {
+      blocks = extractBlocks(document.body, { noStructuralWrites: true })
+    })
+    expect(records).toEqual([])
+    expect(blocks.map((b) => [b.text, !!b.nodes])).toEqual([
+      ['First para here', true],
+      ['Second para here', true],
+      ['Block child', false],
+    ])
+  })
+})
+
+describe('extractBlocks with translateChrome', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  const chromeHtml = `
+    <nav>
+      <ul>
+        <li>Main page</li>
+        <li><a href="#">Talk</a></li>
+      </ul>
+      <a href="#">Log in</a>
+      <button>Save</button>
+    </nav>
+    <p>Main content</p>
+    <footer><p>Copyright notice</p><button>Read</button></footer>
+  `
+
+  it('skips nav and footer by default', () => {
+    document.body.innerHTML = chromeHtml
+    expect(extractBlocks(document.body).map((b) => b.text)).toEqual(['Main content'])
+    expect(
+      extractBlocks(document.body, { noStructuralWrites: true }).map((b) => b.text),
+    ).toEqual(['Main content'])
+  })
+
+  it('collects li, a and button inside nav and footer', () => {
+    document.body.innerHTML = chromeHtml
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true, translateChrome: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text, b.nodes])).toEqual([
+      ['LI', 'Main page', undefined],
+      ['LI', 'Talk', undefined],
+      ['A', 'Log in', undefined],
+      ['BUTTON', 'Save', undefined],
+      ['P', 'Main content', undefined],
+      ['P', 'Copyright notice', undefined],
+      ['BUTTON', 'Read', undefined],
+    ])
+  })
+
+  it('collects a nav whose only content is inline as one block', () => {
+    document.body.innerHTML = '<nav><a href="/">Home</a></nav><p>Main content</p>'
+    const blocks = extractBlocks(document.body, { translateChrome: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+      ['NAV', 'Home'],
+      ['P', 'Main content'],
+    ])
+  })
+
+  it('still skips 1-2 char ASCII and letterless labels', () => {
+    document.body.innerHTML = '<nav><button>OK</button><button>42</button><button>»</button><button>Menu</button></nav>'
+    const blocks = extractBlocks(document.body, { translateChrome: true })
+    expect(blocks.map((b) => b.text)).toEqual(['Menu'])
+  })
+
+  it('keeps a button inside body text as part of one block', () => {
+    document.body.innerHTML = '<p id="p">Click <button>here</button> to continue</p>'
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true, translateChrome: true })
+    expect(blocks.map((b) => [b.element.id, b.text, b.nodes])).toEqual([
+      ['p', 'Click here to continue', undefined],
+    ])
+  })
+
+  it('splits buttons inside nav into separate blocks', () => {
+    document.body.innerHTML =
+      '<nav><span>Signed in</span> <button>Settings</button> <button>Sign out</button></nav>'
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true, translateChrome: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text, b.nodes])).toEqual([
+      ['SPAN', 'Signed in', undefined],
+      ['BUTTON', 'Settings', undefined],
+      ['BUTTON', 'Sign out', undefined],
+    ])
+  })
+
+  it('splits buttons inside a role="toolbar" element', () => {
+    document.body.innerHTML =
+      '<div role="toolbar"><button>Bold</button><button>Italic</button></div>' +
+      '<div><button>Undo</button><button>Redo</button></div>'
+    const blocks = extractBlocks(document.body, { noStructuralWrites: true, translateChrome: true })
+    expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+      ['BUTTON', 'Bold'],
+      ['BUTTON', 'Italic'],
+      ['DIV', 'UndoRedo'],
+    ])
+  })
+
+  it('splits buttons when re-walking a subtree inside nav', () => {
+    document.body.innerHTML = '<nav><div id="sub"><button>Settings</button><button>Sign out</button></div></nav>'
+    const blocks = extractBlocks(document.getElementById('sub')!, { translateChrome: true })
+    expect(blocks.map((b) => b.text)).toEqual(['Settings', 'Sign out'])
+  })
+
+  it('ignores includeSelectors but still honors skipSelectors', () => {
+    document.body.innerHTML = `
+      <nav><a href="#">Log in</a><button class="skip">Save</button></nav>
+      <div class="main"><p>Inside include</p><p class="skip">Excluded inside</p></div>
+      <p>Outside include</p>
+    `
+    const opts = { includeSelectors: ['.main'], skipSelectors: ['.skip'] }
+    expect(extractBlocks(document.body, opts).map((b) => b.text)).toEqual(['Inside include'])
+    expect(
+      extractBlocks(document.body, { ...opts, noStructuralWrites: true, translateChrome: true }).map(
+        (b) => b.text,
+      ),
+    ).toEqual(['Log in', 'Inside include', 'Outside include'])
+  })
+
+  it('ignores includeSelectors for virtual inline runs', () => {
+    document.body.innerHTML =
+      '<div>Loose <b>inline</b> run<p>Para outside</p></div><div class="main"><p>Inside</p></div>'
+    const blocks = extractBlocks(document.body, {
+      includeSelectors: ['.main'],
+      noStructuralWrites: true,
+      translateChrome: true,
+    })
+    expect(blocks.map((b) => b.text)).toEqual(['Loose inline run', 'Para outside', 'Inside'])
+  })
+})

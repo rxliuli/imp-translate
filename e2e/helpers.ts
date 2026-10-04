@@ -96,10 +96,28 @@ export async function configureMockProvider(page: Page, baseURL: string) {
   }, `${baseURL}/v1/chat/completions`)
 }
 
+// Merges into the stored settings, so call it after configureMockProvider
+// (which replaces them wholesale).
+export async function setDisplayMode(context: BrowserContext, displayMode: 'bilingual' | 'replace') {
+  const sw = await getServiceWorker(context)
+  await sw.evaluate(async (displayMode) => {
+    const existing = ((await chrome.storage.local.get('settings')).settings ?? {}) as Record<
+      string,
+      unknown
+    >
+    await chrome.storage.local.set({ settings: { ...existing, displayMode } })
+  }, displayMode)
+}
+
 export async function startTranslation(page: Page, targetLang = 'zh', showToast = false) {
   const tabId = await getTabId(page)
   const sw = await getServiceWorker(page.context())
   const rules = await computeRulesForPage(page)
+  // Like the background's startTranslationForTab: the mode comes from settings.
+  const displayMode = await sw.evaluate(async () => {
+    const r = await chrome.storage.local.get('settings')
+    return (r.settings as { displayMode?: string } | undefined)?.displayMode ?? 'bilingual'
+  })
   await sw.evaluate(
     async ([tabId, lang]) => {
       await chrome.storage.session.set({ [`tab_translating_${tabId}`]: lang })
@@ -112,6 +130,7 @@ export async function startTranslation(page: Page, targetLang = 'zh', showToast 
   )
   await sendToContentScript(page.context(), tabId, 'startTranslation', {
     targetLang,
+    displayMode,
     showToast,
     rules,
   })

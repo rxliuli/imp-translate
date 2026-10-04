@@ -9,7 +9,7 @@ test('options page renders with default settings', async ({
 
   await expect(page.locator('text=Imp Translate')).toBeVisible()
   await expect(page.locator('text=Microsoft Translator')).toBeVisible()
-  await expect(page.locator('text=Google Translate')).toBeVisible()
+  await expect(page.getByText('Google Translate', { exact: true })).toBeVisible()
   await expect(page.locator('text=OpenAI Compatible')).toBeVisible()
 
   const googleRadio = page.locator('button[role="radio"][value="google"]')

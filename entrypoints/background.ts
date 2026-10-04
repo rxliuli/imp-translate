@@ -1,9 +1,14 @@
 import { checkConnection, exchangeCode, humanizeError } from '@rxliuli/imp-credits-sdk'
 import { messager } from '@/lib/message'
 import { getSettings, saveSettings, type TranslationProvider } from '@/lib/storage'
-import { translate } from '@/lib/translator'
+import { PROVIDER_CAPABILITIES, translate } from '@/lib/translator'
 import { getCached, setCached, evictOldEntries } from '@/lib/cache'
-import { createTranslateService, type TranslateService } from '@/lib/translate-service'
+import {
+  createTranslateService,
+  guardSegmentTranslator,
+  translateSegmentsVia,
+  type TranslateService,
+} from '@/lib/translate-service'
 import { eldDetectLanguage } from '@/lib/eld-detect'
 import { parseRules, matchRulesForHostname, type SiteRule } from '@/lib/rules'
 import { getEffectiveRules, setupRemoteRulesAlarm, fetchRemoteRulesIfNeeded } from '@/lib/remote-rules'
@@ -101,7 +106,12 @@ async function startTranslationForTab(
   const tab = await browser.tabs.get(tabId)
   const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
   t('rules fetched')
-  await messager.sendMessage('startTranslation', { targetLang, showToast, rules }, { tabId })
+  const { displayMode } = await getSettings()
+  await messager.sendMessage(
+    'startTranslation',
+    { targetLang, displayMode, showToast, rules },
+    { tabId },
+  )
   t('startTranslation sent')
 }
 
@@ -231,6 +241,48 @@ export default defineBackground(() => {
     }
     return service
   }
+
+  // Segment-encoded paragraphs (translateSegments) get their own services:
+  // their batches need the segment prompt/HTML handling, and their cache
+  // entries are prefixed so they never collide with plain-text ones.
+  const SEGMENT_CACHE_PREFIX = 'seg:'
+  const segmentServices = new Map<TranslationProvider, TranslateService>()
+
+  function getSegmentService(provider: TranslationProvider): TranslateService {
+    let service = segmentServices.get(provider)
+    if (!service) {
+      service = createTranslateService({
+        ...BATCH_PARAMS[provider],
+        getCached: (text, lang) => getCached(SEGMENT_CACHE_PREFIX + text, lang),
+        setCached: (text, lang, translated) =>
+          setCached(SEGMENT_CACHE_PREFIX + text, lang, translated),
+        translator: guardSegmentTranslator(async (texts, lang) => {
+          const settings = await getSettings()
+          const result = await translate(texts, lang, settings, { segments: true })
+          return result.texts
+        }),
+        onAfterFlush: () => evictOldEntries(),
+      })
+      segmentServices.set(provider, service)
+    }
+    return service
+  }
+
+  messager.onMessage('translateSegments', async ({ data }) => {
+    const settings = await getSettings()
+    if (!PROVIDER_CAPABILITIES[settings.provider]?.supportsSegments) {
+      return {
+        segments: null,
+        html: null,
+        sentIndices: [],
+        reason: `provider ${settings.provider} does not support segments`,
+      }
+    }
+    const service = getSegmentService(settings.provider)
+    return await translateSegmentsVia(data.segments, data.targetLang, (encoded, lang) =>
+      service.translate(encoded, lang),
+    )
+  })
 
   messager.onMessage('translate', async ({ data }) => {
     const t = debugTime(`bg:translate(lang=${data.targetLang}, text="${data.text.slice(0, 40)}")`)
@@ -423,11 +475,12 @@ export default defineBackground(() => {
         await injectContentScript(details.tabId, details.frameId)
         const tab = await browser.tabs.get(details.tabId)
         const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
+        const { displayMode } = await getSettings()
         // Target this frame only — broadcasting would needlessly re-wake every
         // already-translating frame in the tab.
         await messager.sendMessage(
           'startTranslation',
-          { targetLang: lang, rules },
+          { targetLang: lang, displayMode, rules },
           { tabId: details.tabId, frameId: details.frameId },
         )
       } catch {
@@ -464,9 +517,10 @@ export default defineBackground(() => {
     const tab = await browser.tabs.get(details.tabId)
     const rules = await getMatchedRulesForHostname(hostnameFromUrl(tab.url))
     t('rules fetched')
+    const { displayMode } = await getSettings()
     await messager.sendMessage(
       'startTranslation',
-      { targetLang: lang, rules },
+      { targetLang: lang, displayMode, rules },
       { tabId: details.tabId },
     )
     t('startTranslation sent')

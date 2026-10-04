@@ -3,6 +3,7 @@ import {
   getSettings,
   saveSettings,
   type Settings,
+  type DisplayMode,
   type TranslationProvider,
 } from '@/lib/storage'
 import { chatCompletionsUrl, translate } from '@/lib/translator'
@@ -64,6 +65,23 @@ const PROVIDERS: {
     value: 'openai',
     label: 'OpenAI Compatible',
     description: 'Requires API key',
+  },
+]
+
+const DISPLAY_MODES: {
+  value: DisplayMode
+  label: string
+  description: string
+}[] = [
+  {
+    value: 'bilingual',
+    label: 'Bilingual',
+    description: 'Show the translation below the original text',
+  },
+  {
+    value: 'replace',
+    label: 'Replace',
+    description: 'Replace the original text in place, like Google Translate',
   },
 ]
 
@@ -376,6 +394,35 @@ export function App() {
       )}
 
       <section className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Display Mode</Label>
+          <RadioGroup
+            value={settings.displayMode}
+            onValueChange={(v) => update({ displayMode: v as DisplayMode })}
+          >
+            {DISPLAY_MODES.map((m) => (
+              <label
+                key={m.value}
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  settings.displayMode === m.value
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <RadioGroupItem value={m.value} className="mt-0.5" />
+                <div>
+                  <div className="text-sm font-medium">{m.label}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {m.description}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </RadioGroup>
+        </div>
+      </section>
+
+      <section className="space-y-4">
         <div className="flex items-start gap-2">
           <Checkbox
             id="developer-mode"
@@ -389,7 +436,10 @@ export function App() {
               Developer Mode
             </Label>
             <p className="text-xs text-muted-foreground">
-              Enables access to features suitable for technical users.
+              Unlocks custom skip rules and outlines translation issues on
+              pages: blocks whose translation matched the original, blocks
+              that needed a structural rewrite, and blocks that fell back to
+              bilingual.
             </p>
           </div>
         </div>
@@ -411,25 +461,6 @@ export function App() {
                 <code className="bg-muted px-1 rounded">domain##selector</code>{' '}
                 — elements matching the CSS selector will not be translated.
               </p>
-            </div>
-
-            <div className="flex items-start gap-2">
-              <Checkbox
-                id="debug-mode"
-                checked={settings.debugMode}
-                onCheckedChange={(checked) =>
-                  update({ debugMode: checked === true })
-                }
-              />
-              <div className="grid gap-0.5 leading-none">
-                <Label htmlFor="debug-mode" className="cursor-pointer">
-                  Debug Mode
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Outline blocks whose translation matched the original (likely
-                  false positives) so you can write skip rules for them.
-                </p>
-              </div>
             </div>
 
             <div className="space-y-2">

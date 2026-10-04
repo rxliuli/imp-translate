@@ -1,5 +1,9 @@
 export type TranslationProvider = 'microsoft' | 'google' | 'openai' | 'imp'
 
+// bilingual: append the translation below the original text.
+// replace: swap the original text for the translation in place.
+export type DisplayMode = 'bilingual' | 'replace'
+
 export interface ImpProvider {
   apiKey: string
   baseUrl: string
@@ -16,18 +20,18 @@ export interface OpenAIConfig {
 export interface Settings {
   provider: TranslationProvider
   targetLang: string
+  displayMode: DisplayMode
   openai: OpenAIConfig
   imp?: ImpProvider // filled in automatically by the connect flow
   developerMode: boolean
   customRules: string
-  debugMode: boolean
 }
 
 const DEFAULT_SETTINGS: Settings = {
   provider: 'google',
   targetLang: navigator.language.split('-')[0] || 'zh',
+  displayMode: 'bilingual',
   developerMode: false,
-  debugMode: false,
   customRules: '',
   openai: {
     apiKey: '',
@@ -53,13 +57,25 @@ function migrateLegacyEndpoint(raw: Partial<Settings>): Partial<Settings> {
   return { ...raw, openai: { ...rest, baseUrl } }
 }
 
+// Fields older versions stored that no longer exist (debugMode was merged
+// into developerMode): dropped from what callers see, and from storage on
+// the next save. No migration — the old value is simply discarded.
+const REMOVED_KEYS = ['debugMode']
+
+function dropRemoved<T extends object>(raw: T): T {
+  if (!REMOVED_KEYS.some((k) => k in raw)) return raw
+  const out = { ...raw } as Record<string, unknown>
+  for (const k of REMOVED_KEYS) delete out[k]
+  return out as T
+}
+
 export async function getSettings(): Promise<Settings> {
   const stored = await browser.storage.local.get('settings')
   if (!stored.settings) return { ...DEFAULT_SETTINGS }
   const raw = stored.settings as Partial<Settings>
   const migrated = migrateLegacyEndpoint(raw)
   if (migrated !== raw) await browser.storage.local.set({ settings: migrated })
-  return { ...DEFAULT_SETTINGS, ...migrated }
+  return { ...DEFAULT_SETTINGS, ...dropRemoved(migrated) }
 }
 
 export async function saveSettings(
@@ -67,7 +83,7 @@ export async function saveSettings(
 ): Promise<Settings> {
   const stored = await browser.storage.local.get('settings')
   const raw = migrateLegacyEndpoint((stored.settings ?? {}) as Partial<Settings>)
-  const merged = { ...raw, ...settings }
+  const merged = dropRemoved({ ...raw, ...settings })
   await browser.storage.local.set({ settings: merged })
   return { ...DEFAULT_SETTINGS, ...merged }
 }
