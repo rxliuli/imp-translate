@@ -14,10 +14,10 @@ An open-source, cross-platform browser extension for full-page web translation. 
 
 - Auto-injected UI (floating buttons, popups on hover, etc.)
 - Word or sentence-level translation (selection, lookup, dictionaries)
-- Input box translation (Discord, Slack, etc.)
-- Video subtitle translation (YouTube, Netflix, etc.)
+- Input box translation (Discord, Slack, etc.) — see [Input Translator](https://store.rxliuli.com/extensions/input-translator)
+- Video subtitle translation (YouTube, Netflix, etc.) — see [BilingualTube](https://chromewebstore.google.com/detail/bilingualtube/ombapcolopdeailifakdgaijhoncgpgn) for YouTube
 - Custom translation styling — will never be considered
-- Document translation of any format (Docs, PDF, etc.)
+- Document translation of any format (Docs, PDF, etc.) — see [Imp Translate Web](https://imp.rxliuli.com/translate/) for text, Markdown, subtitle and EPUB files
 - Compatibility with every website via custom rules — only the world's top 50 most-visited sites are prioritized
 - Support for every LLM API provider — only OpenAI-compatible APIs are supported (many tools exist to convert other providers)
 
