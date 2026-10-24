@@ -116,15 +116,20 @@ old.reddit.com#+#.md
 *.reddit.com#+#search-media-feed a.line-clamp-2
 ! https://www.reddit.com/user/rxliuli/  (user profile: overview + comments tabs)
 *.reddit.com#+#shreddit-profile-comment .md
-! Notifications inbox — each item is a <notification-item> Web Component. Skips:
+! Notifications inbox — two row components exist: the legacy <notification-item> Web Component and
+! Reddit's newer RPL row <rpl-inbox-row> (wrapped in <notification-announcement> for announcements).
+! The 2026-10 redesign switched the inbox page to the RPL row, and because include is an isolate gate
+! (uBO semantics) the legacy-only include matched nothing and silently suppressed the whole page.
+! Both are kept: the legacy tag is still used by other inbox surfaces. Skips:
 !   - data-testid="title": Reddit's templated header ("X replied to your comment in Y", "Achievement unlocked!", "Your post just hit N views!") — structural chrome with variable user/subreddit/count slots, same role as YouTube comment #author-text. Reddit will localize this server-side.
 !   - data-testid="sent-at": "4h ago" timestamp
-!   - notification-context-menu: kebab menu items (slotted into hover-actions)
+!   - notification-context-menu / announcement-overflow-menu: kebab menu items (slotted into hover-actions)
+! The description is data-testid="body" on the RPL row; it sits inside the include set, so it needs no rule.
 ! https://www.reddit.com/notifications
-*.reddit.com#+#notification-item
-*.reddit.com##notification-item [data-testid="title"]
-*.reddit.com##notification-item [data-testid="sent-at"]
-*.reddit.com##notification-item notification-context-menu
+*.reddit.com#+#notification-item,rpl-inbox-row
+*.reddit.com##notification-item [data-testid="title"],rpl-inbox-row [data-testid="title"]
+*.reddit.com##notification-item [data-testid="sent-at"],rpl-inbox-row [data-testid="sent-at"]
+*.reddit.com##notification-context-menu,announcement-overflow-menu
 ! https://www.reddit.com/r/amphibia/  (subreddit sidebar: community description, rules, custom widgets)
 *.reddit.com#+##description
 *.reddit.com#+#faceplate-expandable-section-helper h2.i18n-translatable-text,faceplate-expandable-section-helper .i18n-translatable-text p

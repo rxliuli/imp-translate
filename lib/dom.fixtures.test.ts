@@ -4,6 +4,9 @@ import npmVistaReadme from './__fixtures__/npm-vista-readme.html?raw'
 import appleRejectionBr from './__fixtures__/apple-rejection-br.html?raw'
 import appleRejectionNewlines from './__fixtures__/apple-rejection-newlines.html?raw'
 import grokResponseParagraphs from './__fixtures__/grok-response-paragraphs.html?raw'
+import redditNotifications from './__fixtures__/reddit-notifications.html?raw'
+import builtinRulesRaw from '@/lib/rules.txt?raw'
+import { matchRulesForUrl, parseRules } from './rules'
 
 // Count net Elements inserted into a subtree by running fn().
 // Catches "extractBlocks created 100x more nodes than blocks" regressions —
@@ -340,5 +343,57 @@ describe('Grok response with display:block spans', () => {
       blockCount = extractBlocks(document.body).length
     })
     expect(inserted).toBeLessThanOrEqual(blockCount)
+  })
+})
+
+// Reddit notifications inbox. The 2026-10 redesign replaced the legacy
+// <notification-item> Web Component with the RPL row <rpl-inbox-row> (inside
+// <notification-announcement>). Because include rules are an isolate gate, the
+// legacy-only include matched nothing and suppressed the whole page —
+// silently, with no error anywhere.
+// Captured from https://www.reddit.com/notifications on 2026-10-24.
+describe('Reddit notifications inbox (rpl-inbox-row)', () => {
+  const selectors = () =>
+    matchRulesForUrl(
+      parseRules(builtinRulesRaw),
+      'www.reddit.com',
+      '/notifications',
+    )
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('include rules match the RPL row', () => {
+    document.body.innerHTML = redditNotifications
+    expect(document.querySelector('rpl-inbox-row')).not.toBeNull()
+    const { includeSelectors } = selectors()
+    expect(
+      includeSelectors.some((s) =>
+        document.querySelector('rpl-inbox-row')!.matches(s),
+      ),
+    ).toBe(true)
+  })
+
+  it('extracts the body text of each row', () => {
+    document.body.innerHTML = redditNotifications
+    const blocks = extractBlocks(document.body, selectors())
+    const texts = blocks.map((b) => b.text)
+
+    expect(texts.some((t) => t.includes('Take this quick survey'))).toBe(true)
+    expect(texts.some((t) => t.includes('im_trying_to_learn_chinese'))).toBe(
+      true,
+    )
+  })
+
+  it('skips the templated title and the timestamp', () => {
+    document.body.innerHTML = redditNotifications
+    const blocks = extractBlocks(document.body, selectors())
+    const joined = blocks.map((b) => b.text).join('\n')
+
+    expect(joined).not.toContain('Take part in Reddit research')
+    expect(joined).not.toContain('Please select a user flair')
+    expect(joined).not.toContain('4d ago')
+    expect(joined).not.toContain('3mo ago')
   })
 })
