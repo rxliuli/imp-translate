@@ -14,6 +14,7 @@
 
 import { getVisibleTextNodes, getVisibleTextNodesOf, type TranslatableBlock } from './dom'
 import { mayClearSegment } from './segments'
+import { debugLog } from './utils'
 import {
   getRewrite,
   pruneRewrites,
@@ -63,6 +64,29 @@ const replaced = new WeakMap<Text, Replacement>()
 const registry = new Map<Node, Set<Text>>()
 const loading = new Set<HTMLElement>()
 
+// Whether a node still holds our translation. Text decorators on the page
+// (the CJK/Latin spacing userscripts, RTL fixers, another translator) rewrite
+// our text in place, so their output is our translation with different
+// spacing: comparing the exact string would call the record dead, keep the
+// (translated) text on screen, and — worse — take it for the page's own text
+// on the next retranslation. Whitespace is exactly what those scripts touch,
+// so ignore it here.
+function holdsTranslation(node: Text, rec: Replacement): boolean {
+  if (node.data === rec.translated) return true
+  return squash(node.data) === squash(rec.translated)
+}
+
+function squash(text: string): string {
+  return text.replace(/\s+/g, '')
+}
+
+function describe(node: Node): string {
+  if (node.nodeType !== Node.TEXT_NODE) return `<${node.nodeName.toLowerCase()}>`
+  const p = node.parentElement
+  const tag = p ? `<${p.tagName.toLowerCase()}${p.id ? '#' + p.id : ''}>` : 'detached'
+  return `${tag} "${(node as Text).data.replace(/\s+/g, ' ').trim().slice(0, 40)}"`
+}
+
 // Drop registry records for Text nodes the page has removed (SPA route
 // changes, virtualized lists, a framework swapping the text nodes of a
 // still-attached block), and owners left without any, so long sessions don't
@@ -72,6 +96,9 @@ export function pruneDisconnected() {
   for (const [owner, nodes] of registry) {
     for (const node of nodes) {
       if (node.isConnected) continue
+      if (node.data !== replaced.get(node)?.translated) {
+        debugLog('prune', `dropped a node the page removed: ${describe(node)}`)
+      }
       replaced.delete(node)
       nodes.delete(node)
     }
@@ -110,7 +137,7 @@ export function collectReplaceableTextNodes(
   const sources: string[] = []
   for (const node of nodes) {
     const rec = replaced.get(node)
-    if (rec && node.data === rec.translated) {
+    if (rec && holdsTranslation(node, rec)) {
       if (!opts.reuseOwned || rec.owner !== owner) return null
       sources.push(rec.original)
     } else {
@@ -125,7 +152,14 @@ export function collectReplaceableTextNodes(
     const source = sources[i]
     const rec = replaced.get(node)
     // The page rewrote it since we wrote it; the record is dead.
-    if (rec && node.data !== rec.translated) replaced.delete(node)
+    if (rec && !holdsTranslation(node, rec)) {
+      replaced.delete(node)
+      debugLog(
+        'collect',
+        `${describe(node)} was rewritten after we translated it: now` +
+          ` ${JSON.stringify(node.data)}, ours ${JSON.stringify(rec.translated)}`,
+      )
+    }
     if (!source.trim()) {
       if (entries.length > 0) entries[entries.length - 1].segment += source
       continue
@@ -255,7 +289,7 @@ export function getSourceText(target: Element | Node[], skipSelectors?: string[]
   let text = ''
   for (const node of nodes) {
     const rec = replaced.get(node)
-    text += rec && node.data === rec.translated ? rec.original : node.data
+    text += rec && holdsTranslation(node, rec) ? rec.original : node.data
   }
   return text
 }
@@ -319,7 +353,15 @@ function restoreNodes(owner: Node, nodes: Set<Text>) {
   for (const node of nodes) {
     const rec = replaced.get(node)
     if (!rec || rec.owner !== owner) continue
-    if (node.data === rec.translated) node.data = rec.original
+    if (holdsTranslation(node, rec)) node.data = rec.original
+    else {
+      debugLog(
+        'restore',
+        `${describe(node)} changed after we wrote it: now ${JSON.stringify(node.data)}` +
+          `, ours ${JSON.stringify(rec.translated)}, page text ${JSON.stringify(rec.original)}` +
+          `, trim-equal ${node.data.trim() === rec.translated.trim()}`,
+      )
+    }
     replaced.delete(node)
   }
   registry.delete(owner)

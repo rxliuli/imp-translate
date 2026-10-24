@@ -279,6 +279,46 @@ describe('replace mode', () => {
     expect(node.data).toBe('甲')
   })
 
+  // The CJK/Latin spacing userscripts ("為什麼你們就是不能加個空格呢？") rewrite
+  // our translation in place, adding spaces around Latin runs. Whitespace is
+  // the only difference, so the node is still ours: the record must survive
+  // (otherwise the translation is taken for the page's text and nothing can
+  // ever put the original back).
+  it('still owns a node a text decorator re-spaced', () => {
+    document.body.innerHTML = `<p>As of September 2026</p>`
+    const p = document.querySelector('p')!
+    const node = p.firstChild as Text
+    applyReplacement(p, collectReplaceableTextNodes(blockOf(p))!, ['截至 9 月 2026'])
+    expect(node.data).toBe('截至 9 月 2026')
+
+    // Decorator: "截至 9 月 2026" → "截至 9 月 2026" with extra spaces.
+    node.data = '截至  9 月 2026'
+
+    // The page's text, not our re-spaced translation.
+    expect(getSourceText(p)).toBe('As of September 2026')
+    // A retranslation still reads the original as its source.
+    const entries = collectReplaceableTextNodes(
+      { element: p, text: 'As of September 2026' },
+      undefined,
+      { reuseOwned: true },
+    )!
+    expect(entries.map((e) => e.source)).toEqual(['As of September 2026'])
+
+    restoreReplacements()
+    expect(node.data).toBe('As of September 2026')
+  })
+
+  it('drops the record when the node really was rewritten', () => {
+    document.body.innerHTML = `<p>Alpha</p>`
+    const p = document.querySelector('p')!
+    const node = p.firstChild as Text
+    applyReplacement(p, collectReplaceableTextNodes(blockOf(p))!, ['甲'])
+    node.data = '完全不同的一句话'
+    expect(getSourceText(p)).toBe('完全不同的一句话')
+    restoreReplacements()
+    expect(node.data).toBe('完全不同的一句话')
+  })
+
   it('does not prune while collecting (pruning is once per batch)', () => {
     document.body.innerHTML = `<p id="a">Alpha</p>`
     const a = document.getElementById('a')!

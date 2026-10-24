@@ -88,6 +88,82 @@ Ranks 45 and 47 are absent from the source table at the time this list was built
 
 ## Known limitations
 
+- **Other DOM mutators in replace mode** — a page script or another extension that rewrites our translated text in place can leave a translation on screen that nothing can put back; see [Replace mode: why `Text.data`](#replace-mode-why-textdata-and-what-still-ours-means).
 - **Closed shadow roots** — the DOM walker pierces open shadow roots (`el.shadowRoot != null`), which covers most modern web components including Reddit Chat. Closed shadow roots (created with `attachShadow({ mode: 'closed' })`) remain unreachable; if a site adopts them for UGC, no rule can recover the content.
 - **Mobile toast bar under hostile page CSS** — the language/restore/settings panel is the only UI that floats over the page and has to look identical everywhere, so it renders in its own shadow root with a `:host { … !important }` boundary (`lib/render.ts`); page skins can't resize it or hide its controls (e2e/toast-isolation.spec.ts pins this against an AO3-style skin). Two things it still can't fix: a `transform` / `filter` / `backdrop-filter` / `will-change` on `<html>` breaks `position: fixed` for everyone, and the site's own JavaScript can remove the host node.
+
+## Replace mode: why `Text.data`, and what "still ours" means
+
+Replace mode overwrites the page's own text instead of appending a translation
+next to it. Every way of doing that has a blind spot; this section records which
+one this project lives with and why, so the choice can be checked later — or
+overturned with evidence instead of taste.
+
+### The three designs
+
+| Translation is written as | Ownership signal | Robust to | Broken by |
+| --- | --- | --- | --- |
+| a wrapper element (`<font>`, `<span>`) holding the translated text — Chrome/Google web translate, Safari's TextManipulationController | DOM structure | other scripts rewriting the text | the page's own framework updating nodes it no longer owns (detached-node writes, throws on `insertBefore`) |
+| a replacement text node plus a side table of originals — most "replace" translation extensions | node identity + table | page scripts editing text | same framework problem: the node the page holds is gone |
+| `Text.data` on the page's existing text nodes — this extension | the text itself | React/Preact/Vue/Svelte/Solid/Lit/Angular updates, layout, selection, `:nth-child`, CSS inheritance | any other writer touching the same text node |
+
+A text node cannot carry an attribute, so with the third design **content is the
+only ownership signal available**. That is the whole trade: transparency to the
+page's framework (the reason replace mode exists — see the header of
+`lib/replace.ts` and the React 19 case in `e2e/replace-mode.spec.ts`) in exchange
+for having to guess, from the text, whether a node is still ours.
+
+### What failed, and the rule that replaced it
+
+Reported on Wikipedia and AO3: after "restore", some translated elements stayed
+translated. Cause, confirmed from `[imp-replace]` diagnostics: a userscript that
+inserts spaces between CJK and Latin (`為什麼你們就是不能加個空格呢？`) rewrites
+our translated text node a frame after we write it. Ownership was decided with
+`node.data === rec.translated`; the re-spaced node no longer matched, so
+
+1. the record was dropped and the text **on screen** (our translation) was
+   recorded as the page's original — poisoning every later retranslation of that
+   block, and
+2. restore skipped the node and left the translation on screen.
+
+The same applies to any in-place decorator: RTL and punctuation fixers, other
+translator extensions, scripts inserting thousands separators.
+
+The rule is now `holdsTranslation(node, rec)` in `lib/replace.ts`: equal after
+stripping whitespace. Whitespace is exactly what those decorators touch, and it
+is used everywhere ownership is decided (`getSourceText`,
+`collectReplaceableTextNodes`, `restoreNodes`).
+
+### What it still does not cover
+
+Decorators that insert **non-whitespace** characters (thousand separators, added
+units, zero-width joiners) still mismatch and reproduce the same bug. The next
+step, if that is observed in the wild, is to treat "our translation with
+whitespace stripped is a subsequence of the node's current text" as ours — same
+content-comparison approach, still no wrappers.
+
+### Why not the `<font>` wrapper
+
+Structural ownership is genuinely more robust against other writers, and it is
+why Chrome's built-in translate does not have this bug. It is also one-shot: it
+does not follow dynamic text. Wrapping or replacing text nodes makes the
+frameworks above write into detached nodes or throw, which blanks pages — this
+extension stays attached for the whole session and must survive the page's own
+updates. Segment writes (one paragraph spread over `<a>`/`<b>` text nodes) also
+map onto existing nodes; a wrapper approach has to clone the inline elements to
+keep a link clickable, which is `lib/rewrite.ts`'s rarely-taken last resort.
+
+### When to revisit this decision
+
+Reconsider if (a) non-whitespace in-place text decorators turn out to be common
+enough that the subsequence rule is not sufficient, or (b) a target site needs a
+faithful restore while mutating our blocks heavily. The cost of switching: the
+extraction and visibility layer is text-node based (`lib/dom.ts`), segment writes
+would have to rebuild inline structure, selection / `:nth-child` / CSS
+inheritance regress, and the SPA guarantee — the reason replace mode exists — is
+lost.
+
+Diagnostics for the next round: a dev build (`pnpm dev`) logs `[imp-replace]`
+warnings in the page console (prune / collect / restore say why a record was
+dropped or a node left alone).
 

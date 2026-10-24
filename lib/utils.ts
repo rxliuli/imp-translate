@@ -29,6 +29,16 @@ export function debugTime(label: string): (msg: string) => void {
   return log
 }
 
+// Dev-only diagnostics for the in-place ("replace") bookkeeping. Restore
+// problems are invisible from the outside (the page simply keeps a
+// translation), so every place that drops or skips a record logs its reason
+// here — see "Replace mode: why Text.data" in COMPATIBILITY.md. Same gate as
+// debugTime: dev builds only.
+export function debugLog(scope: string, msg: string) {
+  if (import.meta.env.PROD) return
+  console.warn(`[imp-replace] ${scope} | ${msg}`)
+}
+
 const URL_ONLY_RE = /^https?:\/\/\S+$/
 
 export function isUrlOnly(text: string): boolean {
