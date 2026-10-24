@@ -151,26 +151,59 @@ that (edit distance, subsequence matching) trades a rare missed restore for a
 risk of overwriting what the page really wrote, so it needs evidence before it
 is worth taking.
 
-### Why not the `<font>` wrapper
+### Correction: dynamic content is not the differentiator (2026-08)
 
-Structural ownership is genuinely more robust against other writers, and it is
-why Chrome's built-in translate does not have this bug. It is also one-shot: it
-does not follow dynamic text. Wrapping or replacing text nodes makes the
-frameworks above write into detached nodes or throw, which blanks pages — this
-extension stays attached for the whole session and must survive the page's own
-updates. Segment writes (one paragraph spread over `<a>`/`<b>` text nodes) also
-map onto existing nodes; a wrapper approach has to clone the inline elements to
-keep a link clickable, which is `lib/rewrite.ts`'s rarely-taken last resort.
+An earlier version of this section argued that Chrome's translate is "one-shot
+and does not follow dynamic text", and used that to justify the `Text.data`
+design. That reason is wrong: Chrome's translate element re-translates nodes
+added after the first pass (Reddit, YouTube comments), so following dynamic
+content is not what separates the two designs. What separates them is the DOM
+footprint — whether the extension may replace the page's text nodes.
+
+### Why the `<font>` wrapper was still rejected, measured
+
+The same review concluded that structural ownership (Chrome's shape: replace
+each text node with a `<font>` holding the translation, keep the page's node in
+a record) should replace the content heuristics, on the grounds that Chrome and
+Safari have shipped it for years. The migration was implemented and measured on
+`e2e/static/react-app.js` (React 19, counters and a conditionally rendered
+`<span>` inside a paragraph):
+
+- ~600ms after the first write the page showed a correct translation;
+- then React threw `NotFoundError: Failed to execute 'insertBefore' on 'Node':
+  The node before which the new node is to be inserted is not a child of this
+  node.` and unmounted the whole tree (`#root` children: 0).
+
+The trigger is structural, not a bug in the wrapper: when React inserts a node
+inside a paragraph it positions it relative to the *next child it created* —
+often a text node. Replacing text nodes (not just elements) removes those
+anchors, so the next insert throws. Chrome has the same failure mode; it can
+afford it because most of the web is server-rendered and its goal is a one-pass
+reading aid. Replace mode here exists for the opposite case — staying attached
+while the page updates — and this repo's priority sites are React (X), Lit
+(Reddit) and React (GitHub), so a structural replace would blank exactly the
+sites it is for.
+
+Decision: replace mode keeps writing `Text.data` and decides ownership with the
+skeleton comparison below. Structural ownership stays available where the block
+level rebuild is unavoidable (`lib/rewrite.ts`, engine output that cannot be
+mapped onto the nodes) and is accepted as risky there. If the decorator problem
+becomes common enough to want both, the shape to take is a **setting** between
+the two writers (framework-safe `Text.data` as the default), not a switch of the
+default — a structural mode is only safe on pages that never insert or remove
+nodes next to translated text.
+
+Known cost of staying: a decorator that changes letters or digits (added units,
+spelled-out numbers, simplified/traditional conversion) still defeats the
+skeleton comparison, and the translation stays on screen until the page is
+reloaded.
 
 ### When to revisit this decision
 
-Reconsider if (a) decorators that change letters or digits turn out to be common
-enough to justify fuzzy matching, or (b) a target site needs a faithful restore
-while mutating our blocks heavily. The cost of switching: the
-extraction and visibility layer is text-node based (`lib/dom.ts`), segment writes
-would have to rebuild inline structure, selection / `:nth-child` / CSS
-inheritance regress, and the SPA guarantee — the reason replace mode exists — is
-lost.
+Reconsider if (a) such decorators turn out to be common enough to justify fuzzy
+matching, or (b) a target site needs a faithful restore while mutating our
+blocks heavily — in which case the answer is the opt-in structural mode, with
+the React measurement above as the regression test it must pass first.
 
 Diagnostics for the next round: a dev build (`pnpm dev`) logs `[imp-replace]`
 warnings in the page console (prune / collect / restore say why a record was
