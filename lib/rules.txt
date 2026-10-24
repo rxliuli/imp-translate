@@ -148,7 +148,17 @@ old.reddit.com#+#.md
 ! https://github.com/nicepkg/gpt-runner/issues  (issue list: titles)
 github.com#+#.markdown-body
 github.com#+#.markdown-title
+! GitHub rebuilt the issues/pulls list on the "issues-list-surface" app
+! (class-based CSS modules: heading__fzQskI > anchor__PSAOdR). The only stable
+! handle is the title anchor's data-testid, and it differs per surface:
+!   /issues  → issue-listitem-title-link   (https://github.com/rxliuli/AppDowngrader/issues)
+!   /pulls   → listitem-title-link         (https://github.com/vercel/next.js/pulls?q=is%3Apr+is%3Aopen)
+! The legacy issues list used issue-pr-title-link; some repos still get it, so
+! it stays. Missing either testid means the include set matches nothing on that
+! list page, and the isolate gate then suppresses translation of the whole page.
 github.com#+#[data-testid="issue-pr-title-link"]
+github.com#+#[data-testid="issue-listitem-title-link"]
+github.com#+#[data-testid="listitem-title-link"]
 github.com#+#.f4.tmp-my-3
 ! https://github.com  (homepage: feed items, skip sidebar repo names + card UI)
 github.com#+#feed-container section

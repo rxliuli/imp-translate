@@ -5,6 +5,7 @@ import appleRejectionBr from './__fixtures__/apple-rejection-br.html?raw'
 import appleRejectionNewlines from './__fixtures__/apple-rejection-newlines.html?raw'
 import grokResponseParagraphs from './__fixtures__/grok-response-paragraphs.html?raw'
 import redditNotifications from './__fixtures__/reddit-notifications.html?raw'
+import githubIssuesList from './__fixtures__/github-issues-list.html?raw'
 import builtinRulesRaw from '@/lib/rules.txt?raw'
 import { matchRulesForUrl, parseRules } from './rules'
 
@@ -395,5 +396,46 @@ describe('Reddit notifications inbox (rpl-inbox-row)', () => {
     expect(joined).not.toContain('Please select a user flair')
     expect(joined).not.toContain('4d ago')
     expect(joined).not.toContain('3mo ago')
+  })
+})
+
+// GitHub's rebuilt issues/pulls list (the "issues-list-surface" React app).
+// Every container carries a CSS-module class with a per-deploy hash suffix, so
+// the only stable handle is the title anchor's data-testid — and it is NOT the
+// legacy issue-pr-title-link. Because include rules are an isolate gate, the
+// stale selector matched nothing and the whole list page went untranslated
+// (titles included), silently.
+// Captured from https://github.com/rxliuli/AppDowngrader/issues on 2026-10-23.
+describe('GitHub issues list (issue-listitem-title-link)', () => {
+  const selectors = () =>
+    matchRulesForUrl(parseRules(builtinRulesRaw), 'github.com', '/rxliuli/AppDowngrader/issues')
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('include rules match the rebuilt title anchor', () => {
+    document.body.innerHTML = githubIssuesList
+    const link = document.querySelector('[data-testid="issue-listitem-title-link"]')
+    expect(link).not.toBeNull()
+    const { includeSelectors } = selectors()
+    expect(includeSelectors.some((s) => link!.matches(s))).toBe(true)
+  })
+
+  it('extracts the issue title', () => {
+    document.body.innerHTML = githubIssuesList
+    const texts = extractBlocks(document.body, selectors()).map((b) => b.text)
+    expect(texts.some((t) => t.includes('login not possible'))).toBe(true)
+  })
+
+  it('does not pull in row chrome (repo slug, author, timestamp)', () => {
+    document.body.innerHTML = githubIssuesList
+    const joined = extractBlocks(document.body, selectors())
+      .map((b) => b.text)
+      .join('\n')
+
+    expect(joined).not.toContain('rxliuli/AppDowngrader#3')
+    expect(joined).not.toContain('KapitainNemo')
+    expect(joined).not.toContain('Oct 20, 2026')
   })
 })

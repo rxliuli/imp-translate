@@ -207,6 +207,41 @@ describe('builtin rules.txt — old.reddit.com classic DOM include scope', () =>
   })
 })
 
+describe('builtin rules.txt — GitHub issues/pulls list title links', () => {
+  // GitHub rebuilt the issues list as the "issues-list-surface" app: container
+  // classes are hashed CSS modules and the title anchor is
+  // data-testid="issue-listitem-title-link" (the /pulls list uses the generic
+  // "listitem-title-link"). The legacy issue-pr-title-link matches neither, so
+  // the include set was empty on those pages and the isolate gate suppressed
+  // translation of the whole list — titles included, with no error.
+  const builtinRules = parseRules(builtinRulesRaw)
+
+  it('issue list title anchor is in the include set', () => {
+    const matched = matchRulesForUrl(
+      builtinRules,
+      'github.com',
+      '/rxliuli/AppDowngrader/issues',
+    )
+    expect(matched.includeSelectors).toEqual(
+      expect.arrayContaining(['[data-testid="issue-listitem-title-link"]']),
+    )
+  })
+
+  it('pull request list title anchor is in the include set', () => {
+    const matched = matchRulesForUrl(builtinRules, 'github.com', '/vercel/next.js/pulls')
+    expect(matched.includeSelectors).toEqual(
+      expect.arrayContaining(['[data-testid="listitem-title-link"]']),
+    )
+  })
+
+  it('keeps the legacy selector for repos still served the old list', () => {
+    const matched = matchRulesForUrl(builtinRules, 'github.com', '/nicepkg/gpt-runner/issues')
+    expect(matched.includeSelectors).toEqual(
+      expect.arrayContaining(['[data-testid="issue-pr-title-link"]', '.markdown-title']),
+    )
+  })
+})
+
 describe('bare domain only matches bare + www', () => {
   const rules = parseRules(`
 x.com#+#[data-testid="tweetText"]
