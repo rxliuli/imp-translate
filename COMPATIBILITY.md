@@ -89,4 +89,5 @@ Ranks 45 and 47 are absent from the source table at the time this list was built
 ## Known limitations
 
 - **Closed shadow roots** — the DOM walker pierces open shadow roots (`el.shadowRoot != null`), which covers most modern web components including Reddit Chat. Closed shadow roots (created with `attachShadow({ mode: 'closed' })`) remain unreachable; if a site adopts them for UGC, no rule can recover the content.
+- **Mobile toast bar under hostile page CSS** — the language/restore/settings panel is the only UI that floats over the page and has to look identical everywhere, so it renders in its own shadow root with a `:host { … !important }` boundary (`lib/render.ts`); page skins can't resize it or hide its controls (e2e/toast-isolation.spec.ts pins this against an AO3-style skin). Two things it still can't fix: a `transform` / `filter` / `backdrop-filter` / `will-change` on `<html>` breaks `position: fixed` for everyone, and the site's own JavaScript can remove the host node.
 

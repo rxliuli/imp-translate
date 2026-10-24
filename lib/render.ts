@@ -454,14 +454,37 @@ export function removeDebugStyles() {
   document.getElementById(DEBUG_STYLE_ID)?.remove()
 }
 
+// The toast bar is the one piece of our UI that floats over the page and has to
+// look identical everywhere, so it lives in its own shadow root: page CSS can't
+// reach its contents, and our rules can't leak into the page. Per-site
+// adaptation is not an option here — the bar is only ever shown on mobile (see
+// maybeShowToast in entrypoints/inject.ts), so a site that breaks it would
+// never be noticed on desktop.
 const TOAST_ID = 'imp-translate-toast'
-const TOAST_STYLE_ID = 'imp-translate-toast-style'
+// Valid custom element name: attachShadow rejects anything without a hyphen,
+// and a dedicated tag keeps page rules like `div { … }` / `body > div { … }`
+// from matching the host at all.
+const TOAST_TAG = 'imp-translate-toast'
+const BAR_CLASS = 'imp-toast-bar'
+const OUT_CLASS = 'imp-toast-out'
 
-function ensureToastStyles() {
-  if (document.getElementById(TOAST_STYLE_ID)) return
-  const style = document.createElement('style')
-  style.id = TOAST_STYLE_ID
-  style.textContent = `
+// The host boundary is the only place that needs `!important` — and every
+// declaration there needs it. Per CSS Scoping, a *normal* :host declaration
+// loses against any document rule matching the host (even `* { … }`), after
+// which the page's inherited values flow into the shadow tree as well;
+// `!important` from inside the shadow tree wins over the page's `!important`.
+// `all: initial !important` therefore gives us a clean environment no matter
+// what the site (or a user style / dark-mode extension) throws at the host.
+// Everything below it is plain CSS: page rules cannot match shadow content.
+const TOAST_STYLES = `
+    :host {
+      all: initial !important;
+      display: block !important;
+      position: fixed !important;
+      inset: 0 0 auto 0 !important;
+      z-index: 2147483647 !important;
+      direction: ltr !important;
+    }
     @keyframes imp-toast-slide-in {
       from { transform: translateY(-100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
@@ -470,40 +493,27 @@ function ensureToastStyles() {
       from { transform: translateY(0); opacity: 1; }
       to { transform: translateY(-100%); opacity: 0; }
     }
-    #${TOAST_ID} {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 2147483647;
+    .${BAR_CLASS} {
+      box-sizing: border-box;
       display: flex;
       align-items: center;
       gap: 8px;
+      margin: 0;
       padding: 10px 16px;
       font: 14px/1 system-ui, sans-serif;
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
       background: rgba(255, 255, 255, 0.85);
       color: #333;
       border-bottom: 1px solid rgba(0, 0, 0, 0.1);
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       animation: imp-toast-slide-in 0.25s ease-out;
     }
-    #${TOAST_ID}.imp-toast-out {
+    .${BAR_CLASS}.${OUT_CLASS} {
       animation: imp-toast-slide-out 0.2s ease-in forwards;
     }
-    @media (prefers-color-scheme: dark) {
-      #${TOAST_ID} {
-        background: rgba(30, 30, 30, 0.85);
-        color: #e0e0e0;
-        border-bottom-color: rgba(255, 255, 255, 0.1);
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-      }
-      #${TOAST_ID} .imp-toast-restore { color: #6ea8fe !important; }
-      #${TOAST_ID} .imp-toast-settings { color: #aaa !important; }
-    }
-    #${TOAST_ID} .imp-toast-text { flex: 1; }
-    #${TOAST_ID} button {
+    .imp-toast-text { flex: 1; }
+    .${BAR_CLASS} button {
       background: none;
       border: none;
       cursor: pointer;
@@ -511,13 +521,13 @@ function ensureToastStyles() {
       padding: 4px 8px;
       border-radius: 4px;
     }
-    #${TOAST_ID} button:active { opacity: 0.7; }
-    #${TOAST_ID} .imp-toast-restore { color: #2563eb; }
-    #${TOAST_ID} .imp-toast-settings { color: #666; font-size: 16px; }
-    #${TOAST_ID} .imp-toast-lang {
+    .${BAR_CLASS} button:active { opacity: 0.7; }
+    .imp-toast-restore { color: #2563eb; }
+    .imp-toast-settings { color: #666; font-size: 16px; }
+    .imp-toast-lang {
       appearance: none;
       -webkit-appearance: none;
-      background: rgba(0, 0, 0, 0.06);
+      background-color: rgba(0, 0, 0, 0.06);
       border: 1px solid rgba(0, 0, 0, 0.1);
       border-radius: 4px;
       padding: 4px 20px 4px 8px;
@@ -531,14 +541,47 @@ function ensureToastStyles() {
       flex-shrink: 0;
     }
     @media (prefers-color-scheme: dark) {
-      #${TOAST_ID} .imp-toast-lang {
+      .${BAR_CLASS} {
+        background: rgba(30, 30, 30, 0.85);
+        color: #e0e0e0;
+        border-bottom-color: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      }
+      .imp-toast-restore { color: #6ea8fe; }
+      .imp-toast-settings { color: #aaa; }
+      .imp-toast-lang {
         background-color: rgba(255, 255, 255, 0.1);
         border-color: rgba(255, 255, 255, 0.15);
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23aaa'/%3E%3C/svg%3E");
       }
     }
   `
-  document.head.appendChild(style)
+
+let toastSheet: CSSStyleSheet | null = null
+
+function getToastSheet(): CSSStyleSheet | null {
+  if (typeof CSSStyleSheet === 'undefined') return null
+  if (toastSheet) return toastSheet
+  try {
+    const sheet = new CSSStyleSheet()
+    sheet.replaceSync(TOAST_STYLES)
+    toastSheet = sheet
+    return sheet
+  } catch {
+    return null
+  }
+}
+
+function attachToastStyles(root: ShadowRoot) {
+  const sheet = getToastSheet()
+  if (sheet) {
+    if (!root.adoptedStyleSheets.includes(sheet)) root.adoptedStyleSheets = [sheet]
+    return
+  }
+  // Fallback for environments without constructable stylesheets.
+  const style = document.createElement('style')
+  style.textContent = TOAST_STYLES
+  root.appendChild(style)
 }
 
 export interface ToastBarOptions {
@@ -560,14 +603,23 @@ export function showToastBar(options: ToastBarOptions) {
   // this whenever the translating/restored mode may have changed (e.g. the
   // mobile toolbar icon stopping translation and re-opening the panel), and
   // a stale bar would keep showing the wrong button/handler. Removing
-  // synchronously (no exit animation) is safe even mid-dismiss — the old
-  // node's pending `animationend` listener simply never fires once detached.
+  // synchronously (no exit animation) is safe even mid-dismiss — the removed
+  // host's pending `animationend` listener never fires once it is detached,
+  // and hideToastBar re-checks the host's identity before removing it.
   document.getElementById(TOAST_ID)?.remove()
-  ensureToastStyles()
+
+  const host = document.createElement(TOAST_TAG)
+  host.id = TOAST_ID
+  // Our own walker pierces open shadow roots (see attachShadowObserver in
+  // entrypoints/inject.ts); this attribute is what keeps it out of the panel.
+  // Mounting the host on <html> rather than <body> additionally keeps it away
+  // from the walker's root and from `body > *` page rules.
+  host.setAttribute('translate', 'no')
+  const root = host.attachShadow({ mode: 'open' })
+  attachToastStyles(root)
 
   const bar = document.createElement('div')
-  bar.id = TOAST_ID
-  bar.setAttribute('translate', 'no')
+  bar.className = BAR_CLASS
 
   const langSelect = document.createElement('select')
   langSelect.className = 'imp-toast-lang'
@@ -607,15 +659,26 @@ export function showToastBar(options: ToastBarOptions) {
   settingsBtn.addEventListener('click', options.onSettings)
 
   bar.append(langSelect, spacer, restoreBtn, settingsBtn)
-  document.body.appendChild(bar)
+  root.appendChild(bar)
+  document.documentElement.appendChild(host)
 }
 
 export function hideToastBar() {
-  const bar = document.getElementById(TOAST_ID)
-  if (!bar) return
-  bar.classList.add('imp-toast-out')
-  bar.addEventListener('animationend', () => {
-    bar.remove()
-    document.getElementById(TOAST_STYLE_ID)?.remove()
-  }, { once: true })
+  const host = document.getElementById(TOAST_ID)
+  if (!host) return
+  const remove = () => {
+    // A rebuild may have replaced the host while the exit animation ran.
+    if (document.getElementById(TOAST_ID) === host) host.remove()
+  }
+  const bar = host.shadowRoot?.querySelector<HTMLElement>(`.${BAR_CLASS}`)
+  if (!bar) {
+    remove()
+    return
+  }
+  bar.classList.add(OUT_CLASS)
+  bar.addEventListener('animationend', remove, { once: true })
+  // Animations don't run in a background tab and `prefers-reduced-motion` may
+  // suppress them, so don't rely on the event alone: the bar must not outlive
+  // its dismissal.
+  setTimeout(remove, 400)
 }

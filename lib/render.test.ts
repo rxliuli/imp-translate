@@ -552,8 +552,28 @@ describe('render', () => {
 describe('toast bar', () => {
   afterEach(() => {
     document.getElementById('imp-translate-toast')?.remove()
-    document.getElementById('imp-translate-toast-style')?.remove()
+    document.querySelectorAll('style[data-test-page-css]').forEach((n) => n.remove())
   })
+
+  // The bar is built inside a shadow root, so the tests have to reach through
+  // it — that is also the barrier the page cannot cross.
+  function toastRoot(): ShadowRoot {
+    const host = document.getElementById('imp-translate-toast')
+    expect(host).not.toBeNull()
+    expect(host!.shadowRoot).not.toBeNull()
+    return host!.shadowRoot!
+  }
+  function toastQuery<T extends Element>(selector: string): T {
+    const el = toastRoot().querySelector<T>(selector)
+    expect(el).not.toBeNull()
+    return el!
+  }
+  function pageCss(css: string) {
+    const style = document.createElement('style')
+    style.dataset.testPageCss = ''
+    style.textContent = css
+    document.head.appendChild(style)
+  }
 
   function baseOptions(overrides: Partial<ToastBarOptions> = {}): ToastBarOptions {
     return {
@@ -572,7 +592,7 @@ describe('toast bar', () => {
     const onTranslate = vi.fn()
     showToastBar(baseOptions({ translating: true, onRestore, onTranslate }))
 
-    const btn = document.querySelector<HTMLButtonElement>('.imp-toast-restore')!
+    const btn = toastQuery<HTMLButtonElement>('.imp-toast-restore')
     expect(btn.textContent).toBe('Show Original')
     btn.click()
     expect(onRestore).toHaveBeenCalledOnce()
@@ -589,7 +609,7 @@ describe('toast bar', () => {
     const onTranslate = vi.fn()
     showToastBar(baseOptions({ translating: false, onRestore, onTranslate }))
 
-    const btn = document.querySelector<HTMLButtonElement>('.imp-toast-restore')!
+    const btn = toastQuery<HTMLButtonElement>('.imp-toast-restore')
     expect(btn.textContent).toBe('Translate')
     btn.click()
     expect(onTranslate).toHaveBeenCalledOnce()
@@ -599,9 +619,9 @@ describe('toast bar', () => {
   it('keeps the language select and settings button in the restored state', () => {
     showToastBar(baseOptions({ translating: false, currentLang: 'ja' }))
 
-    const select = document.querySelector<HTMLSelectElement>('.imp-toast-lang')!
+    const select = toastQuery<HTMLSelectElement>('.imp-toast-lang')
     expect(select.value).toBe('ja')
-    expect(document.querySelector('.imp-toast-settings')).not.toBeNull()
+    expect(toastRoot().querySelector('.imp-toast-settings')).not.toBeNull()
   })
 
   // showToastBar is re-invoked whenever the panel's mode may have changed
@@ -611,14 +631,14 @@ describe('toast bar', () => {
   it('rebuilds in place when called again with a different mode', () => {
     showToastBar(baseOptions({ translating: true }))
     expect(document.querySelectorAll('#imp-translate-toast')).toHaveLength(1)
-    expect(document.querySelector('.imp-toast-restore')!.textContent).toBe('Show Original')
+    expect(toastQuery('.imp-toast-restore').textContent).toBe('Show Original')
 
     showToastBar(baseOptions({ translating: false }))
     expect(document.querySelectorAll('#imp-translate-toast')).toHaveLength(1)
-    expect(document.querySelector('.imp-toast-restore')!.textContent).toBe('Translate')
+    expect(toastQuery('.imp-toast-restore').textContent).toBe('Translate')
   })
 
-  it('rebuilds in place even mid dismiss-animation (no stale bar left behind)', () => {
+  it('rebuilds in place even mid dismiss-animation (no stale bar left behind)', async () => {
     showToastBar(baseOptions({ translating: true }))
     hideToastBar()
     // The exit animation is async (fires on `animationend`), so right after
@@ -627,7 +647,61 @@ describe('toast bar', () => {
 
     showToastBar(baseOptions({ translating: false }))
     expect(document.querySelectorAll('#imp-translate-toast')).toHaveLength(1)
-    expect(document.querySelector('.imp-toast-restore')!.textContent).toBe('Translate')
+    expect(toastQuery('.imp-toast-restore').textContent).toBe('Translate')
+
+    // The dismissed bar's fallback removal timer must not take the rebuilt
+    // one with it.
+    await new Promise((r) => setTimeout(r, 500))
+    expect(document.querySelectorAll('#imp-translate-toast')).toHaveLength(1)
+    expect(toastQuery('.imp-toast-restore').textContent).toBe('Translate')
+  })
+
+  // Isolation is the whole point of the shadow root. A regression here shows
+  // up as an unclickable panel on some site's mobile skin, which desktop CI
+  // would never see, so it is asserted against hostile page CSS.
+  it('is immune to page CSS on the controls and on the host', () => {
+    pageCss(`
+      select { vertical-align: text-top; width: 100%; min-width: 10.5em; }
+      button { height: 1.286em; line-height: 1.286; box-sizing: content-box; }
+      body { text-transform: uppercase; }
+      imp-translate-toast { display: none !important; width: 50px !important; }
+      * { font-size: 30px !important; letter-spacing: 3px !important; }
+    `)
+    // Sanity-check that the hostile rules are actually live in this document.
+    const probe = document.createElement('div')
+    probe.style.width = '300px'
+    probe.innerHTML = '<select></select>'
+    document.body.appendChild(probe)
+    const probeSelect = probe.querySelector('select')! as HTMLSelectElement
+    expect(probeSelect.getBoundingClientRect().width).toBeGreaterThanOrEqual(300)
+    expect(getComputedStyle(probeSelect).fontSize).toBe('30px')
+    probe.remove()
+
+    showToastBar(baseOptions({ translating: true }))
+
+    const host = document.getElementById('imp-translate-toast')!
+    const hostStyle = getComputedStyle(host)
+    expect(hostStyle.display).toBe('block')
+    expect(hostStyle.position).toBe('fixed')
+    expect(Math.round(host.getBoundingClientRect().width)).toBe(window.innerWidth)
+
+    const bar = toastQuery<HTMLElement>('.imp-toast-bar')
+    const barStyle = getComputedStyle(bar)
+    expect(barStyle.fontSize).toBe('14px')
+    expect(barStyle.letterSpacing).toBe('normal')
+    expect(barStyle.textTransform).toBe('none')
+
+    // The language select keeps its own width instead of the page's 100%.
+    const select = toastQuery<HTMLSelectElement>('.imp-toast-lang')
+    expect(select.getBoundingClientRect().width).toBeLessThan(bar.clientWidth / 2)
+
+    // …and both buttons stay inside the viewport, which is what the leaked
+    // `select { width: 100% }` used to break on AO3.
+    for (const sel of ['.imp-toast-restore', '.imp-toast-settings']) {
+      const rect = toastQuery<HTMLElement>(sel).getBoundingClientRect()
+      expect(rect.right).toBeLessThanOrEqual(window.innerWidth)
+      expect(rect.width).toBeGreaterThan(0)
+    }
   })
 })
 

@@ -345,6 +345,33 @@ Collapsed tail paragraph that gets cut https://t.co/abc</span></div>
   </script>
 </body>
 </html>`,
+  // Hostile page CSS: AO3's skin (1_site_screen_.css) plus the aggressive
+  // resets / dark-mode-extension patterns. All of these used to reach into the
+  // injected toast bar and push its buttons out of the viewport. The bar now
+  // lives in a shadow root, so none of it may apply to its contents — and the
+  // host rules must lose to the `:host … !important` boundary.
+  '/hostile-css': `<!DOCTYPE html>
+<html lang="en">
+<head><title>Hostile CSS</title>
+<style>
+  select { vertical-align: text-top; width: 100%; min-width: 10.5em; }
+  input, textarea { width: 100%; }
+  button {
+    background: #eee; color: #444; width: auto; font-size: 100%;
+    line-height: 1.286; height: 1.286em; display: inline-block;
+    padding: 0.25em 0.75em; border: 1px solid #bbb; box-sizing: content-box;
+  }
+  option { display: block; }
+  body { text-transform: uppercase; letter-spacing: 2px; }
+  * { box-sizing: content-box; font-size: 19px !important; }
+  imp-translate-toast { display: none !important; position: static !important; width: 50px !important; }
+</style>
+</head>
+<body>
+  <h1>Hostile CSS page</h1>
+  <p id="para">This paragraph has enough words to be translated as a single block.</p>
+</body>
+</html>`,
   '/x-longpost': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Long Post</title></head>
