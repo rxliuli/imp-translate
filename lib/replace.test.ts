@@ -280,8 +280,9 @@ describe('replace mode', () => {
   })
 
   // The CJK/Latin spacing userscripts ("為什麼你們就是不能加個空格呢？") rewrite
-  // our translation in place, adding spaces around Latin runs. Whitespace is
-  // the only difference, so the node is still ours: the record must survive
+  // our translation in place, adding spaces around Latin runs; punctuation
+  // normalizers swap the interpunct ("·" → "・") or a comma ("," → "，").
+  // Only typography differs, so the node is still ours: the record must survive
   // (otherwise the translation is taken for the page's text and nothing can
   // ever put the original back).
   it('still owns a node a text decorator re-spaced', () => {
@@ -306,6 +307,21 @@ describe('replace mode', () => {
 
     restoreReplacements()
     expect(node.data).toBe('As of September 2026')
+  })
+
+  it('still owns a node whose punctuation a decorator normalized', () => {
+    document.body.innerHTML = `<p>Judy Alvarez called.</p>`
+    const p = document.querySelector('p')!
+    const node = p.firstChild as Text
+    applyReplacement(p, collectReplaceableTextNodes(blockOf(p))!, ['朱迪·阿尔瓦雷斯打来电话。'])
+
+    // What the typography userscript did on AO3: interpunct, comma and a
+    // zero-width joiner, none of them our choice.
+    node.data = '朱迪・阿尔瓦雷斯打来电话。\u200d'
+
+    expect(getSourceText(p)).toBe('Judy Alvarez called.')
+    restoreReplacements()
+    expect(node.data).toBe('Judy Alvarez called.')
   })
 
   it('drops the record when the node really was rewritten', () => {

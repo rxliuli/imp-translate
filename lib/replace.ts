@@ -65,19 +65,21 @@ const registry = new Map<Node, Set<Text>>()
 const loading = new Set<HTMLElement>()
 
 // Whether a node still holds our translation. Text decorators on the page
-// (the CJK/Latin spacing userscripts, RTL fixers, another translator) rewrite
-// our text in place, so their output is our translation with different
-// spacing: comparing the exact string would call the record dead, keep the
-// (translated) text on screen, and — worse — take it for the page's own text
-// on the next retranslation. Whitespace is exactly what those scripts touch,
-// so ignore it here.
+// (the CJK/Latin spacing userscripts, punctuation normalizers, RTL fixers,
+// another translator) rewrite our text in place, so their output is our
+// translation with different spacing and typography. Comparing the exact
+// string would call the record dead, keep the translated text on screen and —
+// worse — take it for the page's own text on the next retranslation. Compare
+// skeletons instead: letters and digits must match, whitespace and format
+// characters are ignored, punctuation/symbol runs count as one marker (so
+// "·" vs "・", "," vs "，" and a zero-width joiner don't matter).
 function holdsTranslation(node: Text, rec: Replacement): boolean {
   if (node.data === rec.translated) return true
-  return squash(node.data) === squash(rec.translated)
+  return skeleton(node.data) === skeleton(rec.translated)
 }
 
-function squash(text: string): string {
-  return text.replace(/\s+/g, '')
+function skeleton(text: string): string {
+  return text.replace(/[\s\p{Cf}]+/gu, '').replace(/[\p{P}\p{S}]+/gu, '·')
 }
 
 function describe(node: Node): string {

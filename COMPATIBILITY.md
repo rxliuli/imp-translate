@@ -127,20 +127,29 @@ our translated text node a frame after we write it. Ownership was decided with
 2. restore skipped the node and left the translation on screen.
 
 The same applies to any in-place decorator: RTL and punctuation fixers, other
-translator extensions, scripts inserting thousands separators.
+translator extensions, scripts inserting thousands separators. A second round on
+AO3 showed the punctuation half of it: our `朱迪·阿尔瓦雷斯` (U+00B7 interpunct)
+came back as `朱迪・阿尔瓦雷斯` (U+30FB katakana middle dot) with a zero-width
+joiner appended — a substitution, not a spacing change.
 
-The rule is now `holdsTranslation(node, rec)` in `lib/replace.ts`: equal after
-stripping whitespace. Whitespace is exactly what those decorators touch, and it
-is used everywhere ownership is decided (`getSourceText`,
-`collectReplaceableTextNodes`, `restoreNodes`).
+The rule is now `holdsTranslation(node, rec)` in `lib/replace.ts`: the two texts
+must have the same **skeleton** — letters and digits compared as they are,
+whitespace and format characters (`\p{Cf}`, which is where zero-width joiners
+live) dropped, and every run of punctuation/symbols collapsed into one marker.
+That covers spacing scripts, `·`→`・` and `,`→`，` normalizers, and invisible
+characters, while still failing on real content edits. It is used everywhere
+ownership is decided (`getSourceText`, `collectReplaceableTextNodes`,
+`restoreNodes`).
 
 ### What it still does not cover
 
-Decorators that insert **non-whitespace** characters (thousand separators, added
-units, zero-width joiners) still mismatch and reproduce the same bug. The next
-step, if that is observed in the wild, is to treat "our translation with
-whitespace stripped is a subsequence of the node's current text" as ours — same
-content-comparison approach, still no wrappers.
+Letters and digits must match exactly, so a decorator that inserts words or
+changes characters rather than punctuation (`1,000` → `1 000` is fine, but `km`
+appended, numbers spelled out, or a script converting between simplified and
+traditional Chinese) still mismatches and reproduces the same bug. Loosening
+that (edit distance, subsequence matching) trades a rare missed restore for a
+risk of overwriting what the page really wrote, so it needs evidence before it
+is worth taking.
 
 ### Why not the `<font>` wrapper
 
@@ -155,9 +164,9 @@ keep a link clickable, which is `lib/rewrite.ts`'s rarely-taken last resort.
 
 ### When to revisit this decision
 
-Reconsider if (a) non-whitespace in-place text decorators turn out to be common
-enough that the subsequence rule is not sufficient, or (b) a target site needs a
-faithful restore while mutating our blocks heavily. The cost of switching: the
+Reconsider if (a) decorators that change letters or digits turn out to be common
+enough to justify fuzzy matching, or (b) a target site needs a faithful restore
+while mutating our blocks heavily. The cost of switching: the
 extraction and visibility layer is text-node based (`lib/dom.ts`), segment writes
 would have to rebuild inline structure, selection / `:nth-child` / CSS
 inheritance regress, and the SPA guarantee — the reason replace mode exists — is
