@@ -1,0 +1,9 @@
+allowBuilds:
+  esbuild: true
+  spawn-sync: false
+
+minimumReleaseAgeExclude:
+  - '@extport/*'
+  - '@rxliuli/*'
+
+verifyDepsBeforeRun: false
