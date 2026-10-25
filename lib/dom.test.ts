@@ -1282,6 +1282,137 @@ describe('extractBlocks', () => {
       expect(document.querySelector('font[data-imp-wrap]')).toBe(null)
     })
   })
+
+  // AO3's Collections field has no list markup at all: one <dd> whose children
+  // are <a> elements and the literal ", " text between them. But the shape is
+  // a list of names, not prose — splitting is driven by the punctuation
+  // separators, so the guards below are what separate it from links that are
+  // embedded in a sentence.
+  describe('inline link runs (AO3 collections)', () => {
+    it('splits a punctuation-separated link run into one block per link', () => {
+      document.body.innerHTML = `
+        <dl>
+          <dt>Collections:</dt>
+          <dd class="collections"><a href="/collections/1">Lyrane's treasure trove</a>, <a href="/collections/2">Things to fuel my escapism.</a>, <a href="/collections/3">read again</a></dd>
+        </dl>
+      `
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+        ['DT', 'Collections:'],
+        ['A', "Lyrane's treasure trove"],
+        ['A', 'Things to fuel my escapism.'],
+        ['A', 'read again'],
+      ])
+      expect(document.querySelector('font[data-imp-wrap]')).toBe(null)
+    })
+
+    it('does not split a link run with fewer than three links', () => {
+      document.body.innerHTML =
+        '<dd class="collections"><a href="#">First collection</a>, <a href="#">Second collection</a></dd>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+        ['DD', 'First collection, Second collection'],
+      ])
+    })
+
+    // A word anywhere outside the links means they belong to one sentence, and
+    // that word is never walked on its own — splitting would drop it.
+    it('does not split a link run whose separators contain words', () => {
+      document.body.innerHTML =
+        '<p><a href="#">Alpha docs</a>, or <a href="#">Beta docs</a>, <a href="#">Gamma docs</a></p>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text)).toEqual(['Alpha docs, or Beta docs, Gamma docs'])
+    })
+
+    // Single-character links joined by " · " (an A–Z index): splitting would
+    // turn each letter into its own block, and ASCII_SHORT_RE drops those, so
+    // the whole index would silently stop being translated.
+    it('does not split a link run whose links carry little of the text', () => {
+      document.body.innerHTML =
+        '<p><a href="#">A</a> · <a href="#">B</a> · <a href="#">C</a> · <a href="#">D</a></p>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text)).toEqual(['A · B · C · D'])
+    })
+
+    // GitHub's commit title in the file list: "chore: update @extport packages
+    // to latest" — the gaps are whitespace only, so the links continue one
+    // sentence and must stay one block.
+    it('does not split adjacent links separated by whitespace only', () => {
+      document.body.innerHTML =
+        '<div class="react-directory-commit-message"><a href="#">chore: update</a> <a href="#">packages to latest</a> <a href="#">untrack the config</a></div>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text)).toEqual([
+        'chore: update packages to latest untrack the config',
+      ])
+    })
+
+    it('keeps a paragraph with inline links as one block', () => {
+      document.body.innerHTML =
+        '<p>Read <a href="#">the docs</a>, <a href="#">the guide</a> and <a href="#">the FAQ</a> before you start.</p>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text)).toEqual([
+        'Read the docs, the guide and the FAQ before you start.',
+      ])
+    })
+  })
+
+  // Rows of inline-block controls are toolbars, not sentences. The row element
+  // itself has no block child (inline-block reads as inline), so nothing else in
+  // the walk separates the controls — see isInlineBlockRow in lib/dom.ts.
+  describe('inline-block rows (toolbars)', () => {
+    // FanFiction.net's chapter nav, verbatim in shape: two buttons around a
+    // <select>, all three computing to display:inline-block. Before the rule the
+    // whole row was one "< Prev  Next >" block.
+    it('splits a FanFiction.net chapter nav into one block per button', () => {
+      document.body.innerHTML = `
+        <p>Chapter text</p>
+        <span style="float:right; "><button class="btn">&lt; Prev</button> <select id="chap_select"><option>1. One</option></select> <button class="btn">Next &gt;</button></span>
+      `
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+        ['P', 'Chapter text'],
+        ['BUTTON', '< Prev'],
+        ['BUTTON', 'Next >'],
+      ])
+      // The <select> is skipped, so the run is cut at it — no <font> wrapper.
+      expect(document.querySelector('font[data-imp-wrap]')).toBe(null)
+    })
+
+    // The counter-example the split rule must not break: text between the
+    // controls makes the run one phrase, and that text is never walked on its
+    // own, so splitting would drop "to keep, or" from translation forever.
+    it('keeps buttons embedded in a sentence as one block', () => {
+      document.body.innerHTML =
+        '<div><button>Save</button> to keep, or <button>Cancel</button> to discard.</div>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(1)
+      expect(blocks[0].text).toBe('Save to keep, or Cancel to discard.')
+      expect(blocks[0].text).toContain('to keep, or')
+    })
+
+    it('keeps a button inside a p as part of the paragraph', () => {
+      document.body.innerHTML = '<p>Click <button>here</button> to continue</p>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+        ['P', 'Click here to continue'],
+      ])
+    })
+
+    it('does not split a row with a single control', () => {
+      document.body.innerHTML = '<div><button>Only</button></div>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([['DIV', 'Only']])
+    })
+
+    // Known limitation, recorded not fixed: <p> is a leaf block, and the rule is
+    // checked after the leaf path, so a control row inside a leaf block still
+    // merges (and loses the boundary between the two labels).
+    it('still merges a control row inside a leaf block (known limitation)', () => {
+      document.body.innerHTML = '<p><button>Prev</button><button>Next</button></p>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([['P', 'PrevNext']])
+    })
+  })
 })
 
 describe('extractBlocks with noStructuralWrites', () => {
@@ -1481,7 +1612,13 @@ describe('extractBlocks with translateChrome', () => {
     expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
       ['BUTTON', 'Bold'],
       ['BUTTON', 'Italic'],
-      ['DIV', 'UndoRedo'],
+      // The second div has the same shape as FanFiction.net's chapter nav (two
+      // inline-block controls, whitespace between them only), so it splits even
+      // outside page chrome — the rule is isInlineBlockRow's, not this mode's.
+      // A button inside a sentence stays inline through the run's loose-text
+      // guard instead; see 'inline-block rows (toolbars)' below.
+      ['BUTTON', 'Undo'],
+      ['BUTTON', 'Redo'],
     ])
   })
 

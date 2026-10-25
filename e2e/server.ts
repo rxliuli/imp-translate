@@ -428,6 +428,11 @@ Line two stays in the same block.</span></div>
     </ul>
   </div>
   <p id="control">This paragraph sits outside both lists and must still be translated.</p>
+  <span id="chapter-nav" style="float:right">
+    <button id="bar-prev" class="btn">Prev</button>
+    <select id="bar-select"><option>1. One</option></select>
+    <button id="bar-next" class="btn">Next</button>
+  </span>
 </body>
 </html>`,
 }

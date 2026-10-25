@@ -7,6 +7,12 @@ const INLINE_TAGS = new Set([
 ])
 
 const NO_LETTER_RE = /^\P{L}+$/u
+// Text a link run may carry outside its links: punctuation/symbols only, no
+// letters, digits or CJK.
+const LINK_RUN_TEXT_RE = /^[\s\p{P}\p{S}]*$/u
+// The gap between two links of a link run must contain punctuation, not just
+// whitespace — whitespace-only gaps mean the links are part of one phrase.
+const LINK_RUN_SEPARATOR_RE = /[\p{P}\p{S}]/u
 const ASCII_SHORT_RE = /^[a-zA-Z0-9]{1,2}$/
 // A blank line: two newlines separated only by intra-line whitespace. In
 // white-space:pre-wrap contexts this is a rendered paragraph break.
@@ -34,9 +40,14 @@ const SKIP_CONTAINERS = new Set(['nav', 'footer'])
 
 // With translateChrome, these inline-block controls are standalone blocks
 // inside page chrome (CHROME_SELECTOR): a toolbar of buttons (or a link next
-// to a button) is a list of separate labels, not one sentence. In body text
-// (`<p>Click <button>here</button> to continue</p>`) and in bilingual mode
-// they stay inline.
+// to a button) is a list of separate labels, not one sentence.
+//
+// Outside page chrome — body text, and every mode when translateChrome is off
+// — this set does not apply: whether a control splits off is decided by the
+// run it lands in (flushSegment, isInlineBlockRow), not by position. A run that
+// carries non-whitespace text keeps its control inline
+// (`<p>Click <button>here</button> to continue</p>`); a row of two or more
+// controls with only whitespace between them is a toolbar and splits.
 const CHROME_BLOCK_TAGS = new Set(['button'])
 
 const CHROME_SELECTOR = [
@@ -324,6 +335,81 @@ function isInlineItemList(el: Element, mode: ButtonMode): boolean {
   if (items.length < 2) return false
   if (!items.every((c) => LIST_ITEM_TAGS.has(c.tagName.toLowerCase()))) return false
   return items.filter((c) => !isHidden(c as HTMLElement)).length >= 2
+}
+
+// A leaf block holding nothing but a run of links joined by punctuation —
+// AO3's Collections field:
+//   <dd class="collections"><a …>Name</a>, <a …>Name</a>, … </dd>
+// There is no ul/li, so isInlineItemList does not apply, and `a` is inline so
+// flushSegment's run split does not either: the leaf path merges all 58 names
+// into one 1552-char block and the translation lands as a single paragraph
+// after the last name. Each link is a separate name and must be its own block.
+// The separating punctuation is the discriminator: it marks a list of names
+// ("A, B, C"), as opposed to links embedded in a sentence (GitHub's commit
+// title "chore: update @extport packages to latest" — whitespace-only gaps,
+// prose on both sides) or a row of unseparated icon links.
+function isInlineLinkRun(el: Element, mode: ButtonMode): boolean {
+  if (INLINE_TAGS.has(el.tagName.toLowerCase())) return false
+  if (hasBlockChild(el, mode)) return false
+  const children = Array.from(el.children)
+  const links = children.filter((c) => c.tagName.toLowerCase() === 'a')
+  if (links.length < 3 || links.length !== children.length) return false
+  // Text outside the links must be punctuation/symbols only: a word
+  // ("<a>A</a> or <a>B</a>") means the links are part of one sentence, and
+  // walking them separately would drop that word. Each gap between two links
+  // must itself contain punctuation, so adjacent links that merely continue a
+  // phrase (or bare icon links) keep their current merged block.
+  let gap = ''
+  let prevWasLink = false
+  for (const n of Array.from(el.childNodes)) {
+    if (n.nodeType === Node.TEXT_NODE) {
+      gap += n.textContent ?? ''
+      continue
+    }
+    if (n.nodeType !== Node.ELEMENT_NODE) continue
+    if (!LINK_RUN_TEXT_RE.test(gap)) return false
+    if (prevWasLink && !LINK_RUN_SEPARATOR_RE.test(gap)) return false
+    gap = ''
+    prevWasLink = true
+  }
+  if (!LINK_RUN_TEXT_RE.test(gap)) return false
+  // A hidden link would be walked to no effect; keep the merged block then.
+  if (links.some((a) => isHidden(a as HTMLElement))) return false
+  // A label followed by a link run ("Sections: <a>A</a> · <a>B</a>") would lose
+  // the label, so the links must carry most of the text on their own.
+  let linkChars = 0
+  for (const a of links) linkChars += getVisibleText(a).trim().length
+  const totalChars = getVisibleText(el).trim().length
+  return totalChars > 0 && linkChars / totalChars >= 0.6
+}
+
+// A row of two or more blockish controls that merely compute to
+// display:inline-block — FanFiction.net's chapter nav:
+//   <span style="float:right"><button>< Prev</button><select>…</select><button>Next ></button></span>
+// isDisplayInline demotes inline-block to inline, so hasBlockChild(span) is
+// false and the walk never reaches walkMixed: the span falls through to
+// tryExtract and merges both buttons into one block ("< Prev  Next >"), the
+// <select> between them contributing no text because it is in SKIP_TAGS. Each
+// control is a separate label and must be its own block; walkMixed's run split
+// then does the work, and the <select> cutting the run is what keeps the two
+// buttons apart.
+//
+// Checked before tryExtract, since a row like this is not a leaf block and not
+// a mixed container — tryExtract is the only other place that would claim it.
+// Not before isLeafBlock: `<p><button>Prev</button><button>Next</button></p>`
+// is a leaf block and still merges (known limitation of this rule).
+//
+// Independent of CHROME_BLOCK_TAGS: that set only forces controls apart inside
+// page chrome, while this row sits in body content with translateChrome off.
+function isInlineBlockRow(el: Element): boolean {
+  let count = 0
+  for (const child of el.children) {
+    if (!isBlockTag(child.tagName.toLowerCase())) continue
+    if (!isDisplayInline(child)) continue
+    if (isHidden(child as HTMLElement)) continue
+    if (++count >= 2) return true
+  }
+  return false
 }
 
 // Detect "fake paragraph" markup: 2+ <br>s in a row (possibly with whitespace
@@ -744,6 +830,15 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       return
     }
 
+    // Checked before the leaf path, since AO3's <dd class="collections"> is
+    // itself a leaf block: a link run has no block children, so tryExtract
+    // would merge every name into one block.
+    if (isInlineLinkRun(node, mode)) {
+      for (const child of node.children) walk(child, mode)
+      walkShadow(node, mode)
+      return
+    }
+
     if (isLeafBlock(node, mode)) {
       tryExtract(node)
       walkShadow(node, mode)
@@ -760,6 +855,15 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
     // block children, so tryExtract would merge the whole list into one block.
     if (isInlineItemList(node, mode)) {
       for (const child of node.children) walk(child, mode)
+      walkShadow(node, mode)
+      return
+    }
+
+    // Checked before tryExtract: an inline-block row (FFN's chapter nav) has no
+    // block child, so the leaf path does not claim it and tryExtract would
+    // merge the whole row into one block.
+    if (isInlineBlockRow(node)) {
+      walkMixed(node, mode)
       walkShadow(node, mode)
       return
     }
