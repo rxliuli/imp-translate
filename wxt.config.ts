@@ -73,12 +73,12 @@ export default defineConfig({
     }
     return manifest
   },
-  webExt: {
-    disabled: true,
-    chromiumProfile: '.tmp/chrome-profile',
-    keepProfileChanges: true,
-    chromiumArgs: ['--remote-debugging-port=9222'],
-  },
+  // 不让 wxt 自己拉起浏览器：dev 循环要 attach 到已有的 Chrome（CDP 9222，
+  // 见 .mcp.json 与 scripts/dev-cdp.mjs）。wxt 0.21 起 web-ext 是可选 peer 且本项目
+  // 没装，所以本来就不会自动启浏览器；这行是防止以后有人装了 web-ext 而悄悄改变行为。
+  // 原来的 chromiumProfile / keepProfileChanges / chromiumArgs 是 web-ext 专属选项，
+  // 在 disabled 下从未生效，已删；需要时按 git history 里的 b3b7a03 恢复。
+  webExt: { disabled: true },
   hooks: {
     // wxt 0.21 生成的 .wxt/tsconfig.json 新增了 noUncheckedIndexedAccess，
     // 会把既有代码里 288 处索引访问判成可能 undefined。先用官方文档给的逃生口
