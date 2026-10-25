@@ -54,9 +54,10 @@
     "playwright": "^1.64.1",
     "pngjs": "^7.0.0",
     "typescript": "^6.0.3",
+    "vite": "^8.3.5",
     "vitest": "^4.1.12",
     "vitest-browser-react": "^2.3.0",
-    "wxt": "^0.20.27"
+    "wxt": "^0.21.4"
   },
   "packageManager": "pnpm@12.15.0+sha512.b3951d6d6ff4a9f13dc7cf56cd28d2b8eb37dbcc9c68e52e1e1191873ea9f82a017287ab50baadc5ccc494f036c67c0e47eb13608c2fa36f47711b61ea128e61"
 }

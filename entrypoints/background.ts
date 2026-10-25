@@ -12,7 +12,7 @@ import {
 import { eldDetectLanguage } from '@/lib/eld-detect'
 import { parseRules, matchRulesForHostname, type SiteRule } from '@/lib/rules'
 import { getEffectiveRules, setupRemoteRulesAlarm, fetchRemoteRulesIfNeeded } from '@/lib/remote-rules'
-import { PublicPath } from 'wxt/browser'
+import type { PublicPath } from 'wxt/browser'
 import { debugTime, isPdfUrl } from '@/lib/utils'
 import { IMP_ORIGIN } from '@/lib/imp'
 

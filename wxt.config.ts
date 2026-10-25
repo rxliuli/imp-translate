@@ -1,6 +1,7 @@
-import { defineConfig, UserManifest } from 'wxt'
+import { defineConfig } from 'wxt'
+import type { UserManifest } from 'wxt'
 import tailwindcss from '@tailwindcss/vite'
-import { PublicPath } from 'wxt/browser'
+import type { PublicPath } from 'wxt/browser'
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react', '@extport/wxt'],
@@ -77,5 +78,14 @@ export default defineConfig({
     chromiumProfile: '.tmp/chrome-profile',
     keepProfileChanges: true,
     chromiumArgs: ['--remote-debugging-port=9222'],
+  },
+  hooks: {
+    // wxt 0.21 生成的 .wxt/tsconfig.json 新增了 noUncheckedIndexedAccess，
+    // 会把既有代码里 288 处索引访问判成可能 undefined。先用官方文档给的逃生口
+    // 只回退这一项，是否采纳该严格模式要单独评估并单独改代码。
+    // 注意 tsconfig 是整个文件的 JSON 内容，所以键在 compilerOptions 下面。
+    'prepare:tsconfig': (_, { tsconfig }) => {
+      delete tsconfig.compilerOptions.noUncheckedIndexedAccess
+    },
   },
 })
