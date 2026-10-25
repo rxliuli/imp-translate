@@ -294,6 +294,9 @@ function isBlockTag(tag: string): boolean {
   return !INLINE_TAGS.has(tag) && !SKIP_TAGS.has(tag)
 }
 
+const LIST_CONTAINER_TAGS = new Set(['ul', 'ol', 'dl'])
+const LIST_ITEM_TAGS = new Set(['li', 'dd', 'dt'])
+
 function isDisplayInline(el: Element): boolean {
   const inlineDisplay = (el as HTMLElement).style?.display
   if (inlineDisplay) return inlineDisplay.startsWith('inline')
@@ -305,6 +308,22 @@ function isDisplayInline(el: Element): boolean {
   // Safe for the read/write split: this runs in the walk's read phase, before
   // any deferred write, so it never forces a post-mutation reflow.
   return getComputedStyle(el).display.startsWith('inline')
+}
+
+// A list whose items compute to display:inline — AO3's tag lists
+// (<ul class="commas"> where the commas are CSS ::after content, not text).
+// hasBlockChild is false for that shape, so the leaf path would extract the
+// whole list as one block: the source text arrives as an unseparated run
+// ("Self-InsertCYOATelekinesis") because the separators only exist in CSS, and
+// the translation is appended after the last tag. Each item is a separate
+// label and must be its own block.
+function isInlineItemList(el: Element, mode: ButtonMode): boolean {
+  if (!LIST_CONTAINER_TAGS.has(el.tagName.toLowerCase())) return false
+  if (hasBlockChild(el, mode)) return false
+  const items = Array.from(el.children)
+  if (items.length < 2) return false
+  if (!items.every((c) => LIST_ITEM_TAGS.has(c.tagName.toLowerCase()))) return false
+  return items.filter((c) => !isHidden(c as HTMLElement)).length >= 2
 }
 
 // Detect "fake paragraph" markup: 2+ <br>s in a row (possibly with whitespace
@@ -655,6 +674,25 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
         return
       }
 
+      // A run of sibling block-ish elements that merely compute to inline
+      // (AO3's action bar: <ul class="work navigation actions"> with
+      // li { display: inline-block }) is a row of separate controls, not one
+      // sentence. Wrapping the run in a single <font> puts one translation on
+      // top of two different buttons ([Entire Work, Next Chapter] merged).
+      // Walk each element as its own block instead. The guard: anything but
+      // whitespace text inside the run means the nodes really do read as one
+      // phrase ("Alpha stray label Beta"), and that loose text is never walked
+      // on its own, so it would be silently dropped — keep the wrapper then.
+      const segElements = seg.filter((n) => n.nodeType === Node.ELEMENT_NODE) as Element[]
+      if (
+        segElements.length >= 2 &&
+        segElements.every((el) => !INLINE_TAGS.has(el.tagName.toLowerCase())) &&
+        !seg.some((n) => n.nodeType === Node.TEXT_NODE && !isWhitespaceText(n))
+      ) {
+        for (const el of segElements) walk(el, mode)
+        return
+      }
+
       // <font> over <span>: site CSS/JS targets `span` far more often than the
       // near-deprecated `<font>`, so a font wrapper is more transparent to the
       // host page. Same tag as our translation result element. Insertion is
@@ -714,6 +752,14 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
 
     if (hasBlockChild(node, mode) || hasBrBrSeparator(node)) {
       walkMixed(node, mode)
+      walkShadow(node, mode)
+      return
+    }
+
+    // Checked before the leaf path: an inline-item list (AO3 tag list) has no
+    // block children, so tryExtract would merge the whole list into one block.
+    if (isInlineItemList(node, mode)) {
+      for (const child of node.children) walk(child, mode)
       walkShadow(node, mode)
       return
     }

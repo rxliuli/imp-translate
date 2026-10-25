@@ -386,6 +386,50 @@ Line one of the closing paragraph.
 Line two stays in the same block.</span></div>
 </body>
 </html>`,
+  // AO3's two inline-item shapes: a tag list (<ul class="commas">,
+  // li { display: inline }, the separators are CSS ::after content so there is
+  // no text between the items) and the work action bar (<ul class="actions">,
+  // li { display: inline-block }, one item holding a hidden dropdown). Neither
+  // list has block children, so each used to collapse into a single block at
+  // the end of the <ul>. #control is a plain paragraph: ordinary content must
+  // keep translating as before.
+  '/inline-items': `<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Inline Items</title>
+<style>
+  ul.commas li { display: inline; }
+  ul.commas li::after { content: ", "; }
+  ul.commas li:last-child::after { content: ""; }
+  ul.actions li { display: inline-block; margin-right: 8px; }
+</style>
+</head>
+<body>
+  <div id="tag-list-wrap">
+    <ul id="tag-list" class="commas">
+      <li id="tag-self-insert"><a href="/tags/self-insert">Self-Insert</a></li>
+      <li id="tag-cyoa"><a href="/tags/cyoa">CYOA</a></li>
+      <li id="tag-telekenesis"><a href="/tags/telekenesis">Telekenesis</a></li>
+      <li id="tag-time-travel"><a href="/tags/time-travel">Time Travel</a></li>
+      <li id="tag-fix-it"><a href="/tags/fix-it">Fix-It</a></li>
+    </ul>
+  </div>
+  <div id="action-list-wrap">
+    <ul id="action-list" class="actions">
+      <li id="action-entire-work"><a href="/works/1?view_full_work=true">Entire Work</a></li>
+      <li id="action-next-chapter"><a href="/works/1/chapters/2">Next Chapter</a></li>
+      <li id="action-comments"><a href="/works/1/comments">Comments</a></li>
+      <li id="action-share"><a href="#" aria-expanded="false">Share</a>
+        <ul style="display:none">
+          <li><a href="/share/tweet">Tweet</a></li>
+          <li><a href="/share/tumblr">Tumblr</a></li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+  <p id="control">This paragraph sits outside both lists and must still be translated.</p>
+</body>
+</html>`,
 }
 
 // Per-test mock controls, reset on each server start (tests run serially per

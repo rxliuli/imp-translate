@@ -1135,6 +1135,153 @@ describe('extractBlocks', () => {
       expect(again).toHaveLength(0)
     })
   })
+
+  // Two shapes where several controls ended up merged into one translation
+  // block. Both are AO3, but neither rule is position-specific: the decision is
+  // made on computed display only, so a header or a role="navigation" wrapper
+  // gets exactly the same treatment as body content.
+  describe('inline-item lists and block-ish inline runs (AO3)', () => {
+    // AO3's work action bar: <ul class="work navigation actions"> with
+    // li { display: inline-block }. The <li>s see no block children, so the
+    // inline-run path wrapped [Entire Work, Next Chapter] and [Comments, Share]
+    // into two <font> wrappers — one translation stacked over two buttons.
+    it('splits an inline-block li action bar into one block per button', () => {
+      const style = document.createElement('style')
+      style.textContent = '.imp-test-actions li { display: inline-block; }'
+      document.head.appendChild(style)
+      document.body.innerHTML = `
+        <ul class="work navigation actions imp-test-actions">
+          <li class="entire"><a href="#">Entire Work</a></li>
+          <li class="next"><a href="#">Next Chapter</a></li>
+          <li class="comments"><a href="#">Comments</a></li>
+          <li class="share"><a href="#" aria-expanded="false">Share</a>
+            <ul style="display:none"><li><a href="#">Tweet</a></li></ul>
+          </li>
+        </ul>
+      `
+      const blocks = extractBlocks(document.body)
+      style.remove()
+      // The <li> holding the hidden dropdown has a block child, so the walk
+      // descends into it and the anchor becomes the block; the dropdown's own
+      // items are hidden and produce nothing.
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+        ['LI', 'Entire Work'],
+        ['LI', 'Next Chapter'],
+        ['LI', 'Comments'],
+        ['A', 'Share'],
+      ])
+      expect(document.querySelector('font[data-imp-wrap]')).toBe(null)
+    })
+
+    // AO3 tag list: <ul class="commas"> with li { display: inline } — the commas
+    // between tags are ::after content, so the list has no block children and
+    // the leaf path sent the whole thing as one unseparated run
+    // ("Self-InsertCYOATelekinesis").
+    it('splits an inline li tag list into one block per tag', () => {
+      const style = document.createElement('style')
+      style.textContent =
+        '.imp-test-commas li { display: inline; }\n' +
+        '.imp-test-commas li::after { content: ","; }'
+      document.head.appendChild(style)
+      document.body.innerHTML = `
+        <h2>Tags</h2>
+        <ul class="commas imp-test-commas">
+          <li><a href="#">Self-Insert</a></li>
+          <li><a href="#">CYOA</a></li>
+          <li><a href="#">Telekenesis</a></li>
+        </ul>
+      `
+      const blocks = extractBlocks(document.body)
+      style.remove()
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+        ['H2', 'Tags'],
+        ['LI', 'Self-Insert'],
+        ['LI', 'CYOA'],
+        ['LI', 'Telekenesis'],
+      ])
+      expect(document.querySelector('font[data-imp-wrap]')).toBe(null)
+    })
+
+    // Guardrail on the run-splitting rule: loose text between the elements means
+    // the run reads as one phrase, and that text is never walked on its own —
+    // splitting the elements would drop it from translation forever.
+    it('does not split a block-ish inline run that contains loose text', () => {
+      document.body.innerHTML =
+        '<div><p>Intro</p><li style="display:inline">Alpha</li> stray label <li style="display:inline">Beta</li></div>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text)).toEqual(['Intro', 'Alpha stray label Beta'])
+      expect(blocks[1].text).toContain('stray label')
+      expect(blocks[1].element.tagName).toBe('FONT')
+      expect(blocks[1].element.hasAttribute('data-imp-wrap')).toBe(true)
+    })
+
+    it('does not split an inline-item list with a single item', () => {
+      const style = document.createElement('style')
+      style.textContent = '.imp-test-single li { display: inline; }'
+      document.head.appendChild(style)
+      document.body.innerHTML =
+        '<ul class="commas imp-test-single"><li><a href="#">Only tag</a></li></ul>'
+      const blocks = extractBlocks(document.body)
+      style.remove()
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([['UL', 'Only tag']])
+    })
+
+    // No chrome exception: the split is driven by computed display, so the same
+    // list splits inside <header> / role="navigation". <nav> keeps its existing
+    // SKIP_CONTAINERS treatment.
+    it('splits inline-item lists inside header and role="navigation", but nav is still skipped', () => {
+      const style = document.createElement('style')
+      style.textContent = '.imp-test-chrome li { display: inline; }'
+      document.head.appendChild(style)
+      const list = `
+        <ul class="commas imp-test-chrome">
+          <li><a href="#">Self-Insert</a></li>
+          <li><a href="#">CYOA</a></li>
+        </ul>
+      `
+      document.body.innerHTML = `<header>${list}</header><div role="navigation">${list}</div><p>Body text</p>`
+      const blocks = extractBlocks(document.body)
+      document.body.innerHTML = `<nav>${list}</nav><p>Body text</p>`
+      const navBlocks = extractBlocks(document.body)
+      style.remove()
+      expect(blocks.map((b) => b.text)).toEqual([
+        'Self-Insert',
+        'CYOA',
+        'Self-Insert',
+        'CYOA',
+        'Body text',
+      ])
+      expect(navBlocks.map((b) => b.text)).toEqual(['Body text'])
+    })
+
+    // Over-splitting guard: a run made only of inline tags is one sentence and
+    // must stay one block (the split rule needs block-ish element tags).
+    it('still merges a run made only of inline-tag elements', () => {
+      document.body.innerHTML =
+        '<div><span>Just migrated to </span><a>@helium</a><span> and this works great.</span></div>'
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(1)
+      expect(blocks[0].text).toBe('Just migrated to @helium and this works great.')
+      expect(document.querySelector('font[data-imp-wrap]')).toBe(null)
+    })
+
+    // Regression: a normal list (li computing to display:list-item) is already
+    // per-item through the mixed-container path and must not change.
+    it('keeps one block per li for a default list-item ul', () => {
+      document.body.innerHTML = `
+        <ul class="commas">
+          <li><a href="#">Self-Insert</a></li>
+          <li><a href="#">CYOA</a></li>
+        </ul>
+      `
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => [b.element.tagName, b.text])).toEqual([
+        ['LI', 'Self-Insert'],
+        ['LI', 'CYOA'],
+      ])
+      expect(document.querySelector('font[data-imp-wrap]')).toBe(null)
+    })
+  })
 })
 
 describe('extractBlocks with noStructuralWrites', () => {
