@@ -1,5 +1,9 @@
 import { test, expect } from './fixtures'
-import { startTranslation, configureMockProvider } from './helpers'
+import {
+  startTranslation,
+  configureMockProvider,
+  openBackgroundPopup,
+} from './helpers'
 
 const TRANSLATED_SELECTOR = '.imp-translate-result:not(.imp-translate-loading)'
 
@@ -65,6 +69,50 @@ test('reload stops translation in iframes too (no stale re-translate)', async ({
   await page.waitForTimeout(2000)
   await expect(page.locator(TRANSLATED_SELECTOR)).toHaveCount(0)
   await expect(largeFrame.locator(TRANSLATED_SELECTOR)).toHaveCount(0)
+})
+
+test('restarting translation after a reload still translates newly added iframes', async ({
+  context,
+  baseURL,
+  extensionId,
+}) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/with-iframes`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  const largeFrame = page.frameLocator('#large-iframe')
+  await expect(largeFrame.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  // Reload stops translation. The background also marks this tab as
+  // "reloading" during the reload's tail (see reloadingTabs in
+  // entrypoints/background.ts) so late sub-frames don't re-translate.
+  await page.reload()
+  await page.waitForLoadState('domcontentloaded')
+  await expect(page.locator(TRANSLATED_SELECTOR)).toHaveCount(0)
+
+  // Restart through the background's startTranslationForTab (the popup sends
+  // startTab), which is what clears the reload marker. The test helper above
+  // drives the service worker directly and would never touch it.
+  const popup = await openBackgroundPopup(context, extensionId)
+  await popup.getByRole('button', { name: 'Translate Page' }).click()
+  await expect(page.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
+
+  // A frame loading after the restart must be driven by the background's
+  // sub-frame handler — which a leftover reload marker would suppress until
+  // the tab's next top-level navigation.
+  await page.locator('#add-iframe').click()
+
+  const dynamicFrame = page.frameLocator('#dynamic-iframe')
+  await expect(dynamicFrame.locator(TRANSLATED_SELECTOR).first()).toBeVisible({
+    timeout: 15000,
+  })
 })
 
 test('skips translation inside a tiny iframe', async ({ context, baseURL }) => {

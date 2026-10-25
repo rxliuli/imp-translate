@@ -65,6 +65,17 @@ async function setTabTranslatingLang(tabId: number, lang: string | null) {
   }
 }
 
+// Tabs whose committed document is a reload of a translating tab (or a PDF
+// commit, which also stops translation). Kept in background memory rather than
+// in storage.session precisely because the write has to be synchronous:
+// onCommitted's storage read (`getTabTranslatingLang`) and the clear are
+// cross-process round-trips, so a sub-frame's onDOMContentLoaded can slip
+// between them and still see the pre-reload key. `frameId === 0` is the only
+// writer (see onCommitted below); the entry is dropped by a deliberate start
+// (startTranslationForTab), by the tab's next non-reload frame-0 commit, or
+// when the tab is closed (tabs.onRemoved).
+const reloadingTabs = new Set<number>()
+
 const defaultIcon: Record<number, PublicPath> = {
   16: '/icon/16.png',
   32: '/icon/32.png',
@@ -87,6 +98,13 @@ async function startTranslationForTab(
   showToast = false,
 ) {
   const t = debugTime(`startTranslationForTab(tabId=${tabId})`)
+  // A deliberate start supersedes the reload marker: `reloadingTabs` only
+  // covers one reload's tail (until frame 0's commit clears the key and its
+  // sub-frames have loaded), and a user asking to translate now means that
+  // tail is over. Without this, a restart on a reloaded page would leave
+  // every lazily added iframe untranslated until the next top-level
+  // navigation.
+  reloadingTabs.delete(tabId)
   await setTabTranslatingLang(tabId, targetLang)
   t('setTabTranslatingLang done')
   await browser.action.setIcon({ tabId, path: activeIcon })
@@ -437,15 +455,21 @@ export default defineBackground(() => {
   // in onDOMContentLoaded below will revert it.
   browser.webNavigation.onCommitted.addListener(async (details) => {
     if (details.frameId !== 0) return
+    // A reload (or navigating to a PDF) stops translation. Decide that
+    // synchronously — before the first await — and publish it in
+    // `reloadingTabs`, so the reload branch below (and every sub-frame
+    // onDOMContentLoaded that races this listener) has a decision available
+    // immediately, independent of how long the storage round-trips take.
+    const stopsTranslation =
+      details.transitionType === 'reload' || isPdfUrl(details.url)
+    if (stopsTranslation) {
+      reloadingTabs.add(details.tabId)
+    } else {
+      reloadingTabs.delete(details.tabId)
+    }
     const lang = await getTabTranslatingLang(details.tabId)
     if (!lang) return
-    // A reload (or navigating to a PDF) stops translation. Detect the reload
-    // here at commit — the earliest available event — and clear the
-    // translating state now, so that sub-frame onDOMContentLoaded handlers
-    // below don't read a stale "translating" key and re-translate an iframe
-    // on a page that was just reloaded. The performance.navigation check in
-    // onDOMContentLoaded remains as a backstop for cases transitionType misses.
-    if (details.transitionType === 'reload' || isPdfUrl(details.url)) {
+    if (stopsTranslation) {
       await setTabTranslatingLang(details.tabId, null)
       await browser.action.setIcon({ tabId: details.tabId, path: defaultIcon })
       return
@@ -458,11 +482,21 @@ export default defineBackground(() => {
     // explicitly from the background rather than letting inject.js self-start.
     // Sub-frame auto-init is disabled (it would read the session key on its
     // own and could win a race against frame 0's reload check, translating an
-    // iframe on a page that was just reloaded). Here we read the key *after*
-    // onCommitted has already cleared it for reloads, so the decision is
-    // correct: only inject + start this specific frame when the tab is
-    // genuinely translating.
+    // iframe on a page that was just reloaded).
+    //
+    // The guarantee here is the synchronous `reloadingTabs` check, NOT the
+    // session key: onCommitted's clear is a cross-process round-trip, so a
+    // sub-frame can reach this handler before the pre-reload key is gone. The
+    // marker is written synchronously on commit, so it has no such window;
+    // the key read below then only decides the non-reload case.
+    // Not covered: if the service worker is torn down between the reload's
+    // commit and this event, the in-memory marker is empty and this frame
+    // falls back to the session key — i.e. it may translate once on a page
+    // that was just reloaded. Accepted: an extra inject-and-start on a page
+    // the user already stopped is cosmetic, and buying that last case would
+    // need persistence, reintroducing the very round-trip being avoided.
     if (details.frameId !== 0) {
+      if (reloadingTabs.has(details.tabId)) return
       const lang = await getTabTranslatingLang(details.tabId)
       if (!lang) return
       // Transient sub-frames (ad/embed iframes, especially common on Reddit)
@@ -529,6 +563,7 @@ export default defineBackground(() => {
   })
 
   browser.tabs.onRemoved.addListener(async (tabId) => {
+    reloadingTabs.delete(tabId)
     await browser.storage.session.remove(`tab_translating_${tabId}`)
   })
 
