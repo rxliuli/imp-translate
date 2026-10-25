@@ -22,7 +22,7 @@
     "@rxliuli/imp-credits-sdk": "^0.0.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.5",
-    "@webext-core/messaging": "^2.3.0",
+    "@webext-core/messaging": "^4.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.5.0",
