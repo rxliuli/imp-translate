@@ -165,7 +165,9 @@ async function openPanelForActiveTab() {
 
 async function isMobile(): Promise<boolean> {
   const info = await browser.runtime.getPlatformInfo()
-  return info.os === 'android' || info.os === 'ios'
+  // Browser.PlatformOs has no iOS member upstream, so compare as plain strings.
+  const os: string = info.os
+  return os === 'android' || os === 'ios'
 }
 
 async function setupMobileAction() {
