@@ -1211,7 +1211,24 @@ export default defineUnlistedScript(() => {
     mode: DisplayMode = 'bilingual',
   ) {
     const t = debugTime('content:startTranslation')
-    if (isTranslating) { t('skipped — already translating'); return }
+    if (isTranslating) {
+      // The injection-time auto-init (inject.js's tail) starts with
+      // showToast=false and can win this race against an explicit
+      // startTranslation message carrying showToast=true. Translation is
+      // already running, so there is nothing to start — but the toast request
+      // must not be dropped: the winning path never asked for the bar, and the
+      // bar is the only mobile entry point to restore/settings. maybeShowToast
+      // keeps its own gates (top frame only, mobile only) and showToastBar
+      // rebuilds the bar instead of adding a second one, so calling it here is
+      // idempotent.
+      if (showToast) {
+        maybeShowToast()
+        t('skipped — already translating, toast ensured')
+      } else {
+        t('skipped — already translating')
+      }
+      return
+    }
     isTranslating = true
     sessionId++
     targetLang = lang
