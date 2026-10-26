@@ -161,7 +161,20 @@ github.com#+#[data-testid="issue-listitem-title-link"]
 github.com#+#[data-testid="listitem-title-link"]
 github.com#+#.f4.tmp-my-3
 ! https://github.com  (homepage: feed items, skip sidebar repo names + card UI)
+! The homepage has two layouts with no shared containers, and the include set
+! must cover whichever one is being served:
+!   classic feed  → #feed-container (still reachable via "Switch to classic dashboard")
+!   React         → div#dashboard.dashboard inside main.flex-1 (the default
+!                   since the "Preview" rollout; #dashboard.dashboard is 1 per page)
+! Everything on the React dashboard is light DOM — copilot greeting + pills and
+! the Pull requests / Issues cards both hang off #dashboard > .news >
+! react-partial — but every other handle on it is a per-deploy CSS-module hash,
+! so #dashboard is the only selector that survives a deploy. When the homepage
+! moved to React the feed-only include set matched nothing and the isolate gate
+! suppressed the whole page (greeting, pills, list titles), silently.
+! https://github.com  (React dashboard — verified 2026-10-26)
 github.com#+#feed-container section
+github.com#+#:matches-path(/^\/$/) #dashboard
 github.com##.dashboard-sidebar
 github.com##feed-container .Link--primary
 github.com##feed-container button

@@ -6,6 +6,7 @@ import appleRejectionNewlines from './__fixtures__/apple-rejection-newlines.html
 import grokResponseParagraphs from './__fixtures__/grok-response-paragraphs.html?raw'
 import redditNotifications from './__fixtures__/reddit-notifications.html?raw'
 import githubIssuesList from './__fixtures__/github-issues-list.html?raw'
+import githubDashboard from './__fixtures__/github-dashboard.html?raw'
 import builtinRulesRaw from '@/lib/rules.txt?raw'
 import { matchRulesForUrl, parseRules } from './rules'
 
@@ -437,5 +438,72 @@ describe('GitHub issues list (issue-listitem-title-link)', () => {
     expect(joined).not.toContain('rxliuli/AppDowngrader#3')
     expect(joined).not.toContain('KapitainNemo')
     expect(joined).not.toContain('Oct 20, 2026')
+  })
+})
+
+// GitHub's logged-in homepage moved from the classic #feed-container feed to a
+// React dashboard (div#dashboard.dashboard). The include set was feed-only, so
+// on the new layout it matched nothing and the isolate gate suppressed the
+// whole page: copilot greeting, command pills and both list cards stayed
+// English, with no error anywhere. Same failure mode as the issues list above.
+// Captured from https://github.com/ on 2026-10-26.
+describe('GitHub React dashboard (#dashboard)', () => {
+  const selectors = () => matchRulesForUrl(parseRules(builtinRulesRaw), 'github.com', '/')
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('include rules match the dashboard root', () => {
+    document.body.innerHTML = githubDashboard
+    expect(document.querySelectorAll('#dashboard')).toHaveLength(1)
+    const { includeSelectors } = selectors()
+    expect(includeSelectors).toContain('#dashboard')
+  })
+
+  it('does not suppress the page (isolate gate opens)', () => {
+    document.body.innerHTML = githubDashboard
+    const texts = extractBlocks(document.body, selectors()).map((b) => b.text)
+    // The regression produced zero blocks — every assertion below rides on this.
+    expect(texts.length).toBeGreaterThan(0)
+  })
+
+  it('extracts the copilot greeting and command pills', () => {
+    document.body.innerHTML = githubDashboard
+    const joined = extractBlocks(document.body, selectors())
+      .map((b) => b.text)
+      .join('\n')
+
+    expect(joined).toContain('Good afternoon, rxliuli!')
+    for (const pill of ['Debug', 'Agent', 'Create issue', 'Write code', 'Git']) {
+      expect(joined).toContain(pill)
+    }
+    expect(joined).toContain('All repositories')
+    expect(joined).toContain('Pull requests')
+    expect(joined).toContain('Issues')
+  })
+
+  it('extracts pull request and issue card titles', () => {
+    document.body.innerHTML = githubDashboard
+    const joined = extractBlocks(document.body, selectors())
+      .map((b) => b.text)
+      .join('\n')
+
+    expect(joined).toContain('feat(ch76): scaffold translation draft (WIP, planning)')
+    expect(joined).toContain('login not possible')
+    expect(joined).toContain(
+      '[feat]: Should the init command consider supporting the wxt framework',
+    )
+  })
+
+  it('path-gates #dashboard to the homepage route', () => {
+    // The rule carries :matches-path(/^\/$/) so it only widens the include scope
+    // on the homepage; every other github route keeps its own, narrower scope.
+    const elsewhere = matchRulesForUrl(
+      parseRules(builtinRulesRaw),
+      'github.com',
+      '/rxliuli/AppDowngrader/issues',
+    )
+    expect(elsewhere.includeSelectors).not.toContain('#dashboard')
   })
 })
