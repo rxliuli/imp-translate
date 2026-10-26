@@ -175,6 +175,13 @@ github.com#+#.f4.tmp-my-3
 ! https://github.com  (React dashboard — verified 2026-10-26)
 github.com#+#feed-container section
 github.com#+#:matches-path(/^\/$/) #dashboard
+! "Explore" rail: the Universe promo card and the changelog feed. It is a
+! sibling of #dashboard (aside.feed-right-column), not a descendant, so
+! #dashboard alone leaves the whole column in English. The left nav
+! (.dashboard-sidebar, below) stays out on purpose — it is repo names and
+! global chrome.
+! https://github.com  (right rail — verified 2026-10-26)
+github.com#+#:matches-path(/^\/$/) aside.feed-right-column
 github.com##.dashboard-sidebar
 github.com##feed-container .Link--primary
 github.com##feed-container button

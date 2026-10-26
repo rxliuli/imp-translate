@@ -505,5 +505,30 @@ describe('GitHub React dashboard (#dashboard)', () => {
       '/rxliuli/AppDowngrader/issues',
     )
     expect(elsewhere.includeSelectors).not.toContain('#dashboard')
+    expect(elsewhere.includeSelectors).not.toContain('aside.feed-right-column')
+  })
+
+  // The "Explore" rail is a sibling of #dashboard, not a descendant, so covering
+  // #dashboard alone left the Universe promo and the changelog card in English.
+  it('extracts the Explore rail (promo card + changelog)', () => {
+    document.body.innerHTML = githubDashboard
+    const joined = extractBlocks(document.body, selectors())
+      .map((b) => b.text)
+      .join('\n')
+
+    expect(joined).toContain('Join Universe virtually, from anywhere.')
+    expect(joined).toContain('Save your seat')
+    expect(joined).toContain('Latest from our changelog')
+    expect(joined).toContain('Usage metrics API adds usage from tools like OpenCode')
+    expect(joined).toContain('Turn notifications into code with GitHub Copilot in Teams')
+    expect(joined).toContain('View changelog')
+  })
+
+  it('leaves the repo-name nav out of the include set', () => {
+    // .dashboard-sidebar (global nav: Home/Feed/Top repositories, repo slugs)
+    // is an exclude rule and not part of either include, so the fixture does
+    // not even need to carry it.
+    const { skipSelectors } = selectors()
+    expect(skipSelectors).toContain('.dashboard-sidebar')
   })
 })

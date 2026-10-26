@@ -17,175 +17,244 @@
          asserts either way. -->
 <main class="flex-1">
   <div>
-    <div id="dashboard" class="dashboard">
-      <h1 class="sr-only">Dashboard</h1>
-      <div class="tmp-mb-3 Stack">
-        <button class="Button Button--secondary">Preview</button>
-        <button class="Button">Give feedback</button>
-      </div>
-      <div class="news">
-        <react-partial class="loaded">
-          <div>
-            <div class="inputContainer__n-FaU6">
-              <div data-testid="copilot-chat-input-header" class="header__t9x7f7">
-                <div class="greetingContainer__T0TrQa">
-                  <div class="prc-Stack-Stack-UQ9k6">
-                    <div class="copilotLogo__Z_9Al8 copilotAnimationHolder__Oj2LO7">
-                      <div class="copilotAnimation__BQtrEF">
-                        <div class="static__gMgcwx"></div>
-                      </div>
-                    </div>
-                    <span class="h2 greeting__PzRlL2">Good afternoon, rxliuli!</span>
-                  </div>
-                </div>
+    <div class="feed-content d-flex">
+      <div class="flex-auto col-md-8">
+        <div class="d-md-flex">
+          <div class="color-bg-default">
+            <div id="dashboard" class="dashboard">
+              <h1 class="sr-only">Dashboard</h1>
+              <div class="tmp-mb-3 Stack">
+                <button class="Button Button--secondary">Preview</button>
+                <button class="Button">Give feedback</button>
               </div>
-              <h2 class="sr-only">Copilot</h2>
-              <div class="inputSection__dwz_LW">
-                <div class="container__O7wXIe">
+              <div class="news">
+                <react-partial class="loaded">
                   <div>
-                    <form class="chatForm__S3rNdI input__Q4Kq5n">
-                      <div class="sr-only" role="status"></div>
-                      <div class="inputContainer__VrTwoP inputContainerNewConversation__cRMU7F">
-                        <div class="container__YpJHmd fullWidth__3jx5JM inputAutocompleteWrapper__KZz-bj">
-                          <textarea class="input__Kzrn2s" aria-label="Ask anything or type @ to add context with Copilot" placeholder="Ask anything or type @ to add context"></textarea>
-                        </div>
-                        <div class="inputPreview__N7C-Uo" role="presentation"></div>
-                      </div>
-                      <div class="toolbar__zpzF6u">
-                        <div class="mode__2_y2Qm">
-                          <div class="d-flex">
-                            <button class="prc-Button-ButtonBase-9n-Xk modeSelectButton__uvAJME">
-                              <span class="prc-Button-ButtonContent-Iohp5">Ask</span>
-                            </button>
+                    <div class="inputContainer__n-FaU6">
+                      <div data-testid="copilot-chat-input-header" class="header__t9x7f7">
+                        <div class="greetingContainer__T0TrQa">
+                          <div class="prc-Stack-Stack-UQ9k6">
+                            <div class="copilotLogo__Z_9Al8 copilotAnimationHolder__Oj2LO7">
+                              <div class="copilotAnimation__BQtrEF">
+                                <div class="static__gMgcwx"></div>
+                              </div>
+                            </div>
+                            <span class="h2 greeting__PzRlL2">Good afternoon, rxliuli!</span>
                           </div>
                         </div>
-                        <div class="extra__jM40GG">
-                          <button aria-label="Select repositories to attach to conversation" class="prc-Button-ButtonBase-9n-Xk invisibleWithBorder__XJQ0D0">
-                            <span class="prc-Button-ButtonContent-Iohp5">
-                              <span class="prc-Button-Label-FWkx3">All repositories</span>
-                            </span>
-                          </button>
-                          <button data-testid="attachment-menu-button" class="prc-Button-ButtonBase-9n-Xk attachmentIconButton__AFCFLM"></button>
-                          <div class="actions__G3E7-q actionsMultiple__Mirojp">
-                            <div>
-                              <button class="prc-Button-ButtonBase-9n-Xk menuButton__sIWjNM">
-                                <span class="prc-Button-ButtonContent-Iohp5">
-                                  <span class="prc-Button-Label-FWkx3">Auto</span>
-                                </span>
-                              </button>
-                            </div>
-                            <button aria-label="Optimized for: Balance" class="prc-Button-ButtonBase-9n-Xk trigger__MoXGxK">
+                      </div>
+                      <h2 class="sr-only">Copilot</h2>
+                      <div class="inputSection__dwz_LW">
+                        <div class="container__O7wXIe">
+                          <div>
+                            <form class="chatForm__S3rNdI input__Q4Kq5n">
+                              <div class="sr-only" role="status"></div>
+                              <div class="inputContainer__VrTwoP inputContainerNewConversation__cRMU7F">
+                                <div class="container__YpJHmd fullWidth__3jx5JM inputAutocompleteWrapper__KZz-bj">
+                                  <textarea class="input__Kzrn2s" aria-label="Ask anything or type @ to add context with Copilot" placeholder="Ask anything or type @ to add context"></textarea>
+                                </div>
+                                <div class="inputPreview__N7C-Uo" role="presentation"></div>
+                              </div>
+                              <div class="toolbar__zpzF6u">
+                                <div class="mode__2_y2Qm">
+                                  <div class="d-flex">
+                                    <button class="prc-Button-ButtonBase-9n-Xk modeSelectButton__uvAJME">
+                                      <span class="prc-Button-ButtonContent-Iohp5">Ask</span>
+                                    </button>
+                                  </div>
+                                </div>
+                                <div class="extra__jM40GG">
+                                  <button aria-label="Select repositories to attach to conversation" class="prc-Button-ButtonBase-9n-Xk invisibleWithBorder__XJQ0D0">
+                                    <span class="prc-Button-ButtonContent-Iohp5">
+                                      <span class="prc-Button-Label-FWkx3">All repositories</span>
+                                    </span>
+                                  </button>
+                                  <button data-testid="attachment-menu-button" class="prc-Button-ButtonBase-9n-Xk attachmentIconButton__AFCFLM"></button>
+                                  <div class="actions__G3E7-q actionsMultiple__Mirojp">
+                                    <div>
+                                      <button class="prc-Button-ButtonBase-9n-Xk menuButton__sIWjNM">
+                                        <span class="prc-Button-ButtonContent-Iohp5">
+                                          <span class="prc-Button-Label-FWkx3">Auto</span>
+                                        </span>
+                                      </button>
+                                    </div>
+                                    <button aria-label="Optimized for: Balance" class="prc-Button-ButtonBase-9n-Xk trigger__MoXGxK">
+                                      <span class="prc-Button-ButtonContent-Iohp5">
+                                        <span class="prc-Button-Label-FWkx3">Optimized for: Balance</span>
+                                      </span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                      <h2 class="sr-only">Chat commands</h2>
+                      <div class="container__XV5lTK">
+                        <ul class="list__vCph0B">
+                          <li>
+                            <button class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
                               <span class="prc-Button-ButtonContent-Iohp5">
-                                <span class="prc-Button-Label-FWkx3">Optimized for: Balance</span>
+                                <span class="prc-Button-Label-FWkx3">Debug</span>
                               </span>
                             </button>
-                          </div>
-                        </div>
+                          </li>
+                          <li>
+                            <button class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
+                              <span class="prc-Button-ButtonContent-Iohp5">
+                                <span class="prc-Button-Label-FWkx3">Agent</span>
+                              </span>
+                            </button>
+                          </li>
+                          <li>
+                            <button class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
+                              <span class="prc-Button-ButtonContent-Iohp5">
+                                <span class="prc-Button-Label-FWkx3">Create issue</span>
+                              </span>
+                            </button>
+                          </li>
+                          <li>
+                            <button data-testid="starter-write-code-group" class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
+                              <span class="prc-Button-ButtonContent-Iohp5">
+                                <span class="prc-Button-Label-FWkx3">Write code</span>
+                              </span>
+                            </button>
+                          </li>
+                          <li>
+                            <button data-testid="starter-git-group" class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
+                              <span class="prc-Button-ButtonContent-Iohp5">
+                                <span class="prc-Button-Label-FWkx3">Git</span>
+                              </span>
+                            </button>
+                          </li>
+                        </ul>
                       </div>
-                    </form>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <h2 class="sr-only">Chat commands</h2>
-              <div class="container__XV5lTK">
-                <ul class="list__vCph0B">
-                  <li>
-                    <button class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
-                      <span class="prc-Button-ButtonContent-Iohp5">
-                        <span class="prc-Button-Label-FWkx3">Debug</span>
-                      </span>
-                    </button>
-                  </li>
-                  <li>
-                    <button class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
-                      <span class="prc-Button-ButtonContent-Iohp5">
-                        <span class="prc-Button-Label-FWkx3">Agent</span>
-                      </span>
-                    </button>
-                  </li>
-                  <li>
-                    <button class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
-                      <span class="prc-Button-ButtonContent-Iohp5">
-                        <span class="prc-Button-Label-FWkx3">Create issue</span>
-                      </span>
-                    </button>
-                  </li>
-                  <li>
-                    <button data-testid="starter-write-code-group" class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
-                      <span class="prc-Button-ButtonContent-Iohp5">
-                        <span class="prc-Button-Label-FWkx3">Write code</span>
-                      </span>
-                    </button>
-                  </li>
-                  <li>
-                    <button data-testid="starter-git-group" class="prc-Button-ButtonBase-9n-Xk Pill__CRQNhA">
-                      <span class="prc-Button-ButtonContent-Iohp5">
-                        <span class="prc-Button-Label-FWkx3">Git</span>
-                      </span>
-                    </button>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </react-partial>
-        <react-partial class="loaded">
-          <div>
-            <div class="List__Eu5BiA">
-              <div class="container__kYmfXz">
-                <div class="container__jostUS Header__RlhH1l prc-Stack-Stack-UQ9k6">
-                  <h2 class="title___kY5U_">
-                    <div class="prc-Stack-Stack-UQ9k6">Pull requests</div>
-                  </h2>
-                  <span>
-                    <a class="prc-Link-Link-9ZwDx" href="https://github.com/pulls">View all</a>
-                  </span>
-                </div>
-                <ul class="list__vMdHel Items__wBJzVF">
-                  <li class="controlBoxContainer container__goMigQ Item__j56nWl fadeIn__o">
-                    <a href="https://github.com/liuli-moe/to-the-stars/pull/253">
-                      <span class="title__l_yjdG ItemTitleInner__vXJ_4I">feat(ch76): scaffold translation draft (WIP, planning)</span>
-                    </a>
-                    <span class="container__hjOUVP ItemDescription__MNF-Pl">liuli-moe/to-the-stars#253 · Opened by JoinNico · Updated <relative-time>Sep 3, 2026</relative-time></span>
-                  </li>
-                  <li class="controlBoxContainer container__goMigQ Item__j56nWl fadeIn__o">
-                    <a href="https://github.com/aklinker1/publish-browser-extension/pull/89">
-                      <span class="title__l_yjdG ItemTitleInner__vXJ_4I">feat: implement Safari extension publishing via App Store Connect</span>
-                    </a>
-                    <span class="container__hjOUVP ItemDescription__MNF-Pl">aklinker1/publish-browser-extension#89 · Opened by Juknum · Updated <relative-time>Aug 6, 2026</relative-time></span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-            <div class="List__Eu5BiA">
-              <div class="container__kYmfXz">
-                <div class="container__jostUS Header__RlhH1l prc-Stack-Stack-UQ9k6">
-                  <h2 class="title___kY5U_">
-                    <div class="prc-Stack-Stack-UQ9k6">Issues</div>
-                  </h2>
-                  <span>
-                    <a class="prc-Link-Link-9ZwDx" href="https://github.com/issues">View all</a>
-                  </span>
-                </div>
-                <ul class="list__vMdHel Items__wBJzVF">
-                  <li class="controlBoxContainer container__goMigQ Item__j56nWl fadeIn__o">
-                    <a href="https://github.com/rxliuli/AppDowngrader/issues/3">
-                      <span class="title__l_yjdG ItemTitleInner__vXJ_4I">login not possible</span>
-                    </a>
-                    <span class="container__hjOUVP ItemDescription__MNF-Pl">rxliuli/AppDowngrader#3 · Opened by KapitainNemo · Updated <relative-time>Oct 22, 2026</relative-time></span>
-                  </li>
-                  <li class="controlBoxContainer container__goMigQ Item__j56nWl fadeIn__o">
-                    <a href="https://github.com/shadcn-ui/ui/issues/9343">
-                      <span class="title__l_yjdG ItemTitleInner__vXJ_4I">[feat]: Should the init command consider supporting the wxt framework</span>
-                    </a>
-                    <span class="container__hjOUVP ItemDescription__MNF-Pl">shadcn-ui/ui#9343 · Opened by rxliuli · Updated <relative-time>Sep 15, 2026</relative-time></span>
-                  </li>
-                </ul>
+                </react-partial>
+                <react-partial class="loaded">
+                  <div>
+                    <div class="List__Eu5BiA">
+                      <div class="container__kYmfXz">
+                        <div class="container__jostUS Header__RlhH1l prc-Stack-Stack-UQ9k6">
+                          <h2 class="title___kY5U_">
+                            <div class="prc-Stack-Stack-UQ9k6">Pull requests</div>
+                          </h2>
+                          <span>
+                            <a class="prc-Link-Link-9ZwDx" href="https://github.com/pulls">View all</a>
+                          </span>
+                        </div>
+                        <ul class="list__vMdHel Items__wBJzVF">
+                          <li class="controlBoxContainer container__goMigQ Item__j56nWl fadeIn__o">
+                            <a href="https://github.com/liuli-moe/to-the-stars/pull/253">
+                              <span class="title__l_yjdG ItemTitleInner__vXJ_4I">feat(ch76): scaffold translation draft (WIP, planning)</span>
+                            </a>
+                            <span class="container__hjOUVP ItemDescription__MNF-Pl">liuli-moe/to-the-stars#253 · Opened by JoinNico · Updated <relative-time>Sep 3, 2026</relative-time></span>
+                          </li>
+                          <li class="controlBoxContainer container__goMigQ Item__j56nWl fadeIn__o">
+                            <a href="https://github.com/aklinker1/publish-browser-extension/pull/89">
+                              <span class="title__l_yjdG ItemTitleInner__vXJ_4I">feat: implement Safari extension publishing via App Store Connect</span>
+                            </a>
+                            <span class="container__hjOUVP ItemDescription__MNF-Pl">aklinker1/publish-browser-extension#89 · Opened by Juknum · Updated <relative-time>Aug 6, 2026</relative-time></span>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div class="List__Eu5BiA">
+                      <div class="container__kYmfXz">
+                        <div class="container__jostUS Header__RlhH1l prc-Stack-Stack-UQ9k6">
+                          <h2 class="title___kY5U_">
+                            <div class="prc-Stack-Stack-UQ9k6">Issues</div>
+                          </h2>
+                          <span>
+                            <a class="prc-Link-Link-9ZwDx" href="https://github.com/issues">View all</a>
+                          </span>
+                        </div>
+                        <ul class="list__vMdHel Items__wBJzVF">
+                          <li class="controlBoxContainer container__goMigQ Item__j56nWl fadeIn__o">
+                            <a href="https://github.com/rxliuli/AppDowngrader/issues/3">
+                              <span class="title__l_yjdG ItemTitleInner__vXJ_4I">login not possible</span>
+                            </a>
+                            <span class="container__hjOUVP ItemDescription__MNF-Pl">rxliuli/AppDowngrader#3 · Opened by KapitainNemo · Updated <relative-time>Oct 22, 2026</relative-time></span>
+                          </li>
+                          <li class="controlBoxContainer container__goMigQ Item__j56nWl fadeIn__o">
+                            <a href="https://github.com/shadcn-ui/ui/issues/9343">
+                              <span class="title__l_yjdG ItemTitleInner__vXJ_4I">[feat]: Should the init command consider supporting the wxt framework</span>
+                            </a>
+                            <span class="container__hjOUVP ItemDescription__MNF-Pl">shadcn-ui/ui#9343 · Opened by rxliuli · Updated <relative-time>Sep 15, 2026</relative-time></span>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </react-partial>
               </div>
             </div>
           </div>
-        </react-partial>
+        </div>
       </div>
+      <aside class="feed-right-column d-block tmp-mb-5" aria-label="Explore">
+        <div>
+          <div class="js-notice marketing-banner d-none d-xl-block">
+            <picture>
+              <img alt="" />
+            </picture>
+            <div class="universe26banner">
+              <div class="universe26banner-hero-section">
+                <div class="universe26banner-header">
+                  <img alt="GitHub Universe 2026" />
+                  <img alt="GitHub Universe 2026" />
+                  <form class="universe26banner-dismiss-form">
+                    <input />
+                    <button class="Button Button--iconOnly Button--invisible Button--medium col"></button>
+                    <tool-tip class="sr-only position-absolute" role="tooltip">Dismiss</tool-tip>
+                  </form>
+                </div>
+                <h3 class="universe26banner-promo-description">Join Universe virtually, from anywhere.</h3>
+                <div class="universe26banner-actions">
+                  <a class="universe26banner-cta" href="/in-product-messaging/dismiss-and-redirect?destination_key=universe">Save your seat</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tmp-mb-3 dashboard-changelog color-bg-default border color-border-muted">
+          <h2 class="f5 text-bold tmp-mb-3 width-full dashboard-changelog__title">Latest from our changelog</h2>
+          <ul class="list-style-none">
+            <li class="TimelineItem TimelineItem--condensed ml-1 pt-0 tmp-pb-3">
+              <div class="TimelineItem-badge mt-0 color-bg-transparent"></div>
+              <div class="TimelineItem-body mt-n1">
+                <div class="text-small color-fg-muted dashboard-changelog-timestamp">
+                  <relative-time class="no-wrap">Oct 24, 2026</relative-time>
+                </div>
+                <a href="https://github.blog/changelog/2026-10-23-usage-metrics-api" class="Link--primary line-clamp-2 Link">Usage metrics API adds usage from tools like OpenCode</a>
+              </div>
+            </li>
+            <li class="TimelineItem TimelineItem--condensed ml-1 pt-0 tmp-pb-3">
+              <div class="TimelineItem-badge mt-0 color-bg-transparent"></div>
+              <div class="TimelineItem-body mt-n1">
+                <div class="text-small color-fg-muted dashboard-changelog-timestamp">
+                  <relative-time class="no-wrap">Oct 24, 2026</relative-time>
+                </div>
+                <a href="https://github.blog/changelog/2026-10-23-turn-notifications" class="Link--primary line-clamp-2 Link">Turn notifications into code with GitHub Copilot in Teams</a>
+              </div>
+            </li>
+            <li class="TimelineItem TimelineItem--condensed ml-1 pt-0 pb-0">
+              <div class="TimelineItem-badge mt-0 color-bg-transparent"></div>
+              <div class="TimelineItem-body mt-n1">
+                <div class="text-small color-fg-muted dashboard-changelog-timestamp">
+                  <relative-time class="no-wrap">Oct 24, 2026</relative-time>
+                </div>
+                <a href="https://github.blog/changelog/2026-10-23-emu-deletions-fix" class="Link--primary line-clamp-2 Link">EMU deletions fix</a>
+              </div>
+            </li>
+          </ul>
+          <div class="width-full ml-1 pt-2 tmp-pl-4 border-left color-border-muted">
+            <a class="text-small mt-2 Link--muted" href="https://github.blog/changelog">View changelog →</a>
+          </div>
+        </div>
+      </aside>
     </div>
   </div>
 </main>
