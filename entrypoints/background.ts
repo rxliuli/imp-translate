@@ -6,6 +6,7 @@ import { getCached, setCached, evictOldEntries } from '@/lib/cache'
 import {
   createTranslateService,
   guardSegmentTranslator,
+  translateBatchTexts,
   translateSegmentsVia,
   type TranslateService,
 } from '@/lib/translate-service'
@@ -234,8 +235,9 @@ export default defineBackground(() => {
     google: { batchWindowMs: 50, maxBatchSize: 20, maxBatchChars: 14000 },
     openai: { batchWindowMs: 100, maxBatchSize: 8, maxBatchChars: 1000 },
     // Imp Credits chunks and guarantees 1:1 server-side (cap 500 texts per
-    // request), so the client can hand the whole array over in one call
-    // rather than partitioning itself.
+    // request), but a POST over 20,000 characters is rejected outright, and a
+    // single 4,000+ char text fails upstream — so both limits are enforced
+    // here, maxBatchChars against characters rather than item count.
     imp: { batchWindowMs: 100, maxBatchSize: 500, maxBatchChars: 20000 },
   }
 
@@ -264,7 +266,9 @@ export default defineBackground(() => {
 
   // Segment-encoded paragraphs (translateSegments) get their own services:
   // their batches need the segment prompt/HTML handling, and their cache
-  // entries are prefixed so they never collide with plain-text ones.
+  // entries are prefixed so they never collide with plain-text ones. They opt
+  // out of splitting: a cut inside an <i> tag makes decodeSegments drop the
+  // paragraph (the provider translators cut between whole tags themselves).
   const SEGMENT_CACHE_PREFIX = 'seg:'
   const segmentServices = new Map<TranslationProvider, TranslateService>()
 
@@ -281,6 +285,7 @@ export default defineBackground(() => {
           const result = await translate(texts, lang, settings, { segments: true })
           return result.texts
         }),
+        splitLongTexts: false,
         onAfterFlush: () => evictOldEntries(),
       })
       segmentServices.set(provider, service)
@@ -357,38 +362,23 @@ export default defineBackground(() => {
     }
   })
 
+  // The page-facing batch path (the web app sends 20 texts at a time, batching
+  // by COUNT) used to call the provider directly, so BATCH_PARAMS never applied
+  // here and 20 runs of 7,000 chars became one 140,000-char POST. This path now
+  // enforces the same count/character bounds and split/in-flight rules as the
+  // queue, and keeps the result 1:1 with the input, which callers rely on.
   messager.onMessage('translateBatch', async ({ data }) => {
     const t = debugTime(`bg:translateBatch(lang=${data.targetLang}, n=${data.texts.length})`)
     const settings = await getSettings()
-    const lang = data.targetLang
-
-    const results: string[] = new Array(data.texts.length)
-    const uncachedIndices: number[] = []
-    const uncachedTexts: string[] = []
-
-    for (let i = 0; i < data.texts.length; i++) {
-      const cached = await getCached(data.texts[i], lang)
-      if (cached !== undefined) {
-        results[i] = cached
-      } else {
-        uncachedIndices.push(i)
-        uncachedTexts.push(data.texts[i])
-      }
-    }
-    t(`cache: ${data.texts.length - uncachedTexts.length} hit, ${uncachedTexts.length} miss`)
-
-    if (uncachedTexts.length > 0) {
-      const translated = await translate(uncachedTexts, lang, settings)
-      for (let j = 0; j < uncachedIndices.length; j++) {
-        const text = uncachedTexts[j]
-        const out = translated.texts[j]
-        results[uncachedIndices[j]] = out
-        if (out.trim() && out.toLowerCase() !== text.toLowerCase()) {
-          await setCached(text, lang, out)
-        }
-      }
-      evictOldEntries()
-    }
+    const { maxBatchSize, maxBatchChars } = BATCH_PARAMS[settings.provider]
+    const results = await translateBatchTexts(data.texts, data.targetLang, {
+      maxBatchSize,
+      maxBatchChars,
+      getCached,
+      setCached,
+      translate: async (texts, lang) => (await translate(texts, lang, settings)).texts,
+    })
+    evictOldEntries()
     t('done')
     return results
   })

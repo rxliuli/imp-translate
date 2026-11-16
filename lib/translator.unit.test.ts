@@ -629,6 +629,22 @@ describe('Imp Credits translate', () => {
       'Rate limited',
     )
   })
+
+  // 413 is the 20,000-character cap on the whole request, not a segment count.
+  it('maps 413 to the request character-limit message', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 413,
+      json: async () => ({ error: 'request too large' }),
+    })
+
+    const { translate } = await import('./translator')
+    await expect(translate(['Hello'], 'zh', impSettings)).rejects.toThrow(
+      'Text too long for one request (max 20,000 characters) — retry with less text',
+    )
+  })
 })
 
 describe('segment translation', () => {

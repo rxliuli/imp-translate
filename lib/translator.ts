@@ -497,7 +497,9 @@ function impError(status: number): string {
     return 'Insufficient credits — top up on the Imp website'
   }
   if (status === 429) return 'Rate limited — try again in a moment'
-  if (status === 413) return 'Too many segments for a single request — retry with fewer'
+  // 413 is the character cap (20,000 chars across `texts`), not a segment
+  // count — see MAX_CHARS_PER_TEXT in lib/translate-service.ts.
+  if (status === 413) return 'Text too long for one request (max 20,000 characters) — retry with less text'
   if (status >= 500) return 'Imp Credits service error — try again later'
   return `Imp Credits error (${status})`
 }

@@ -9,6 +9,17 @@ import {
 } from './segments'
 import { EXPANSION_RATIO } from './translator'
 
+/**
+ * Upper bound on one text in a request. Matches the server's
+ * SUB_BATCH_MAX_CHARS (imp-credits apps/api/src/routes/translate.ts): each
+ * piece becomes exactly one upstream call, and the whole request (all
+ * `texts` plus `context`) is hard-rejected above 20,000 characters. Both
+ * failure modes were reproduced in production — a 30,000-char block made the
+ * single POST 413, and a 19,000-char text (under the cap) died after 42s
+ * upstream with "expected 1 translations, got none".
+ */
+export const MAX_CHARS_PER_TEXT = 4000
+
 export interface TranslateServiceConfig {
   getCached: (text: string, lang: string) => Promise<string | undefined>
   setCached: (text: string, lang: string, translated: string) => Promise<void>
@@ -16,6 +27,10 @@ export interface TranslateServiceConfig {
   batchWindowMs: number
   maxBatchSize: number
   maxBatchChars?: number
+  // Whether a text longer than MAX_CHARS_PER_TEXT is cut into request-sized
+  // pieces (see splitTextForRequest). Segment-encoded texts (lib/segments.ts)
+  // opt out: a cut inside an <i> tag makes decodeSegments drop the paragraph.
+  splitLongTexts?: boolean
   onAfterFlush?: () => void
 }
 
@@ -33,6 +48,139 @@ interface BatchQueue {
   pending: PendingItem[]
   pendingChars: number
   timer: ReturnType<typeof setTimeout> | null
+}
+
+/**
+ * Largest piece one request may carry: the server's per-text chunk size, but
+ * never more than the provider's own request budget (openai: 1,000 chars).
+ */
+function pieceCharLimit(maxBatchChars?: number): number {
+  return Math.min(MAX_CHARS_PER_TEXT, maxBatchChars ?? MAX_CHARS_PER_TEXT)
+}
+
+/**
+ * Cuts `text` into pieces of at most `maxChars` characters, on sentence
+ * boundaries first and word boundaries second, so `pieces.join('') === text`:
+ * every piece keeps the separators that followed it, which makes rejoining the
+ * pieces (or their translations) reproduce the input exactly. A raw character
+ * cut only happens inside a run with no whitespace at all (CJK, URLs, base64),
+ * and never between the halves of a surrogate pair.
+ */
+export function splitTextForRequest(
+  text: string,
+  maxChars: number = MAX_CHARS_PER_TEXT,
+): string[] {
+  if (maxChars <= 0 || text.length <= maxChars) return [text]
+  // Same sentence split as bingTranslateLong (lib/translator.ts); the pieces
+  // include the trailing terminator, closing quotes and whitespace.
+  const sentences = text.match(/[^.!?。！？]*[.!?。！？]+["')\]]*\s*|[^.!?。！？]+$/g) ?? [text]
+  const pieces: string[] = []
+  let current = ''
+  const flushCurrent = () => {
+    if (current) {
+      pieces.push(current)
+      current = ''
+    }
+  }
+  for (const sentence of sentences) {
+    if (sentence.length > maxChars) {
+      flushCurrent()
+      pieces.push(...splitUnbrokenRun(sentence, maxChars))
+      continue
+    }
+    if (current.length + sentence.length > maxChars) flushCurrent()
+    current += sentence
+  }
+  flushCurrent()
+  return pieces
+}
+
+// Cuts a sentence that is itself over the limit at its last whitespace, so a
+// word is only ever split when the window holds no boundary at all.
+function splitUnbrokenRun(run: string, maxChars: number): string[] {
+  const pieces: string[] = []
+  let rest = run
+  while (rest.length > maxChars) {
+    let cut = maxChars
+    for (let i = maxChars - 1; i > 0; i--) {
+      if (/\s/.test(rest[i])) {
+        cut = i + 1
+        break
+      }
+    }
+    const high = rest.charCodeAt(cut - 1)
+    if (cut > 1 && high >= 0xd800 && high <= 0xdbff) cut--
+    pieces.push(rest.slice(0, cut))
+    rest = rest.slice(cut)
+  }
+  pieces.push(rest)
+  return pieces
+}
+
+// Re-attaches the whitespace a piece ended with when the translator dropped it
+// (most trim): the pieces are concatenated back, so a lost trailing space would
+// glue two sentences together.
+function joinTranslatedPieces(pieces: string[], translated: string[]): string {
+  return translated
+    .map((out, i) => {
+      if (i === translated.length - 1) return out
+      if (/\s$/.test(out)) return out
+      return out + (/\s+$/.exec(pieces[i])?.[0] ?? '')
+    })
+    .join('')
+}
+
+interface Deferred<T> {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (err: Error) => void
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  let reject!: (err: Error) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+/**
+ * Translations currently being fetched, keyed by language + text, so a second
+ * request for the same text joins the first one's POST instead of paying for a
+ * duplicate: two identical bodies were billed 71 ms apart in production, the
+ * cache only being written once the response arrives. Shared by the batch
+ * queue and the background's translateBatch handler, which hit the same
+ * endpoint. Entries are removed when the promise settles, failure included, so
+ * a retry after an error still goes out; failures are never cached as results.
+ */
+const inFlight = new Map<string, Promise<string>>()
+
+function inFlightKey(lang: string, text: string): string {
+  return `${lang}\u0000${text}`
+}
+
+function getInFlight(lang: string, text: string): Promise<string> | undefined {
+  return inFlight.get(inFlightKey(lang, text))
+}
+
+function shareInFlight(
+  lang: string,
+  text: string,
+  pending: Promise<string>,
+): Promise<string> {
+  const key = inFlightKey(lang, text)
+  const existing = inFlight.get(key)
+  if (existing) return existing
+  inFlight.set(key, pending)
+  const clear = () => {
+    // Only drop our own entry: a settled request may already have been
+    // replaced by a newer one for the same text.
+    if (inFlight.get(key) === pending) inFlight.delete(key)
+  }
+  pending.then(clear, clear)
+  return pending
 }
 
 function svcDebugTime(label: string): (msg: string) => void {
@@ -104,7 +252,15 @@ export function createTranslateService(config: TranslateServiceConfig): Translat
     }
   }
 
-  function enqueue(text: string, lang: string): Promise<string> {
+  // A piece must fit one request on its own: config.maxBatchChars is what the
+  // whole POST is charged against, and the old check only flushed when the
+  // queue was non-empty, so an oversized text went out alone, unbounded.
+  const pieceLimit =
+    config.splitLongTexts === false
+      ? Number.POSITIVE_INFINITY
+      : pieceCharLimit(config.maxBatchChars)
+
+  function enqueuePiece(text: string, lang: string): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       let q = queues.get(lang)
       if (!q) {
@@ -128,13 +284,163 @@ export function createTranslateService(config: TranslateServiceConfig): Translat
     })
   }
 
+  async function enqueueText(text: string, lang: string): Promise<string> {
+    const pieces = splitTextForRequest(text, pieceLimit)
+    if (pieces.length === 1) return enqueuePiece(pieces[0], lang)
+    const translated = await Promise.all(pieces.map((piece) => enqueuePiece(piece, lang)))
+    const joined = joinTranslatedPieces(pieces, translated)
+    // flush caches the pieces individually; cache the joined result as well so
+    // a repeat of the original text doesn't re-request every piece.
+    if (joined.trim() && joined.toLowerCase() !== text.toLowerCase()) {
+      config.setCached(text, lang, joined)
+    }
+    return joined
+  }
+
   return {
     async translate(text, lang) {
       const cached = await config.getCached(text, lang)
       if (cached !== undefined) return cached
-      return enqueue(text, lang)
+      // Keyed on the whole text, not a piece: a second enqueue while the first
+      // is running has to join it, since the cache is only written on success.
+      const existing = getInFlight(lang, text)
+      if (existing) return existing
+      return shareInFlight(lang, text, enqueueText(text, lang))
     },
   }
+}
+
+export interface BatchTranslateConfig {
+  getCached: (text: string, lang: string) => Promise<string | undefined>
+  setCached: (text: string, lang: string, translated: string) => Promise<void>
+  translate: (texts: string[], lang: string) => Promise<string[]>
+  maxBatchSize: number
+  maxBatchChars?: number
+}
+
+/**
+ * The background's translateBatch path (the page-facing RPC): translates
+ * `texts` 1:1 by array position, bounding every request by both item count and
+ * characters. Callers batch by COUNT — the web app sends 20 texts at a time,
+ * which a single text of 7,000 chars turns into 140,000 characters, far over
+ * the server's 20,000 cap (413) — and one text can be over the cap alone, so
+ * each is cut with splitTextForRequest first. In-flight texts share the queue's
+ * map, so re-submitting the same body while the first request runs costs
+ * nothing.
+ */
+export async function translateBatchTexts(
+  texts: string[],
+  lang: string,
+  config: BatchTranslateConfig,
+): Promise<string[]> {
+  const results: string[] = new Array(texts.length)
+  const uncached: number[] = []
+  for (let i = 0; i < texts.length; i++) {
+    const cached = await config.getCached(texts[i], lang)
+    if (cached !== undefined) results[i] = cached
+    else uncached.push(i)
+  }
+  if (uncached.length === 0) return results
+
+  interface PendingText {
+    index: number
+    text: string
+    promise: Promise<string>
+  }
+  interface SentText {
+    index: number
+    text: string
+    pieces: string[]
+    translated: string[]
+    resolve: (translated: string) => void
+    reject: (err: Error) => void
+  }
+
+  const pending: PendingText[] = []
+  const sent: SentText[] = []
+  for (const index of uncached) {
+    const text = texts[index]
+    const existing = getInFlight(lang, text)
+    if (existing) {
+      pending.push({ index, text, promise: existing })
+      continue
+    }
+    const deferred = createDeferred<string>()
+    pending.push({ index, text, promise: shareInFlight(lang, text, deferred.promise) })
+    sent.push({
+      index,
+      text,
+      pieces: [],
+      translated: [],
+      resolve: deferred.resolve,
+      reject: deferred.reject,
+    })
+  }
+
+  const pieceLimit = pieceCharLimit(config.maxBatchChars)
+  const groups: { texts: string[]; slots: { sent: number; piece: number }[] }[] = []
+  let group: { texts: string[]; slots: { sent: number; piece: number }[] } = {
+    texts: [],
+    slots: [],
+  }
+  let groupChars = 0
+  sent.forEach((item, slot) => {
+    item.pieces = splitTextForRequest(item.text, pieceLimit)
+    item.translated = new Array(item.pieces.length)
+    item.pieces.forEach((piece, pieceIndex) => {
+      const overCount = group.texts.length >= config.maxBatchSize
+      const overChars =
+        config.maxBatchChars !== undefined && groupChars + piece.length > config.maxBatchChars
+      if (group.texts.length > 0 && (overCount || overChars)) {
+        groups.push(group)
+        group = { texts: [], slots: [] }
+        groupChars = 0
+      }
+      group.texts.push(piece)
+      group.slots.push({ sent: slot, piece: pieceIndex })
+      groupChars += piece.length
+    })
+  })
+  if (group.texts.length > 0) groups.push(group)
+
+  try {
+    // Sequential: imp-credits runs its own upstream chunks serially, so
+    // parallel groups would only add rate-limit pressure.
+    for (const current of groups) {
+      const translated = await config.translate(current.texts, lang)
+      if (translated.length < current.texts.length) {
+        throw new Error(
+          `Translator returned ${translated.length} results for ${current.texts.length} inputs`,
+        )
+      }
+      current.slots.forEach((slot, j) => {
+        const out = translated[j]
+        if (typeof out !== 'string') {
+          throw new Error(
+            `Translator returned no result for "${current.texts[j].slice(0, 50)}"`,
+          )
+        }
+        sent[slot.sent].translated[slot.piece] = out
+      })
+    }
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err))
+    for (const item of sent) item.reject(e)
+    throw e
+  }
+
+  for (const item of sent) {
+    item.resolve(joinTranslatedPieces(item.pieces, item.translated))
+  }
+
+  for (const item of pending) {
+    const out = await item.promise
+    results[item.index] = out
+    if (out.trim() && out.toLowerCase() !== item.text.toLowerCase()) {
+      await config.setCached(item.text, lang, out)
+    }
+  }
+  return results
 }
 
 /**
