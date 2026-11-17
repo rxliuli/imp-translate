@@ -172,23 +172,37 @@ github.com#+#.f4.tmp-my-3
 ! so #dashboard is the only selector that survives a deploy. When the homepage
 ! moved to React the feed-only include set matched nothing and the isolate gate
 ! suppressed the whole page (greeting, pills, list titles), silently.
+! The same dashboard is also served at /dashboard (identical DOM), so the
+! path gate covers both; gating to / alone left /dashboard with an include set
+! that matched nothing.
 ! https://github.com  (React dashboard — verified 2026-10-26)
+! https://github.com/dashboard  (same page — verified 2026-11-18)
 github.com#+#feed-container section
-github.com#+#:matches-path(/^\/$/) #dashboard
+github.com#+#:matches-path(/^\/(dashboard\/?)?$/) #dashboard
 ! "Explore" rail: the Universe promo card and the changelog feed. It is a
 ! sibling of #dashboard (aside.feed-right-column), not a descendant, so
 ! #dashboard alone leaves the whole column in English. The left nav
 ! (.dashboard-sidebar, below) stays out on purpose — it is repo names and
 ! global chrome.
 ! https://github.com  (right rail — verified 2026-10-26)
-github.com#+#:matches-path(/^\/$/) aside.feed-right-column
+github.com#+#:matches-path(/^\/(dashboard\/?)?$/) aside.feed-right-column
 github.com##.dashboard-sidebar
 github.com##feed-container .Link--primary
 github.com##feed-container button
 
-! ChatGPT — chat platform; include user prompts and assistant responses only. Code blocks (<pre>) are already skipped by the default walker.
+! ChatGPT — exclude mode. The message DOM churns too often to pin with an
+! include rule ([data-message-author-role] vanished in 2026-11, silently
+! untranslating every conversation), so translate the page and skip app chrome:
+! the title bar (conversation title, offer button), every button (composer
+! controls, "Show more", profile, "Claim offer"), screen-reader-only links, and
+! whatever ChatGPT itself marks as not message content via data-markdown-copy
+! (the "ChatGPT can make mistakes" disclaimer). The sidebar is <nav> and code
+! blocks are <pre>, both skipped by the walker.
 ! https://chatgpt.com/c/<id>  (any conversation)
-chatgpt.com#+#[data-message-author-role]
+chatgpt.com##header
+chatgpt.com##button
+chatgpt.com##.sr-only
+chatgpt.com##[data-markdown-copy="exclude"]
 
 ! Telegram Web — separate K (/k/) and A (/a/) SPAs with incompatible DOMs.
 ! Each rule is path-gated so an active include selector on the wrong client
