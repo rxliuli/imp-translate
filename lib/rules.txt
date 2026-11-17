@@ -48,12 +48,14 @@ www.google.*##:matches-path(/^\/search/) #fbar
 ! https://x.com/home, https://x.com/x  (timeline tweets + profile bio)
 x.com#+#[data-testid="tweetText"]
 x.com#+#[data-testid="UserDescription"]
-! https://x.com/elonmusk/status/1768217967220789299  (long-form article tweet)
+! https://x.com/pqoqubbw/status/2122725141285364024  (long-form article tweet — verified 2026-11-18; the earlier example was deleted)
 x.com#+#[data-testid="article-cover-image"]+div
 x.com#+#[data-testid="twitter-article-title"]
 x.com#+#[data-testid="longformRichTextComponent"]
 ! Direct messages — real URLs are private and not shareable; verify against any DM thread.
-! https://x.com/messages
+! /messages now redirects to /i/chat (XChat), which renders inside an open
+! shadow root on [data-testid="xchatEmbedRoute"]; the testids below are unchanged.
+! https://x.com/i/chat/<conversation-id>  (verified 2026-11-18)
 x.com#+#[data-testid^="message-text-"]
 x.com#+#[data-testid^="dm-conversation-item-"]
 ! https://x.com/x/followers, https://x.com/x/following  (user cell rows: only bio; name + handle + button stay as-is)
@@ -134,7 +136,7 @@ old.reddit.com#+#.md
 *.reddit.com#+##description
 *.reddit.com#+#faceplate-expandable-section-helper h2.i18n-translatable-text,faceplate-expandable-section-helper .i18n-translatable-text p
 ! Reddit Chat — message bodies + link-preview cards live inside nested Shadow DOM (rs-timeline-event > shadow > rs-external-link-preview > shadow). The walker pierces open shadow roots, and include matching crosses shadow boundaries via closestThroughShadow.
-! https://chat.reddit.com/  (any chat room — actual room URLs are private)
+! https://www.reddit.com/chat/  (any chat room — chat.reddit.com now redirects here; room URLs are private; verified 2026-11-18)
 *.reddit.com#+#.room-message-text
 *.reddit.com#+#rs-external-link-preview
 
@@ -160,6 +162,11 @@ github.com#+#[data-testid="issue-pr-title-link"]
 github.com#+#[data-testid="issue-listitem-title-link"]
 github.com#+#[data-testid="listitem-title-link"]
 github.com#+#.f4.tmp-my-3
+! Repo home "About" description, React sidebar (2026-11): <p
+! class="SidebarAbout-module_<hash>_description">. Only the module prefix and
+! the _description suffix survive a deploy, so match both halves.
+! https://github.com/rxliuli/imp-translate  (verified 2026-11-18)
+github.com#+#p[class*="SidebarAbout-module_"][class*="_description"]
 ! https://github.com  (homepage: feed items, skip sidebar repo names + card UI)
 ! The homepage has two layouts with no shared containers, and the include set
 ! must cover whichever one is being served:
@@ -248,6 +255,14 @@ web.telegram.org##:matches-path(/a/) .message-content .message-title
 ! https://www.youtube.com/watch?v=q1oh5UIun20  (transcript panel)
 *.youtube.com#+#ytd-transcript-segment-renderer
 *.youtube.com##.segment-start-offset
+! The transcript panel was rebuilt on view models (2026-11): each line is a
+! <transcript-segment-view-model> holding a visible timestamp ("0:00"), a
+! screen-reader label ("0 seconds") and the caption span. The legacy renderer
+! above stays for clients still served the old panel.
+! https://www.youtube.com/watch?v=q1oh5UIun20  (transcript panel — verified 2026-11-18)
+*.youtube.com#+#transcript-segment-view-model
+*.youtube.com##.ytwTranscriptSegmentViewModelTimestamp
+*.youtube.com##.ytwTranscriptSegmentViewModelTimestampA11yLabel
 
 ! Comment chrome: usernames, timestamps, comments header, like/dislike/reply bar, expander toggles, and reply-thread show/hide buttons.
 *.youtube.com##ytd-comment-view-model #author-text
@@ -270,12 +285,20 @@ discord.com#+#[data-text-variant="heading-xxl/extrabold"]
 discord.com##.channelMention
 ! Thread preview inside accessories: skip the "N Messages ›" CTA button — it's navigation chrome, not user text. The thread name and the message-content inside the bottomLine are still translated.
 discord.com##[id^="message-accessories-"] [class*="lineClamp1__"]
+discord.com##[id^="message-accessories-"] [class*="lineClamp1_"]
 discord.com##[id^="message-accessories-"] [class^="topLine__"]
+discord.com##[id^="message-accessories-"] [class^="topLine_"]
 ! Forwarded message chrome: the "Forwarded" header label and "#channel • date" footer are structural navigation, not user-authored text.
 discord.com##[id^="message-accessories-"] [class*="headerContainer_"]
 discord.com##[id^="message-accessories-"] [class*="footerContainer_"]
 ! Channel header topic bar + click-to-expand topic modal. Narrow scopes so we don't pull in chrome (channel name H1, search box, modal "Channel Topic" heading). [class*="topic__"] depends on Discord's CSS-module source-name prefix being stable across deploys; section[aria-label="Channel header"] anchors it safely. [data-dialog="modal"] main targets the modal body only — its <header> with the title stays untranslated.
 discord.com#+#section[aria-label="Channel header"] [class*="topic__"]
+! Discord's CSS-module classes went from name__hash to name_hash (2026-11:
+! topic_pVbL3l), so the double-underscore selectors above no longer match;
+! they stay for older clients. ^= / " topic_" anchor the name so
+! topicClickTarget_* is not caught.
+! https://discord.com/channels/<server>/<channel>  (channel with a topic — verified 2026-11-18)
+discord.com#+#section[aria-label="Channel header"] :is([class^="topic_"], [class*=" topic_"])
 discord.com#+#[data-dialog="modal"] main
 ! Reply reference quoting a system message (join/wave) — skip the quoted preview; normal user reply references are kept for translation.
 discord.com##[id^="message-reply-context-"]:has(svg[class*="SystemMessageIcon"])
