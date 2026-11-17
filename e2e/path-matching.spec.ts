@@ -118,6 +118,62 @@ test('SPA navigation re-evaluates path-gated rules', async ({ context, baseURL }
   expect(plainSpaTranslated).toBe(0)
 })
 
+// A site redesign that breaks every include selector must not leave the page
+// untranslated: once the grace period passes with zero matches, the include
+// set is dropped for that path and exclude rules alone apply.
+test('include rule that matches nothing falls back to full-page translation', async ({
+  context,
+  baseURL,
+}) => {
+  const impURL = impHost(baseURL)
+  const page = await context.newPage()
+  await page.goto(`${impURL}/scoped`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, impURL)
+  await setCustomRules(context, 'imp.test#+#[data-gone]\nimp.test##[data-target]')
+
+  await startTranslation(page)
+
+  await expect(
+    page.locator(`p:not([data-target]) ${TRANSLATED_SELECTOR}`),
+  ).toBeVisible({ timeout: 15000 })
+  // Exclude rule still honored after the fallback.
+  await page.waitForTimeout(1500)
+  expect(await page.locator(`p[data-target] ${TRANSLATED_SELECTOR}`).count()).toBe(0)
+})
+
+test('include rule matching late-rendered content stays strict', async ({
+  context,
+  baseURL,
+}) => {
+  const impURL = impHost(baseURL)
+  const page = await context.newPage()
+  await page.goto(`${impURL}/regular`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, impURL)
+  await setCustomRules(context, 'imp.test#+#[data-late]')
+
+  await startTranslation(page)
+
+  // SPA content arrives inside the grace period: the include rule matches,
+  // so no fallback and the pre-existing paragraphs stay untranslated.
+  await page.waitForTimeout(1000)
+  await page.evaluate(() => {
+    const p = document.createElement('p')
+    p.setAttribute('data-late', '')
+    p.textContent = 'Late content rendered by the app after hydration.'
+    document.body.appendChild(p)
+  })
+
+  await expect(page.locator(`p[data-late] ${TRANSLATED_SELECTOR}`)).toBeVisible({
+    timeout: 15000,
+  })
+  await page.waitForTimeout(4000)
+  expect(await page.locator(`p:not([data-late]) ${TRANSLATED_SELECTOR}`).count()).toBe(0)
+})
+
 // Include rules are a bilingual layout compromise; replace mode ignores them
 // (and translates nav/footer) but still honors exclude rules.
 test('replace mode ignores include rules but honors exclude rules', async ({

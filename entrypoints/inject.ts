@@ -70,13 +70,64 @@ export default defineUnlistedScript(() => {
   let cachedPathname: string | null = null
   let cachedSelectors = { skipSelectors: [] as string[], includeSelectors: [] as string[] }
 
+  // Include-rule fallback. An include set means "translate only inside these
+  // scopes", so when a site redesign breaks every include selector the page
+  // silently translates nothing. If the active include selectors still match
+  // nothing INCLUDE_GRACE_MS after a start or route change, they are dropped
+  // for that pathname and the page is walked like a rule-less one (exclude
+  // rules still apply). The grace period covers SPAs whose content renders
+  // after the first walk; until it expires, include rules stay strict so a
+  // slow load doesn't translate page chrome.
+  const INCLUDE_GRACE_MS = 3000
+  let includeFallbackPath: string | null = null
+  let includeCheckTimer: ReturnType<typeof setTimeout> | null = null
+
   function getActiveSelectors() {
     const p = location.pathname
     if (p !== cachedPathname) {
       cachedPathname = p
-      cachedSelectors = selectorsForPath(hostRules, p)
+      const s = selectorsForPath(hostRules, p)
+      cachedSelectors = includeFallbackPath === p ? { ...s, includeSelectors: [] } : s
     }
     return cachedSelectors
+  }
+
+  function includeMatchesAnywhere(selectors: string[]): boolean {
+    // Shadow roots the walker has visited — include-mode walks still descend
+    // into shadow hosts, so a match inside one is found here.
+    const roots: ParentNode[] = [document, ...shadowObservers.keys()]
+    for (const s of selectors) {
+      for (const r of roots) {
+        try {
+          if (r.querySelector(s)) return true
+        } catch {
+          // Invalid selector: treat as non-matching.
+        }
+      }
+    }
+    return false
+  }
+
+  function scheduleIncludeCheck() {
+    if (includeCheckTimer) clearTimeout(includeCheckTimer)
+    includeCheckTimer = setTimeout(checkIncludeFallback, INCLUDE_GRACE_MS)
+  }
+
+  function checkIncludeFallback() {
+    includeCheckTimer = null
+    if (!isTranslating) return
+    const p = location.pathname
+    if (includeFallbackPath === p) return
+    const { includeSelectors } = getActiveSelectors()
+    if (includeSelectors.length === 0) return
+    if (includeMatchesAnywhere(includeSelectors)) return
+    console.warn(
+      `[imp] include rules matched nothing on ${location.hostname}${p}; falling back to full-page translation`,
+      includeSelectors,
+    )
+    includeFallbackPath = p
+    cachedPathname = null
+    rescanBlocks()
   }
 
   const extractOpts: ExtractOptions = {
@@ -1116,6 +1167,7 @@ export default defineUnlistedScript(() => {
     discardSelfMutations()
     observeBlocks(blocks)
     setTimeout(rescanBlocks, 1000)
+    scheduleIncludeCheck()
   }
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -1234,6 +1286,7 @@ export default defineUnlistedScript(() => {
     targetLang = lang
     displayMode = mode
     hostRules = rules
+    includeFallbackPath = null
     cachedPathname = null
     t('state set')
     await loadDeveloperSettings()
@@ -1272,6 +1325,7 @@ export default defineUnlistedScript(() => {
     // filters them out. A delayed rescan catches them once rendering
     // settles, without requiring the user to toggle translation off/on.
     delayedRescanTimer = setTimeout(rescanBlocks, 1000)
+    scheduleIncludeCheck()
   }
 
   function stopTranslation(keepToast = false) {
@@ -1312,6 +1366,11 @@ export default defineUnlistedScript(() => {
       clearTimeout(clickRescanTimer)
       clickRescanTimer = null
     }
+    if (includeCheckTimer) {
+      clearTimeout(includeCheckTimer)
+      includeCheckTimer = null
+    }
+    includeFallbackPath = null
     pendingRecheck.clear()
     pendingRunRecheck.clear()
     pendingRunReset.clear()
