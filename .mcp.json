@@ -3,7 +3,13 @@
     "chrome-devtools": {
       "type": "stdio",
       "command": "npx",
-      "args": ["chrome-devtools-mcp@latest", "--browserUrl=http://127.0.0.1:9222"]
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--autoConnect",
+        "--categoryExtensions",
+        "--categoryExperimentalWebmcp"
+      ]
     }
   }
 }
