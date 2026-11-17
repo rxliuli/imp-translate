@@ -143,6 +143,38 @@ test('include rule that matches nothing falls back to full-page translation', as
   expect(await page.locator(`p[data-target] ${TRANSLATED_SELECTOR}`).count()).toBe(0)
 })
 
+// Always-present widgets (X's closed Grok drawer, Reddit's collapsed chat)
+// match an include rule on every page; they must not count as "the include
+// set is alive", or the fallback never fires on those sites.
+test('include matches that are empty or hidden still trigger the fallback', async ({
+  context,
+  baseURL,
+}) => {
+  const impURL = impHost(baseURL)
+  const page = await context.newPage()
+  await page.goto(`${impURL}/scoped`)
+  await page.waitForLoadState('domcontentloaded')
+  await page.evaluate(() => {
+    const empty = document.createElement('div')
+    empty.setAttribute('data-widget', '')
+    empty.style.height = '40px'
+    const hidden = document.createElement('div')
+    hidden.setAttribute('data-widget', '')
+    hidden.style.display = 'none'
+    hidden.textContent = 'Collapsed chat message that nobody can see.'
+    document.body.append(empty, hidden)
+  })
+
+  await configureMockProvider(page, impURL)
+  await setCustomRules(context, 'imp.test#+#[data-widget]')
+
+  await startTranslation(page)
+
+  await expect(
+    page.locator(`p:not([data-target]) ${TRANSLATED_SELECTOR}`),
+  ).toBeVisible({ timeout: 15000 })
+})
+
 test('include rule matching late-rendered content stays strict', async ({
   context,
   baseURL,

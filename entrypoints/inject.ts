@@ -92,6 +92,16 @@ export default defineUnlistedScript(() => {
     return cachedSelectors
   }
 
+  // A match only proves the include set is alive if it holds content the
+  // user can see. Some include rules target widgets that sit in the DOM on
+  // every page: X's Grok drawer is an empty 55px header bar until opened, and
+  // Reddit keeps chat messages in a collapsed, display:none chat window.
+  // Counting those would keep the fallback from ever firing on those sites.
+  function isLiveMatch(el: Element): boolean {
+    if (el.checkVisibility && !el.checkVisibility()) return false
+    return (el.textContent ?? '').trim().length > 0
+  }
+
   function includeMatchesAnywhere(selectors: string[]): boolean {
     // Shadow roots the walker has visited — include-mode walks still descend
     // into shadow hosts, so a match inside one is found here.
@@ -99,7 +109,7 @@ export default defineUnlistedScript(() => {
     for (const s of selectors) {
       for (const r of roots) {
         try {
-          if (r.querySelector(s)) return true
+          for (const el of r.querySelectorAll(s)) if (isLiveMatch(el)) return true
         } catch {
           // Invalid selector: treat as non-matching.
         }
