@@ -218,6 +218,9 @@ web.whatsapp.com###side
 web.whatsapp.com##[data-testid^="intro"]
 web.whatsapp.com##[data-testid="author"]
 web.whatsapp.com##button
+! "… Read more" and other pseudo-buttons are div[role=button]; skipping them
+! also keeps the walker from reparenting them (see walkMixed).
+web.whatsapp.com##[role="button"]
 web.whatsapp.com##[data-testid="conversation-panel-messages"] [data-tab] > div:not(:has([role="row"]))
 
 ! Yandex — search results, gated to /search (yandex.com, yandex.ru, ...).
