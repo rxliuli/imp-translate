@@ -86,7 +86,11 @@ jobs:
   safari:
     needs: version
     if: needs.version.outputs.changed == 'true'
-    runs-on: macos-26
+    # Xcode 27 (iOS 27 SDK) is required for App Store uploads from April 2027
+    # (ITMS-90725). The macos-26 image tops out at Xcode 26.6, so use the
+    # xcode-27 image (preview, macOS 27 base). The job is continue-on-error,
+    # so a preview-image hiccup never blocks the other stores.
+    runs-on: xcode-27
     timeout-minutes: 15
     continue-on-error: true
     steps:
