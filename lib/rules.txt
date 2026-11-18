@@ -186,6 +186,15 @@ www.nytimes.com###masthead-bar-one
 www.instagram.com##[role="button"]
 www.instagram.com##button
 
+! LinkedIn — class names are fully obfuscated, so anchor on semantics. The
+! main feed (data-testid="mainFeed") translates; skip both <aside> rails
+! (profile card, news/ads, menus) and every button (reactions, Follow,
+! "see more", nav tabs).
+! https://www.linkedin.com/feed/  (verified 2026-11-18)
+www.linkedin.com##aside
+www.linkedin.com##button
+www.linkedin.com##[role="button"]
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
