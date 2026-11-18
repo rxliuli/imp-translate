@@ -120,6 +120,13 @@ dzen.ru##button
 mail.ru##.ph-auth
 mail.ru##[data-testid="mailbox"]
 
+! Microsoft — marketing pages built from uhf-* / store-* web components.
+! Copy translates; skip the header actions (search, cart, account menu —
+! which shows the signed-in user's name) and buttons (chat pill prompts).
+! https://www.microsoft.com/en-us/  (verified 2026-11-18)
+www.microsoft.com##uhf-actions
+www.microsoft.com##button
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
