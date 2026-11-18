@@ -133,6 +133,10 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 *.reddit.com##create-post-entry-point-wrapper
 *.reddit.com##.masthead h1
 *.reddit.com###right-sidebar-container > :not(#right-sidebar-contents)
+! Pages without a right rail (/notifications) render the same legal footer
+! as div.legal-links in the main column.
+! https://www.reddit.com/notifications  (verified 2026-11-18)
+*.reddit.com##.legal-links
 ! Feed + post detail: credit bar, comment meta (author, "Edited"), action
 ! rows, comment sort, and the "Suggested communities" carousel.
 ! https://www.reddit.com/  (baseline-checked 2026-11-18; rate-limited before a final pass)
@@ -168,7 +172,7 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 *.reddit.com##faceplate-tracker[noun*="social_link"]
 ! Notifications inbox: data-testid="title" is Reddit's templated header ("X
 ! replied to your comment in Y"); the body (data-testid="body") translates.
-! https://www.reddit.com/notifications  (baseline-checked 2026-11-18; covered by the reddit-notifications fixture test)
+! https://www.reddit.com/notifications  (verified 2026-11-18)
 *.reddit.com##notification-item [data-testid="title"],rpl-inbox-row [data-testid="title"]
 *.reddit.com##notification-item [data-testid="sent-at"],rpl-inbox-row [data-testid="sent-at"]
 *.reddit.com##notification-context-menu,announcement-overflow-menu
