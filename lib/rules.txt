@@ -610,7 +610,7 @@ web.telegram.org##:matches-path(/a/) .message-media-duration
 *.youtube.com##ytd-comment-replies-renderer ytd-continuation-item-renderer:has(yt-touch-feedback-shape)
 
 ! Discord — chat platform; include message text and accessories. Reply-context preview is covered automatically because Discord renders the quoted text as another [id^="message-content-"] inside the reply block. Channel sidebar, member list, and the message composer fall outside the include set.
-! https://discord.com/channels/<server>/<channel>  (private servers — verify against any text channel)
+! https://discord.com/channels/<server>/<channel>  (private servers — verify against any text channel; verified 2026-11-18)
 discord.com#+#[id^="message-content-"]
 discord.com#+#[id^="message-accessories-"]
 ! https://discord.com/channels/<server>/<thread> (thread heading)
