@@ -348,6 +348,21 @@ function isBlockTag(tag: string): boolean {
 const LIST_CONTAINER_TAGS = new Set(['ul', 'ol', 'dl'])
 const LIST_ITEM_TAGS = new Set(['li', 'dd', 'dt'])
 
+// Per-walk cache of computed `display`. extractBlocks's walk is a read phase
+// (writes are deferred to after it), so an element's display cannot change
+// mid-walk; hasBlockChild re-visits the same inline descendants many times,
+// and the cache keeps that to one style read per element.
+let displayCache: WeakMap<Element, string> | null = null
+function computedDisplay(el: Element): string {
+  const inlineDisplay = (el as HTMLElement).style?.display
+  if (inlineDisplay) return inlineDisplay
+  const cached = displayCache?.get(el)
+  if (cached !== undefined) return cached
+  const display = getComputedStyle(el).display
+  displayCache?.set(el, display)
+  return display
+}
+
 function isDisplayInline(el: Element): boolean {
   const inlineDisplay = (el as HTMLElement).style?.display
   if (inlineDisplay) return inlineDisplay.startsWith('inline')
@@ -358,7 +373,7 @@ function isDisplayInline(el: Element): boolean {
   // into one translation block, destroying the outline structure.
   // Safe for the read/write split: this runs in the walk's read phase, before
   // any deferred write, so it never forces a post-mutation reflow.
-  return getComputedStyle(el).display.startsWith('inline')
+  return computedDisplay(el).startsWith('inline')
 }
 
 // A list whose items compute to display:inline — AO3's tag lists
@@ -633,6 +648,26 @@ function isOurInjectedNode(n: Node): boolean {
 }
 
 // `mode`: the ButtonMode of `el`'s children (i.e. already entered for `el`).
+// An inline-tag element that CSS lays out as a block. WhatsApp Web renders
+// every paragraph of a message as <span style="display:block"> inside an
+// inline <span>; judged by tag name alone the message looked like one leaf
+// and was extracted (and translated) as a single block. Replaced elements are
+// left out: Tailwind's preflight sets img/svg/video to display:block, which
+// says nothing about paragraph structure.
+const BLOCKIFIED_DISPLAYS = new Set(['block', 'list-item', 'flex', 'grid', 'table', 'flow-root'])
+const NOT_BLOCKIFIABLE_TAGS = new Set(['img', 'input', 'br', 'wbr'])
+// Flex and grid items are blockified by the layout itself (X's inline-flex
+// mention wrapper turns its inner <span> into display:block), which is not a
+// paragraph signal — only an explicit block display under a normal-flow parent
+// is.
+function isBlockifiedInlineTag(el: Element, tag: string): boolean {
+  if (NOT_BLOCKIFIABLE_TAGS.has(tag)) return false
+  if (!BLOCKIFIED_DISPLAYS.has(computedDisplay(el))) return false
+  const parent = el.parentElement
+  if (parent && /flex|grid/.test(computedDisplay(parent))) return false
+  return true
+}
+
 function hasBlockChild(el: Element, mode: ButtonMode = 'off'): boolean {
   for (const child of el.children) {
     const tag = child.tagName.toLowerCase()
@@ -655,6 +690,7 @@ function hasBlockChild(el: Element, mode: ButtonMode = 'off'): boolean {
     // from a leaf-extraction decision. Bounded by inline-chain depth,
     // which is naturally small in real DOM.
     if (INLINE_TAGS.has(tag)) {
+      if (isBlockifiedInlineTag(child, tag)) return true
       if (hasBlockChild(child, enterMode(child, mode))) return true
     }
   }
@@ -940,8 +976,14 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       : root.parentNode instanceof ShadowRoot && closestThroughShadow(root.parentNode.host, CHROME_SELECTOR)
         ? 'chrome'
         : 'body'
-  walk(root, rootParentMode)
-  if (root instanceof Element) walkShadow(root, enterMode(root, rootParentMode))
+  const outerDisplayCache = displayCache
+  displayCache = new WeakMap()
+  try {
+    walk(root, rootParentMode)
+    if (root instanceof Element) walkShadow(root, enterMode(root, rootParentMode))
+  } finally {
+    displayCache = outerDisplayCache
+  }
 
   // WRITE PHASE — every DOM mutation happens here, after all layout reads, so
   // the browser coalesces the work into a single reflow instead of one per node.

@@ -1076,6 +1076,57 @@ describe('extractBlocks', () => {
       ])
     })
 
+    // The real WhatsApp Web DOM (2026-11): the paragraphs are not inline —
+    // each is a <span> with display:block inside an inline pre-wrap <span>.
+    // Judged by tag name the message looked like one leaf block, so the whole
+    // message was extracted and its translation appended once at the end.
+    it('splits display:block paragraph spans inside an inline span (WhatsApp)', () => {
+      const style = document.createElement('style')
+      style.textContent = '.wa-p { display: block; }'
+      document.head.appendChild(style)
+      const div = document.createElement('div')
+      div.className = 'copyable-text'
+      div.innerHTML =
+        '<span data-testid="selectable-text" dir="ltr" style="white-space: pre-wrap">' +
+        '<span class="wa-p">Today is Thursday which means tomorrow is Friday <img alt="😍">\n</span>' +
+        '<span class="wa-p">\n</span>' +
+        '<span class="wa-p">Friday is spa day for the gym.\n</span>' +
+        '<span class="wa-p">\n</span>' +
+        '<span class="wa-p">The vibe is chill and relaxing.\n</span>' +
+        '<span class="wa-p">450 baht entrance fee.\n</span>' +
+        '<span class="wa-p">\n</span>' +
+        '<span class="wa-p">It is a walking distance from the gym.</span>' +
+        '</span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      style.remove()
+      expect(blocks.map((b) => b.text.trim())).toEqual([
+        'Today is Thursday which means tomorrow is Friday',
+        'Friday is spa day for the gym.',
+        'The vibe is chill and relaxing.',
+        '450 baht entrance fee.',
+        'It is a walking distance from the gym.',
+      ])
+    })
+
+    it('keeps an inline-flex/inline-block span inside a sentence in one block', () => {
+      const div = document.createElement('div')
+      div.innerHTML =
+        '<span>Click the <span style="display: inline-flex">Save</span> button to keep your changes.</span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(1)
+    })
+
+    it('does not treat display:block images as paragraph breaks', () => {
+      const div = document.createElement('div')
+      div.innerHTML =
+        '<span>Sentence before the icon <img style="display: block" alt=""> and after it.</span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(1)
+    })
+
     it('splits when the blank line is split across adjacent span edges', () => {
       const div = document.createElement('div')
       div.style.whiteSpace = 'pre-wrap'
