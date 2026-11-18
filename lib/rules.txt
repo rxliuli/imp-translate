@@ -176,12 +176,48 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 *.reddit.com##notification-item [data-testid="title"],rpl-inbox-row [data-testid="title"]
 *.reddit.com##notification-item [data-testid="sent-at"],rpl-inbox-row [data-testid="sent-at"]
 *.reddit.com##notification-context-menu,announcement-overflow-menu
-! old.reddit.com (logged-in) serves the classic SSR DOM — no slot / data-testid / shreddit / faceplate
-! markup. Its text slots are stable and few: the post title anchor (a.title) and the markdown body
-! container (.md), which covers self-post bodies, comments, and the sidebar community description.
-! https://old.reddit.com/r/programming/  (classic feed: titles + self-post bodies + comments)
-old.reddit.com#+#a.title
-old.reddit.com#+#.md
+! old.reddit.com — exclude mode. The classic SSR DOM has not changed in years
+! and every piece of chrome carries a long-lived class, so excludes here are
+! as stable as the old include pair (a.title, .md) — and unlike that pair
+! they don't miss surfaces such as search results or wiki pages. The
+! *.reddit.com excludes above also apply but are mostly inert on this DOM.
+! Skips: the whole #header (subreddit bar, sort tabs, user menu), taglines
+! ("submitted by …", comment author/score), the per-thing button rows, the
+! post's linkinfo box, sidebar chrome around the subreddit description
+! (submit/create boxes, subscribe/flair toggles, moderators, account
+! activity), the multireddit chooser, comment-area sort/form chrome,
+! "load more comments" links, pagination and the footer.
+! https://old.reddit.com/  (verified 2026-11-18)
+! https://old.reddit.com/r/webdev/comments/1xz4eyx/does_anyone_else_look_back_so_fondly_on_the_days/  (verified 2026-11-18)
+old.reddit.com###header
+old.reddit.com##.tagline
+old.reddit.com##.flat-list.buttons
+old.reddit.com##.linkinfo
+old.reddit.com##.domain
+old.reddit.com##.side .sidebox
+old.reddit.com##.side .titlebox > :not(form.usertext)
+old.reddit.com##.side .sidecontentbox
+old.reddit.com##.account-activity-box
+old.reddit.com##.listing-chooser
+old.reddit.com##.commentarea > .panestack-title
+old.reddit.com##.menuarea
+old.reddit.com##.usertext-edit
+old.reddit.com##.morecomments
+old.reddit.com##.deepthread
+old.reddit.com##.nav-buttons
+old.reddit.com##.footer-parent
+old.reddit.com##.debuginfo
+! Search results (not reachable with the old include pair): result titles,
+! subreddit descriptions and matched comment bodies translate; skip the
+! search box, group labels/sort menus, per-result meta and footer links, and
+! the "more" expandos.
+! https://old.reddit.com/search?q=browser+extension+translate  (verified 2026-11-18)
+old.reddit.com##.searchpane
+old.reddit.com##.search-result-group-header
+old.reddit.com##.search-result-meta
+old.reddit.com##.search-result-footer
+old.reddit.com##.search-expando-button
+old.reddit.com##.search-result-subreddit .search-result-header
 
 ! Wikipedia — document-style site; default walker handles main content. Only one nuisance: section-heading [edit] links bleed into the heading translation.
 ! https://en.wikipedia.org/wiki/Public_Suffix_List

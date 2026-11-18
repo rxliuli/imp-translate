@@ -185,26 +185,24 @@ describe('builtin rules.txt — Google Search scoped to /search', () => {
   })
 })
 
-describe('builtin rules.txt — old.reddit.com classic DOM include scope', () => {
-  // Regression: old.reddit.com (logged-in) serves the classic SSR DOM whose markup has no
-  // slot / data-testid / shreddit / faceplate. The *.reddit.com SDUI include selectors match
-  // nothing there, and an include set that matches nothing suppresses translation of the whole
-  // page (uBO isolate semantics). old.reddit.com must therefore carry its own include selectors
-  // for its text slots (a.title = post titles, .md = self-post/comment/sidebar bodies).
+describe('builtin rules.txt — old.reddit.com runs in exclude mode', () => {
+  // old.reddit.com used to carry its own include pair (a.title, .md). That
+  // pair missed surfaces like search results, so the classic DOM now runs in
+  // exclude mode against its long-lived chrome classes.
   const builtinRules = parseRules(builtinRulesRaw)
 
-  it('old.reddit.com gets the classic text-slot include selectors', () => {
-    const matched = matchRulesForUrl(builtinRules, 'old.reddit.com', '/r/programming/')
-    expect(matched.includeSelectors).toEqual(
-      expect.arrayContaining(['a.title', '.md']),
-    )
-  })
+  it.each(['/', '/r/programming/', '/r/x/comments/y/z/', '/search'])(
+    'old.reddit.com%s has no include selectors',
+    (path) => {
+      expect(matchRulesForUrl(builtinRules, 'old.reddit.com', path).includeSelectors).toEqual([])
+    },
+  )
 
-  it('classic include selectors come from old.reddit.com rules, not the *.reddit.com SDUI set', () => {
-    const own = builtinRules.filter((r) => r.domain === 'old.reddit.com')
-    expect(own.map((r) => r.selector)).toEqual(expect.arrayContaining(['a.title', '.md']))
-    // The SDUI-only selectors must NOT be the source of the classic scope.
-    expect(own.some((r) => r.selector.includes('[slot='))).toBe(false)
+  it('skips classic chrome (header, taglines, button rows)', () => {
+    const { skipSelectors } = matchRulesForUrl(builtinRules, 'old.reddit.com', '/r/programming/')
+    expect(skipSelectors).toEqual(
+      expect.arrayContaining(['#header', '.tagline', '.flat-list.buttons']),
+    )
   })
 })
 
