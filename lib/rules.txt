@@ -68,6 +68,13 @@ duckduckgo.com##button
 duckduckgo.com##.nav-menu--slideout
 duckduckgo.com##[data-testid="duckbar"]
 
+! Yahoo — portal homepage; headlines and story cards translate. Most chrome
+! classes are utility/hashed, so only the stable handles are skipped: the
+! top nav bar and buttons.
+! https://www.yahoo.com/  (verified 2026-11-18)
+www.yahoo.com###ybar-l1-nav
+www.yahoo.com##button
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
