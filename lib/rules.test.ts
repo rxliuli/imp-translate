@@ -208,6 +208,23 @@ describe('builtin rules.txt — old.reddit.com classic DOM include scope', () =>
   })
 })
 
+describe('builtin rules.txt — X runs in exclude mode', () => {
+  const builtinRules = parseRules(builtinRulesRaw)
+
+  it.each(['/home', '/x', '/x/followers', '/explore', '/search', '/i/grok', '/i/chat/123'])(
+    'x.com%s has no include selectors',
+    (path) => {
+      expect(matchRulesForUrl(builtinRules, 'x.com', path).includeSelectors).toEqual([])
+    },
+  )
+
+  it('keeps UserCell rows walkable so follower bios translate', () => {
+    const { skipSelectors } = matchRulesForUrl(builtinRules, 'x.com', '/x/followers')
+    expect(skipSelectors).toContain('button:not([data-testid="UserCell"])')
+    expect(skipSelectors).not.toContain('button')
+  })
+})
+
 describe('builtin rules.txt — GitHub runs in exclude mode', () => {
   // GitHub's include set was a one-way ratchet: every rebuilt surface (issues
   // list, dashboard, commit history) left its page untranslated until someone
