@@ -210,10 +210,15 @@ outlook.live.com##[id^="groupHeader"]
 ! WhatsApp Web — the message pane (#main) translates; skip the whole left
 ! column (#side: header, search, chat list names and previews) and the
 ! intro panel shown when no chat is open.
-! https://web.whatsapp.com/  (chat list + intro panel verified 2026-11-18;
-!   message pane not verified — opening a chat marks it read)
+! Inside the pane, skip sender names, buttons (CTA cards) and the date /
+! "N unread messages" dividers — the message list's direct children that
+! hold no role="row".
+! https://web.whatsapp.com/  (chat list, intro panel and an open chat — verified 2026-11-18)
 web.whatsapp.com###side
 web.whatsapp.com##[data-testid^="intro"]
+web.whatsapp.com##[data-testid="author"]
+web.whatsapp.com##button
+web.whatsapp.com##[data-testid="conversation-panel-messages"] [data-tab] > div:not(:has([role="row"]))
 
 ! Yandex — search results, gated to /search (yandex.com, yandex.ru, ...).
 ! Titles and snippets translate; skip the header login, the host/path row

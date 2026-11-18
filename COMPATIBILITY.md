@@ -52,7 +52,7 @@ Sites the maintainer uses regularly and verifies first. Other sites in the full 
 | 6 | X | x.com | Done | Exclude mode: author rows, action bars, buttons, nav, rail headings/filters, profile stats |
 | 7 | Reddit | reddit.com | Done | Exclude mode on new Reddit (web-component tags/slots) and old.reddit.com (classic classes); chat via shadow DOM piercing |
 | 8 | Microsoft Bing | bing.com | Done | Exclude mode on /search: skip links, buttons, URL breadcrumbs, obfuscated site names, citation domains |
-| 9 | WhatsApp | whatsapp.com | Partial | Exclude `#side` (chat list) and intro panel; message pane not verified (opening a chat marks it read) |
+| 9 | WhatsApp | whatsapp.com | Done | Exclude `#side`, intro panel, sender names, buttons and date/unread dividers; message text translates |
 | 10 | Wikipedia | wikipedia.org | Done | Default walker + skip `.mw-editsection` ([edit] links beside headings) |
 | 11 | TikTok | tiktok.com | TODO | Platform; video captions and comments need rules |
 | 12 | Yahoo Japan | yahoo.co.jp | Done | Skip id/role-anchored chrome (eyebrow, masthead, login, notices, search, tablist) |
