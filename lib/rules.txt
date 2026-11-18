@@ -322,7 +322,12 @@ chatgpt.com##[data-markdown-copy="exclude"]
 ! Service bubbles (date dividers, "user joined") and media-only bubbles fall
 ! outside the include set automatically on both clients.
 ! https://web.telegram.org/k/  (any chat — Web K client)
-! https://web.telegram.org/a/  (any chat — Web A client)
+! https://web.telegram.org/a/  (any chat — Web A client; verified 2026-11-18 with a chat already open)
+! Known gap: both clients are hash-routed, so the pathname stays /k/ or /a/
+! across the chat list and every chat. Starting translation on the chat list
+! (no message containers yet) trips the include fallback for that pathname,
+! and the whole app — chat list, headers, composer — stays in full-page mode
+! after a chat is opened, until reload.
 web.telegram.org#+#:matches-path(/k/) .bubble .message
 web.telegram.org##:matches-path(/k/) .message .time
 web.telegram.org#+#:matches-path(/a/) .message-content

@@ -38,7 +38,7 @@ Sites the maintainer uses regularly and verifies first. Other sites in the full 
 - [x] Wikipedia — default walker + skip section-heading [edit] links
 - [x] GitHub — exclude mode; skips global header, buttons, diffs/file tree, ListView row metadata, repo-home file table and sidebar, issue metadata
 - [x] ChatGPT — exclude mode; skips header, buttons, sr-only links, `data-markdown-copy="exclude"`
-- [x] Telegram Web — K client covered; A client (web.telegram.org/a) not verified
+- [~] Telegram Web — K and A clients covered once a chat is open; translating from the chat list trips the include fallback (hash routing keeps the pathname fixed)
 
 ## Full list
 
@@ -85,7 +85,7 @@ Sites the maintainer uses regularly and verifies first. Other sites in the full 
 | 39 | Yahoo News Japan | news.yahoo.co.jp | Default | News articles; verify |
 | 40 | Mail.ru | mail.ru | Default | Portal; verify |
 | 41 | Fandom | fandom.com | Default | Wiki; document-style, default walker likely fits |
-| 42 | Telegram | t.me / web.telegram.org | Done | Web /k client: include `.bubble .message`, skip `.time`. The /a client at web.telegram.org/a not yet verified |
+| 42 | Telegram | t.me / web.telegram.org | Partial | Include `.bubble .message` (/k) and `.message-content` (/a), both verified with a chat open. Starting translation on the chat list trips the include fallback for the whole hash-routed app |
 | 43 | The New York Times | nytimes.com | Default | News articles; verify |
 | 44 | DuckDuckGo | duckduckgo.com | Default | Search results; verify |
 | 46 | Stripchat | stripchat.com | Out of scope | Adult camming; not actively pursued |
