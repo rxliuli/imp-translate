@@ -100,6 +100,19 @@ www.naver.com##[role="navigation"]
 www.naver.com##[role="tablist"]
 www.naver.com##button
 
+! Dzen — news/feed homepage; story headlines and feed cards translate. Skip
+! the search box, login, weather/geo widget, section tabs, sidebar meta
+! links, news-category chips and buttons (all data-testid anchored).
+! https://dzen.ru/  (verified 2026-11-18)
+dzen.ru##form[class*="dzen-search"]
+dzen.ru##[data-testid="login-button-wrapper"]
+dzen.ru##[data-testid="weather-widget"]
+dzen.ru##li[class*="navigation-tab__tabContent"]
+dzen.ru##[data-testid="sidebar-meta-links"]
+dzen.ru##[data-testid="tab"], [data-testid="active-tab"]
+dzen.ru##[data-testid="news-categories"]
+dzen.ru##button
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
