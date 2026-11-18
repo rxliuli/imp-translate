@@ -75,6 +75,20 @@ duckduckgo.com##[data-testid="duckbar"]
 www.yahoo.com###ybar-l1-nav
 www.yahoo.com##button
 
+! Yahoo! JAPAN — portal homepage; news headlines and pickups translate.
+! Classes are CSS-module hashes, so skip only id/role-anchored chrome: the
+! eyebrow bar, masthead, login box, notice links, search form and the news
+! category tablist. news.yahoo.co.jp is styled-components throughout with
+! no stable chrome handles; its headlines translate fine without rules.
+! https://www.yahoo.co.jp/  (verified 2026-11-18)
+! https://news.yahoo.co.jp/  (verified 2026-11-18 — no rules needed)
+www.yahoo.co.jp###eyebrow
+www.yahoo.co.jp###Masthead
+www.yahoo.co.jp###Login
+www.yahoo.co.jp###TopLink
+www.yahoo.co.jp##form[role="search"]
+www.yahoo.co.jp##[role="tablist"]
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
