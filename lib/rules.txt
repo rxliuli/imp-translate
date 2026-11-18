@@ -157,6 +157,20 @@ www.baidu.com##:matches-path(/^\/s$/) #u
 www.baidu.com##:matches-path(/^\/s$/) #s_tab
 www.baidu.com##:matches-path(/^\/s$/) button
 
+! Fandom — wiki articles translate; skip the Fandom design-system chrome:
+! site notice, community navigation, sign-in/register actions, the Explore
+! side panel, skip link, community header (name, page counter), category
+! row and the recommendation cards.
+! https://harrypotter.fandom.com/wiki/Hermione_Granger  (verified 2026-11-18)
+*.fandom.com##.sitenotice-wrapper
+*.fandom.com###community-navigation
+*.fandom.com##.global-action__item
+*.fandom.com##.navigation-panel
+*.fandom.com##.skip-link
+*.fandom.com##.fandom-community-header__top-container
+*.fandom.com##.page-header__categories
+*.fandom.com##.universal-card
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
