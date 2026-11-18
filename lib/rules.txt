@@ -56,6 +56,18 @@ www.bing.com##:matches-path(/^\/search/) .b_attribution
 www.bing.com##:matches-path(/^\/search/) .tptt
 www.bing.com##:matches-path(/^\/search/) .cht_cit_site
 
+! DuckDuckGo — exclude mode. Result titles and snippets translate; skip the
+! site-name + URL row above each title (site names are proper nouns —
+! "Baeldung" came back as "建筑"), the header promo, the "More results"
+! button, the slide-out menu and the vertical tabs (duckbar). The right-rail
+! promo cards have no stable handle and are full sentences, so they stay.
+! https://duckduckgo.com/?q=how+does+http+caching+work&kl=us-en  (verified 2026-11-18)
+duckduckgo.com##article[data-testid="result"] div:has(> a[data-testid="result-extras-url-link"])
+duckduckgo.com##.header--aside
+duckduckgo.com##button
+duckduckgo.com##.nav-menu--slideout
+duckduckgo.com##[data-testid="duckbar"]
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
