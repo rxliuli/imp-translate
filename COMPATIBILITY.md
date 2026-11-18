@@ -57,7 +57,7 @@ Sites the maintainer uses regularly and verifies first. Other sites in the full 
 | 11 | TikTok | tiktok.com | TODO | Platform; video captions and comments need rules |
 | 12 | Yahoo Japan | yahoo.co.jp | Done | Skip id/role-anchored chrome (eyebrow, masthead, login, notices, search, tablist) |
 | 13 | Yahoo! | yahoo.com | Done | Skip top nav bar and buttons; headlines translate |
-| 14 | Yandex | yandex.ru | Default | Search served a captcha to automation; not verified |
+| 14 | Yandex | yandex.ru | Done | Exclude mode on /search: header login, host/path row, buttons, AI card header |
 | 15 | Gemini | gemini.google.com | Done | Exclude mode: side nav, logo, upsell, buttons, sr-only labels, disclaimer |
 | 16 | Amazon | amazon.com | TODO | Product titles / descriptions / reviews need scoping |
 | 17 | LinkedIn | linkedin.com | Done | Obfuscated classes; feed translates, skip both `<aside>` rails and buttons |
