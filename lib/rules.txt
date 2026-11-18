@@ -345,8 +345,20 @@ web.telegram.org##:matches-path(/a/) .message-content .message-title
 *.youtube.com#+#ytd-video-renderer
 *.youtube.com###metadata-line
 *.youtube.com##ytd-channel-name
+! Thumbnail/metadata badges inside the included cards ("Mix", "LIVE",
+! "14 lessons", "20 videos", "New", "Lecture", "Now playing"), the
+! "N chapters" label, and collaborator channel names.
+! https://www.youtube.com/  (verified 2026-11-18)
+! https://www.youtube.com/results?search_query=javascript  (verified 2026-11-18)
+! https://www.youtube.com/watch?v=V6kJKxvbgZ0  (related rail — verified 2026-11-18)
+*.youtube.com##yt-thumbnail-badge-view-model
+*.youtube.com##yt-metadata-badge-renderer
+*.youtube.com##ytd-thumbnail-overlay-now-playing-renderer
+*.youtube.com##.ytSpecAvatarShapeLiveBadge
+*.youtube.com###prominent-collapsed-label
+*.youtube.com###attributed-channel-name
 
-! https://www.youtube.com/watch?v=V6kJKxvbgZ0  (title + description block, comments below)
+! https://www.youtube.com/watch?v=V6kJKxvbgZ0  (title + description block, comments below — verified 2026-11-18)
 *.youtube.com#+#ytd-watch-metadata
 *.youtube.com#+#ytd-comments
 *.youtube.com##ytd-watch-metadata #owner
