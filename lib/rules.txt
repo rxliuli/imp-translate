@@ -131,6 +131,10 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 *.reddit.com##faceplate-tabgroup
 *.reddit.com##[slot="trigger-content"]
 *.reddit.com##create-post-entry-point-wrapper
+! Left sidebar nav is a <reddit-sidebar-nav> web component, not a <nav>, so
+! the walker's nav skip misses it (Games on Reddit, Custom Feeds, community
+! list).
+*.reddit.com##reddit-sidebar-nav
 *.reddit.com##.masthead h1
 *.reddit.com###right-sidebar-container > :not(#right-sidebar-contents)
 ! Pages without a right rail (/notifications) render the same legal footer
@@ -139,7 +143,7 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener n
 *.reddit.com##.legal-links
 ! Feed + post detail: credit bar, comment meta (author, "Edited"), action
 ! rows, comment sort, and the "Suggested communities" carousel.
-! https://www.reddit.com/  (baseline-checked 2026-11-18; rate-limited before a final pass)
+! https://www.reddit.com/  (verified 2026-11-18)
 ! https://www.reddit.com/r/programming/comments/1xtmzs5/google_searchs_foundational_pagerank_patent_has/  (verified 2026-11-18)
 *.reddit.com##[slot="credit-bar"]
 *.reddit.com##[slot="commentMeta"]
