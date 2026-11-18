@@ -313,6 +313,19 @@ chatgpt.com##button
 chatgpt.com##.sr-only
 chatgpt.com##[data-markdown-copy="exclude"]
 
+! Gemini — exclude mode. Messages render in Angular custom elements
+! (user-query, model-response > message-content); everything else is chrome:
+! the side nav (bard-sidenav — chat titles, notebooks, account footer), the
+! upsell button, mode picker and other buttons, visually hidden screen-reader
+! labels ("Gemini said"), and the hallucination disclaimer.
+! https://gemini.google.com/app/<id>  (any conversation — verified 2026-11-18)
+gemini.google.com##bard-sidenav
+gemini.google.com##side-nav-sparkle-button
+gemini.google.com##upsell-button
+gemini.google.com##button
+gemini.google.com##.cdk-visually-hidden
+gemini.google.com##hallucination-disclaimer
+
 ! Telegram Web — separate K (/k/) and A (/a/) SPAs with incompatible DOMs.
 ! Each rule is path-gated so an active include selector on the wrong client
 ! (whose DOM has no matching elements) doesn't suppress the entire page.
