@@ -195,6 +195,18 @@ www.linkedin.com##aside
 www.linkedin.com##button
 www.linkedin.com##[role="button"]
 
+! Outlook (live.com / office.com web mail) — obfuscated classes, rich ARIA.
+! Message list subjects/previews and the reading pane translate; skip the
+! branding, buttons, tab lists, toolbars, the folder tree and the date
+! group headers in the message list.
+! https://outlook.live.com/mail/0/  (verified 2026-11-18)
+outlook.live.com###owaBranding_container
+outlook.live.com##button
+outlook.live.com##[role="tablist"]
+outlook.live.com##[role="toolbar"]
+outlook.live.com##[role="treeitem"]
+outlook.live.com##[id^="groupHeader"]
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
