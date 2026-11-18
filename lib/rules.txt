@@ -44,6 +44,18 @@ www.google.*##:matches-path(/^\/search/) [role="button"]:has([d="M5.41 7.59L4 9l
 ! Footer
 www.google.*##:matches-path(/^\/search/) #fbar
 
+! Bing — exclude mode, gated to /search. Results, captions and the Copilot
+! answer translate; skip the a11y skip links, buttons (Show more/Show all),
+! the URL breadcrumb, site names (Bing serves them with homoglyph
+! obfuscation, so translating them garbles them) and citation domains.
+! https://www.bing.com/search?q=how+does+http+caching+work&setlang=en  (verified 2026-11-18)
+www.bing.com##:matches-path(/^\/search/) #b_skip_to_content
+www.bing.com##:matches-path(/^\/search/) #b_a11y_feedback
+www.bing.com##:matches-path(/^\/search/) button
+www.bing.com##:matches-path(/^\/search/) .b_attribution
+www.bing.com##:matches-path(/^\/search/) .tptt
+www.bing.com##:matches-path(/^\/search/) .cht_cit_site
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
