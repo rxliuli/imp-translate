@@ -287,8 +287,14 @@ x.com##[data-testid="primaryColumn"] div:has(> h2[role="heading"]) > div
 ! pages" pill, model selector and embedded tweets. Pane-only skips:
 !   - div:has(> div > div > div > svg clipPath[id^="__lottie_element_"]): live-thinking status — "Thinking about your request". Lottie Web generates clipPath elements with __lottie_element_ ID prefix inside its SVGs; ordinary icon SVGs have no clipPath children.
 !   - …same… + div: live-thinking search section — search queries, "Searching on X". After thinking completes both sections collapse into a button.
-! https://x.com/i/grok?conversation=2049842901010755900  (standalone)
+!   - a[href*="/status/"] > div:first-child: author row (name, @handle, date) of a post card embedded in an answer; the card body (second child) still translates.
+!   - [aria-hidden="true"]: the composer's "Ask anything" placeholder overlay.
+!   - a[href="/i/grok"]: the "New chat" link.
+! https://x.com/i/grok?conversation=c4e6c12f-0479-433f-8f78-10c65e2eecd0  (standalone — verified 2026-11-18)
 ! https://x.com/home  (drawer — click the bottom-right Grok pill, then open any history conversation)
+x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[href*="/status/"] > div:first-child
+x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) [aria-hidden="true"]
+x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[href="/i/grok"]
 x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) div:has(> div > div > div > svg clipPath[id^="__lottie_element_"])
 x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) div:has(> div > div > div > svg clipPath[id^="__lottie_element_"]) + div
 ! Citation drawer ("Relevant Web Pages") opens in #layers > [role="dialog"]. Card titles/descriptions translate; skip the domain badge row (its immediately-following sibling is the data-testid^="web_result_item_" tracking div) — translating "x.com"/"github.com" is a no-op churn.
