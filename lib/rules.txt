@@ -171,6 +171,13 @@ www.baidu.com##:matches-path(/^\/s$/) button
 *.fandom.com##.page-header__categories
 *.fandom.com##.universal-card
 
+! The New York Times — headlines, summaries and articles translate. Skip
+! the edition menu and the masthead date / Today's Paper bar; the rest of
+! the masthead uses hashed classes.
+! https://www.nytimes.com/  (verified 2026-11-18)
+www.nytimes.com##[data-testid^="masthead-edition-menu"]
+www.nytimes.com###masthead-bar-one
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
