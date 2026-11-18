@@ -517,26 +517,32 @@ claude.ai##[data-testid="session-title-split"]
 claude.ai##button
 claude.ai##[role="note"]
 
-! Telegram Web — separate K (/k/) and A (/a/) SPAs with incompatible DOMs.
-! Each rule is path-gated so an active include selector on the wrong client
-! (whose DOM has no matching elements) doesn't suppress the entire page.
-! Include text-message containers, skip the time/read-receipt span; on A
-! also skip the sender-name title row that lives inside .message-content
-! (K's include scope is narrower and doesn't pull the title in).
-! Service bubbles (date dividers, "user joined") and media-only bubbles fall
-! outside the include set automatically on both clients.
-! https://web.telegram.org/k/  (any chat — Web K client)
-! https://web.telegram.org/a/  (any chat — Web A client; verified 2026-11-18 with a chat already open)
-! Known gap: both clients are hash-routed, so the pathname stays /k/ or /a/
-! across the chat list and every chat. Starting translation on the chat list
-! (no message containers yet) trips the include fallback for that pathname,
-! and the whole app — chat list, headers, composer — stays in full-page mode
-! after a chat is opened, until reload.
-web.telegram.org#+#:matches-path(/k/) .bubble .message
+! Telegram Web — exclude mode. Two hash-routed SPAs with incompatible DOMs:
+! K (/k/) and A (/a/), so every rule is path-gated. The old include rules
+! (.bubble .message on K, .message-content on A) broke on the chat list:
+! the pathname never changes between the list and a chat, so starting a
+! translation before opening a chat tripped the include fallback and the
+! whole app stayed in full-page mode. In exclude mode the message pane just
+! translates; skip the side columns (chat list, profile panel), the chat
+! header, service bubbles / date dividers, the composer and toolbars, popups,
+! and in-bubble meta (time, read receipts, sender title, media duration).
+! https://web.telegram.org/k/  (any open chat — verified 2026-11-18)
+! https://web.telegram.org/a/  (any open chat — verified 2026-11-18)
+web.telegram.org##:matches-path(/k/) #column-left
+web.telegram.org##:matches-path(/k/) #column-right
+web.telegram.org##:matches-path(/k/) .topbar
+web.telegram.org##:matches-path(/k/) .bubble.service
+web.telegram.org##:matches-path(/k/) .chat-input-wrapper
+web.telegram.org##:matches-path(/k/) .popup
 web.telegram.org##:matches-path(/k/) .message .time
-web.telegram.org#+#:matches-path(/a/) .message-content
+web.telegram.org##:matches-path(/a/) #LeftColumn
+web.telegram.org##:matches-path(/a/) #RightColumn
+web.telegram.org##:matches-path(/a/) .MiddleHeader
+web.telegram.org##:matches-path(/a/) .sticky-date
+web.telegram.org##:matches-path(/a/) .middle-column-footer
 web.telegram.org##:matches-path(/a/) .message-content .MessageMeta
 web.telegram.org##:matches-path(/a/) .message-content .message-title
+web.telegram.org##:matches-path(/a/) .message-media-duration
 
 ! YouTube — include UGC containers; skip already-localized fields inside them
 

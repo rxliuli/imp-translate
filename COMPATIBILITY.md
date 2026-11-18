@@ -38,7 +38,7 @@ Sites the maintainer uses regularly and verifies first. Other sites in the full 
 - [x] Wikipedia — default walker + skip section-heading [edit] links
 - [x] GitHub — exclude mode; skips global header, buttons, diffs/file tree, ListView row metadata, repo-home file table and sidebar, issue metadata
 - [x] ChatGPT — exclude mode; skips header, buttons, sr-only links, `data-markdown-copy="exclude"`
-- [~] Telegram Web — K and A clients covered once a chat is open; translating from the chat list trips the include fallback (hash routing keeps the pathname fixed)
+- [x] Telegram Web — exclude mode on K and A clients (fixes the chat-list fallback trap)
 
 ## Full list
 
@@ -85,7 +85,7 @@ Sites the maintainer uses regularly and verifies first. Other sites in the full 
 | 39 | Yahoo News Japan | news.yahoo.co.jp | Done | Verified; styled-components only, headlines translate without rules |
 | 40 | Mail.ru | mail.ru | Done | Skip portal auth links and mailbox box; ad blocks are obfuscated |
 | 41 | Fandom | fandom.com | Done | Article translates; skip wds/fandom chrome (notice, nav, actions, header, categories, cards) |
-| 42 | Telegram | t.me / web.telegram.org | Partial | Include `.bubble .message` (/k) and `.message-content` (/a), both verified with a chat open. Starting translation on the chat list trips the include fallback for the whole hash-routed app |
+| 42 | Telegram | t.me / web.telegram.org | Done | Exclude mode on both /k and /a: side columns, chat header, service bubbles, composer, in-bubble meta. Works when translation starts on the chat list |
 | 43 | The New York Times | nytimes.com | Done | Skip edition menu and masthead date bar |
 | 44 | DuckDuckGo | duckduckgo.com | Done | Skip site-name/URL row, header promo, buttons, slide-out menu, duckbar |
 | 46 | Stripchat | stripchat.com | Out of scope | Adult camming; not actively pursued |
