@@ -127,6 +127,13 @@ mail.ru##[data-testid="mailbox"]
 www.microsoft.com##uhf-actions
 www.microsoft.com##button
 
+! weather.com — forecast pages; conditions, outlooks and articles translate.
+! Skip the forecast sub-navigation, buttons and the JW video player chrome.
+! https://weather.com/  (verified 2026-11-18)
+weather.com##[data-testid="subnavigation"]
+weather.com##button
+weather.com##.jwplayer
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
