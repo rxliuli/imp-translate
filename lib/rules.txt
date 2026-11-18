@@ -113,6 +113,13 @@ dzen.ru##[data-testid="tab"], [data-testid="active-tab"]
 dzen.ru##[data-testid="news-categories"]
 dzen.ru##button
 
+! Mail.ru — portal homepage; news and widgets translate. Most classes are
+! hashed or obfuscated (ad blocks), so only the stable handles are skipped:
+! the portal header auth links and the mailbox login box.
+! https://mail.ru/  (verified 2026-11-18)
+mail.ru##.ph-auth
+mail.ru##[data-testid="mailbox"]
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
