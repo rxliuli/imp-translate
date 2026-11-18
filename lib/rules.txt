@@ -134,6 +134,15 @@ weather.com##[data-testid="subnavigation"]
 weather.com##button
 weather.com##.jwplayer
 
+! Globo — portal homepage; headlines and bullets translate. Skip the menu
+! toggle, account box, search form, the products bar and buttons.
+! https://www.globo.com/  (verified 2026-11-18)
+www.globo.com###menu-toggle
+www.globo.com###account-header
+www.globo.com###header-search-section
+www.globo.com##ul[aria-label="Produtos Globo"]
+www.globo.com##button
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
