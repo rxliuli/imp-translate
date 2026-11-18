@@ -207,6 +207,14 @@ outlook.live.com##[role="toolbar"]
 outlook.live.com##[role="treeitem"]
 outlook.live.com##[id^="groupHeader"]
 
+! WhatsApp Web — the message pane (#main) translates; skip the whole left
+! column (#side: header, search, chat list names and previews) and the
+! intro panel shown when no chat is open.
+! https://web.whatsapp.com/  (chat list + intro panel verified 2026-11-18;
+!   message pane not verified — opening a chat marks it read)
+web.whatsapp.com###side
+web.whatsapp.com##[data-testid^="intro"]
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
