@@ -178,6 +178,14 @@ www.baidu.com##:matches-path(/^\/s$/) button
 www.nytimes.com##[data-testid^="masthead-edition-menu"]
 www.nytimes.com###masthead-bar-one
 
+! Instagram — atomic CSS classes only, so anchor on roles. Captions and
+! comments translate; skip every role="button" / <button> (story usernames,
+! like counts, Follow, Switch, Messages, "See translation"). The suggestions
+! rail has no stable handle and stays.
+! https://www.instagram.com/  (feed — verified 2026-11-18)
+www.instagram.com##[role="button"]
+www.instagram.com##button
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
