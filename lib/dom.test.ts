@@ -1109,6 +1109,27 @@ describe('extractBlocks', () => {
       ])
     })
 
+    // WhatsApp's truncated message footer: "… Read more" is a space, a
+    // div[role=button] and a span, siblings of the message text. Wrapping the
+    // run in a <font> moved React's button; clicking Read more then made
+    // React removeChild it from the old parent, which threw and unmounted the
+    // whole message. Excluded nodes must never be reparented.
+    it('never wraps (reparents) a node matched by an exclude rule', () => {
+      // As in WhatsApp, the message body is an inline span whose paragraphs
+      // are display:block, so the container is walked as mixed content and
+      // the footer nodes form their own inline run.
+      const div = document.createElement('div')
+      div.innerHTML =
+        '<span style="white-space: pre-wrap"><span style="display: block">Message text that will be translated.</span></span> ' +
+        '<div role="button" style="display: inline-block">Read more</div>' +
+        '<span>to see the rest of the message.</span>'
+      document.body.appendChild(div)
+      const button = div.querySelector('[role="button"]')!
+      extractBlocks(document.body, { skipSelectors: ['[role="button"]'] })
+      expect(button.parentElement).toBe(div)
+      expect(div.querySelector('[data-imp-wrap] [role="button"]')).toBeNull()
+    })
+
     it('keeps an inline-flex/inline-block span inside a sentence in one block', () => {
       const div = document.createElement('div')
       div.innerHTML =

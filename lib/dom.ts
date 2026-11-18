@@ -246,6 +246,12 @@ function hasStatefulInteractive(el: Element): boolean {
   return el.matches('[aria-expanded]') || el.querySelector('[aria-expanded]') !== null
 }
 
+const INTERACTIVE_SELECTOR =
+  'button, [role="button"], [role="link"], [role="tab"], [role="menuitem"], summary'
+function isInteractiveControl(el: Element): boolean {
+  return el.matches(INTERACTIVE_SELECTOR) || el.querySelector(INTERACTIVE_SELECTOR) !== null
+}
+
 function closestThroughShadow(el: Element, selector: string): Element | null {
   let current: Element | null = el
   while (current) {
@@ -826,8 +832,20 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
       // breaks React reconciliation: when the framework later runs removeChild
       // on a node it expects under `parent`, our wrapper is in the way and
       // the call throws NotFoundError.
+      //
+      // The same goes for an interactive control an exclude rule matched: the
+      // rule says it is app chrome, and clicking it is exactly when the
+      // framework re-renders it. WhatsApp's "… Read more" row (a space, a
+      // div[role=button], a span) was wrapped as one inline run; clicking it
+      // made React removeChild the button from its original parent, the call
+      // threw, and React unmounted the whole message. Excluded non-interactive
+      // inline nodes (a meta <span> mid-sentence) still wrap with the
+      // sentence — their text is filtered, and nothing re-renders them.
       const hasStateful = seg.some(
-        (n) => n.nodeType === Node.ELEMENT_NODE && hasStatefulInteractive(n as Element),
+        (n) =>
+          n.nodeType === Node.ELEMENT_NODE &&
+          (hasStatefulInteractive(n as Element) ||
+            (isInteractiveControl(n as Element) && shouldSkip(n as Element, opts))),
       )
       if (hasStateful) {
         for (const n of seg) {
