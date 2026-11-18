@@ -144,58 +144,77 @@ old.reddit.com#+#.md
 ! https://en.wikipedia.org/wiki/Public_Suffix_List
 *.wikipedia.org##.mw-editsection
 
-! GitHub — component-based platform; include user-generated content containers only.
-! https://github.com/rxliuli/imp-translate  (repo home: README + About description)
-! https://github.com/nicepkg/gpt-runner/issues/39  (issue detail: title + body)
-! https://github.com/nicepkg/gpt-runner/issues  (issue list: titles)
-github.com#+#.markdown-body
-github.com#+#.markdown-title
-! GitHub rebuilt the issues/pulls list on the "issues-list-surface" app
-! (class-based CSS modules: heading__fzQskI > anchor__PSAOdR). The only stable
-! handle is the title anchor's data-testid, and it differs per surface:
-!   /issues  → issue-listitem-title-link   (https://github.com/rxliuli/AppDowngrader/issues)
-!   /pulls   → listitem-title-link         (https://github.com/vercel/next.js/pulls?q=is%3Apr+is%3Aopen)
-! The legacy issues list used issue-pr-title-link; some repos still get it, so
-! it stays. Missing either testid means the include set matches nothing on that
-! list page, and the isolate gate then suppresses translation of the whole page.
-github.com#+#[data-testid="issue-pr-title-link"]
-github.com#+#[data-testid="issue-listitem-title-link"]
-github.com#+#[data-testid="listitem-title-link"]
-github.com#+#.f4.tmp-my-3
-! Repo home "About" description, React sidebar (2026-11): <p
-! class="SidebarAbout-module_<hash>_description">. Only the module prefix and
-! the _description suffix survive a deploy, so match both halves.
+! GitHub — exclude mode. The include set was a one-way ratchet: every page
+! type nobody had enumerated (commit history, commit detail, releases, PR
+! "Files changed", discussions...) either waited out the include fallback's
+! grace period or — when one stray selector matched — went untranslated
+! silently. Commit titles on /commits are a plain a.color-fg-default with no
+! include handle at all. So translate the page and skip app chrome instead; a
+! missed exclude is visible (a translated button label), a missed include was
+! not. The walker already skips <nav> (repo tabs, breadcrumbs, pagination),
+! <footer>, <pre> and <time>; the rules below cover the rest. Prefer
+! data-component / data-testid / ARIA handles: CSS-module classes carry a
+! per-deploy hash, so only their name prefix may be matched.
+!
+! Global chrome. Only the site header: GitHub also renders page-level
+! <header data-component="SplitPageLayout.Header"> that holds the commit
+! message and the narrow-layout About, so a bare `header` is too wide.
+! Primer buttons are often <a data-component="Button|LinkButton">.
+! https://github.com/nicepkg/gpt-runner/issues/39  (verified 2026-11-18)
+github.com##.GlobalNav
+github.com##.AppHeader
+github.com##button
+github.com##[data-component="Button"]
+github.com##[data-component="LinkButton"]
+github.com##.sr-only
+! <relative-time> is a custom element, not <time>, so the walker's tag skip misses it.
+github.com##relative-time
+! Code: diffs (React table[data-diff-anchor], legacy .diff-table), the file
+! tree, diff file-name headers, and the blob viewer.
+! https://github.com/majd/ipatool/commit/3b02b4c55576562f2a55284cda9db9a4411d3067  (verified 2026-11-18)
+github.com##table[data-diff-anchor]
+github.com##.diff-table
+github.com##[role="tree"]
+github.com##[class*="file-name__"]
+github.com##.react-code-view
+! Commit detail header: "Commit <sha>" title, author + "committed" line,
+! branch/PR refs and the "N files changed" summary. The commit message
+! (commitMessageContainer__) stays.
+github.com##:matches-path(/\/commit\//) [data-component="PH_Title"]
+github.com##[data-component="PageHeader.Description"] :has(> [data-testid="author-avatar"])
+github.com##[class*="commitBranchContainer__"]
+github.com##[class*="commitFilesChangedContainer__"]
+! ListView rows (issue/PR lists, commit history): keep only the title
+! container; the rest of the row is repo#number, author, "committed",
+! timestamps, SHA and actions.
+! https://github.com/majd/ipatool/commits/main/  (verified 2026-11-18)
+! https://github.com/rxliuli/AppDowngrader/issues  (verified 2026-11-18)
+github.com##[data-listview-component="items-list"] > li > :not([data-listview-item-title-container])
+github.com##.styled-input-container
+github.com##ul[aria-label^="Filter"]
+! Repo home: file table + latest-commit box, branch/tag counters, and every
+! sidebar section child except the About description (Readme, license,
+! stars, releases, languages, contributors).
 ! https://github.com/rxliuli/imp-translate  (verified 2026-11-18)
-github.com#+#p[class*="SidebarAbout-module_"][class*="_description"]
-! https://github.com  (homepage: feed items, skip sidebar repo names + card UI)
-! The homepage has two layouts with no shared containers, and the include set
-! must cover whichever one is being served:
-!   classic feed  → #feed-container (still reachable via "Switch to classic dashboard")
-!   React         → div#dashboard.dashboard inside main.flex-1 (the default
-!                   since the "Preview" rollout; #dashboard.dashboard is 1 per page)
-! Everything on the React dashboard is light DOM — copilot greeting + pills and
-! the Pull requests / Issues cards both hang off #dashboard > .news >
-! react-partial — but every other handle on it is a per-deploy CSS-module hash,
-! so #dashboard is the only selector that survives a deploy. When the homepage
-! moved to React the feed-only include set matched nothing and the isolate gate
-! suppressed the whole page (greeting, pills, list titles), silently.
-! The same dashboard is also served at /dashboard (identical DOM), so the
-! path gate covers both; gating to / alone left /dashboard with an include set
-! that matched nothing.
-! https://github.com  (React dashboard — verified 2026-10-26)
-! https://github.com/dashboard  (same page — verified 2026-11-18)
-github.com#+#feed-container section
-github.com#+#:matches-path(/^\/(dashboard\/?)?$/) #dashboard
-! "Explore" rail: the Universe promo card and the changelog feed. It is a
-! sibling of #dashboard (aside.feed-right-column), not a descendant, so
-! #dashboard alone leaves the whole column in English. The left nav
-! (.dashboard-sidebar, below) stays out on purpose — it is repo names and
-! global chrome.
-! https://github.com  (right rail — verified 2026-10-26)
-github.com#+#:matches-path(/^\/(dashboard\/?)?$/) aside.feed-right-column
+github.com###repo-title-component
+github.com##[class*="SidebarTemplateRepository-module_"]
+github.com##[class*="DirectoryContent-module_"]
+github.com##[class*="OverviewContent-module_"]:has(> a[href$="/branches"])
+github.com##[class*="SidebarSection-module_"] > :not([class*="_description"])
+! Issue/PR detail: state badge + sticky header, body/comment author headers,
+! the comment composer and the metadata sidebar.
+! https://github.com/nicepkg/gpt-runner/issues/39  (verified 2026-11-18)
+github.com##[data-testid^="issue-metadata"]
+github.com##[class*="activityHeader__"]
+github.com##[data-testid="comment-composer"]
+github.com##[data-testid="issue-viewer-metadata-pane"]
+! Dashboard: left nav is repo names; the classic feed's repo links too. The
+! Pull requests / Issues cards put "owner/repo#123 · Opened by … · Updated"
+! under each title in an ItemDescription__<hash> span.
+! https://github.com  (verified 2026-11-18)
 github.com##.dashboard-sidebar
+github.com##[class*="ItemDescription__"]
 github.com##feed-container .Link--primary
-github.com##feed-container button
 
 ! ChatGPT — exclude mode. The message DOM churns too often to pin with an
 ! include rule ([data-message-author-role] vanished in 2026-11, silently

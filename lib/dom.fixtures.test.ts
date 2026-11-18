@@ -401,13 +401,11 @@ describe('Reddit notifications inbox (rpl-inbox-row)', () => {
 })
 
 // GitHub's rebuilt issues/pulls list (the "issues-list-surface" React app).
-// Every container carries a CSS-module class with a per-deploy hash suffix, so
-// the only stable handle is the title anchor's data-testid — and it is NOT the
-// legacy issue-pr-title-link. Because include rules are an isolate gate, the
-// stale selector matched nothing and the whole list page went untranslated
-// (titles included), silently.
+// GitHub runs in exclude mode: the include set kept going stale (this list's
+// title testid changed and the whole page went untranslated, silently). Rows
+// are ListView items; everything but the title container is chrome.
 // Captured from https://github.com/rxliuli/AppDowngrader/issues on 2026-10-23.
-describe('GitHub issues list (issue-listitem-title-link)', () => {
+describe('GitHub issues list (ListView rows)', () => {
   const selectors = () =>
     matchRulesForUrl(parseRules(builtinRulesRaw), 'github.com', '/rxliuli/AppDowngrader/issues')
 
@@ -415,12 +413,8 @@ describe('GitHub issues list (issue-listitem-title-link)', () => {
     document.body.innerHTML = ''
   })
 
-  it('include rules match the rebuilt title anchor', () => {
-    document.body.innerHTML = githubIssuesList
-    const link = document.querySelector('[data-testid="issue-listitem-title-link"]')
-    expect(link).not.toBeNull()
-    const { includeSelectors } = selectors()
-    expect(includeSelectors.some((s) => link!.matches(s))).toBe(true)
+  it('runs in exclude mode (no include set to go stale)', () => {
+    expect(selectors().includeSelectors).toEqual([])
   })
 
   it('extracts the issue title', () => {
@@ -441,11 +435,9 @@ describe('GitHub issues list (issue-listitem-title-link)', () => {
   })
 })
 
-// GitHub's logged-in homepage moved from the classic #feed-container feed to a
-// React dashboard (div#dashboard.dashboard). The include set was feed-only, so
-// on the new layout it matched nothing and the isolate gate suppressed the
-// whole page: copilot greeting, command pills and both list cards stayed
-// English, with no error anywhere. Same failure mode as the issues list above.
+// GitHub's logged-in homepage (React dashboard, div#dashboard.dashboard). Under
+// the old include rules a layout switch left the whole page untranslated; in
+// exclude mode the content translates and only chrome is skipped.
 // Captured from https://github.com/ on 2026-10-26.
 describe('GitHub React dashboard (#dashboard)', () => {
   const selectors = () => matchRulesForUrl(parseRules(builtinRulesRaw), 'github.com', '/')
@@ -454,11 +446,8 @@ describe('GitHub React dashboard (#dashboard)', () => {
     document.body.innerHTML = ''
   })
 
-  it('include rules match the dashboard root', () => {
-    document.body.innerHTML = githubDashboard
-    expect(document.querySelectorAll('#dashboard')).toHaveLength(1)
-    const { includeSelectors } = selectors()
-    expect(includeSelectors).toContain('#dashboard')
+  it('runs in exclude mode (no include set to go stale)', () => {
+    expect(selectors().includeSelectors).toEqual([])
   })
 
   it('does not suppress the page (isolate gate opens)', () => {
@@ -468,19 +457,29 @@ describe('GitHub React dashboard (#dashboard)', () => {
     expect(texts.length).toBeGreaterThan(0)
   })
 
-  it('extracts the copilot greeting and command pills', () => {
+  it('extracts the copilot greeting and card headings, not the command pills', () => {
     document.body.innerHTML = githubDashboard
     const joined = extractBlocks(document.body, selectors())
       .map((b) => b.text)
       .join('\n')
 
     expect(joined).toContain('Good afternoon, rxliuli!')
-    for (const pill of ['Debug', 'Agent', 'Create issue', 'Write code', 'Git']) {
-      expect(joined).toContain(pill)
-    }
-    expect(joined).toContain('All repositories')
     expect(joined).toContain('Pull requests')
     expect(joined).toContain('Issues')
+    // The pills are <button>s — app chrome under the exclude rules.
+    for (const pill of ['Debug', 'Write code']) {
+      expect(joined).not.toContain(pill)
+    }
+  })
+
+  it('skips the card row descriptions (repo#number, author, timestamp)', () => {
+    document.body.innerHTML = githubDashboard
+    const joined = extractBlocks(document.body, selectors())
+      .map((b) => b.text)
+      .join('\n')
+
+    expect(joined).not.toContain('liuli-moe/to-the-stars#253')
+    expect(joined).not.toContain('Opened by')
   })
 
   it('extracts pull request and issue card titles', () => {
@@ -494,18 +493,6 @@ describe('GitHub React dashboard (#dashboard)', () => {
     expect(joined).toContain(
       '[feat]: Should the init command consider supporting the wxt framework',
     )
-  })
-
-  it('path-gates #dashboard to the homepage route', () => {
-    // The rule carries :matches-path(/^\/$/) so it only widens the include scope
-    // on the homepage; every other github route keeps its own, narrower scope.
-    const elsewhere = matchRulesForUrl(
-      parseRules(builtinRulesRaw),
-      'github.com',
-      '/rxliuli/AppDowngrader/issues',
-    )
-    expect(elsewhere.includeSelectors).not.toContain('#dashboard')
-    expect(elsewhere.includeSelectors).not.toContain('aside.feed-right-column')
   })
 
   // The "Explore" rail is a sibling of #dashboard, not a descendant, so covering
@@ -524,10 +511,9 @@ describe('GitHub React dashboard (#dashboard)', () => {
     expect(joined).toContain('View changelog')
   })
 
-  it('leaves the repo-name nav out of the include set', () => {
+  it('skips the repo-name nav', () => {
     // .dashboard-sidebar (global nav: Home/Feed/Top repositories, repo slugs)
-    // is an exclude rule and not part of either include, so the fixture does
-    // not even need to carry it.
+    // is an exclude rule; the fixture does not carry it.
     const { skipSelectors } = selectors()
     expect(skipSelectors).toContain('.dashboard-sidebar')
   })

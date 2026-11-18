@@ -207,38 +207,27 @@ describe('builtin rules.txt — old.reddit.com classic DOM include scope', () =>
   })
 })
 
-describe('builtin rules.txt — GitHub issues/pulls list title links', () => {
-  // GitHub rebuilt the issues list as the "issues-list-surface" app: container
-  // classes are hashed CSS modules and the title anchor is
-  // data-testid="issue-listitem-title-link" (the /pulls list uses the generic
-  // "listitem-title-link"). The legacy issue-pr-title-link matches neither, so
-  // the include set was empty on those pages and the isolate gate suppressed
-  // translation of the whole list — titles included, with no error.
+describe('builtin rules.txt — GitHub runs in exclude mode', () => {
+  // GitHub's include set was a one-way ratchet: every rebuilt surface (issues
+  // list, dashboard, commit history) left its page untranslated until someone
+  // noticed. Exclude mode translates by default and skips chrome instead.
   const builtinRules = parseRules(builtinRulesRaw)
 
-  it('issue list title anchor is in the include set', () => {
-    const matched = matchRulesForUrl(
-      builtinRules,
-      'github.com',
-      '/rxliuli/AppDowngrader/issues',
-    )
-    expect(matched.includeSelectors).toEqual(
-      expect.arrayContaining(['[data-testid="issue-listitem-title-link"]']),
-    )
+  it.each([
+    '/',
+    '/majd/ipatool/commits/main/',
+    '/rxliuli/AppDowngrader/issues',
+    '/vercel/next.js/pulls',
+    '/nicepkg/gpt-runner/issues/39',
+    '/rxliuli/imp-translate',
+  ])('%s has no include selectors', (path) => {
+    expect(matchRulesForUrl(builtinRules, 'github.com', path).includeSelectors).toEqual([])
   })
 
-  it('pull request list title anchor is in the include set', () => {
-    const matched = matchRulesForUrl(builtinRules, 'github.com', '/vercel/next.js/pulls')
-    expect(matched.includeSelectors).toEqual(
-      expect.arrayContaining(['[data-testid="listitem-title-link"]']),
-    )
-  })
-
-  it('keeps the legacy selector for repos still served the old list', () => {
-    const matched = matchRulesForUrl(builtinRules, 'github.com', '/nicepkg/gpt-runner/issues')
-    expect(matched.includeSelectors).toEqual(
-      expect.arrayContaining(['[data-testid="issue-pr-title-link"]', '.markdown-title']),
-    )
+  it('skips the global header but not page-layout <header>s', () => {
+    const { skipSelectors } = matchRulesForUrl(builtinRules, 'github.com', '/')
+    expect(skipSelectors).toEqual(expect.arrayContaining(['.GlobalNav', 'button']))
+    expect(skipSelectors).not.toContain('header')
   })
 })
 
