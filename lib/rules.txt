@@ -149,6 +149,14 @@ www.globo.com##button
 www.samsung.com##.nv16-country-selector
 www.samsung.com##[class*="__cta-wrap"]
 
+! Baidu — search results, gated to /s. Mostly same-language for zh users,
+! but skip the user bar (shows the signed-in name), search vertical tabs and
+! buttons so other target languages don't translate chrome.
+! https://www.baidu.com/s?wd=http%E7%BC%93%E5%AD%98  (verified 2026-11-18)
+www.baidu.com##:matches-path(/^\/s$/) #u
+www.baidu.com##:matches-path(/^\/s$/) #s_tab
+www.baidu.com##:matches-path(/^\/s$/) button
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
