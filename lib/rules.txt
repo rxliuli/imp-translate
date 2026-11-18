@@ -89,6 +89,17 @@ www.yahoo.co.jp###TopLink
 www.yahoo.co.jp##form[role="search"]
 www.yahoo.co.jp##[role="tablist"]
 
+! Naver — portal homepage; news, shopping and book feeds translate. Skip the
+! skip links, the Whale browser promo (top banner + bottom bar), the service
+! shortcut row (role="navigation", not a <nav>), tab bars and buttons.
+! https://www.naver.com/  (verified 2026-11-18)
+www.naver.com###u_skip
+www.naver.com##[role="complementary"]
+www.naver.com###whale-banner-bottom
+www.naver.com##[role="navigation"]
+www.naver.com##[role="tablist"]
+www.naver.com##button
+
 ! Twitter/X — exclude mode. The include set (tweetText, UserDescription,
 ! article bodies, DMs, UserCell bios, trends, news, event heroes, the Grok pane,
 ! citation cards) gained a selector every time X shipped a new surface, and
