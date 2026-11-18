@@ -69,10 +69,10 @@ For per-site coverage status (which top-50 sites have explicit rules vs rely on 
 
 ### Contributing rules for a new site
 
-If you use [Claude Code](https://claude.com/claude-code), this repo ships a project-scoped skill that automates the workflow: open the page, inspect the DOM, find the missing selectors, and append them to `lib/rules.txt`.
-
-```
-/add-site-rules https://example.com/some/page
-```
-
-Without Claude Code, the same workflow is documented step-by-step in `.claude/skills/add-site-rules/SKILL.md` — you can follow it manually with browser DevTools.
+Start in exclude mode: translate the page with Developer Mode on, note what
+chrome got translated (buttons, author rows, counters, nav), and add a `##`
+rule for each, anchored on stable handles (`data-testid`, `role`, `href`, web
+component tags) rather than hashed class names. Precede each rule group with a
+`!` comment listing the URL(s) it was verified against. See
+[`COMPATIBILITY.md`](./COMPATIBILITY.md#exclude-mode-first) for why include
+rules are a last resort.

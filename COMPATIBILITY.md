@@ -7,8 +7,17 @@ improve rules for any of them are welcomed and will be reviewed.
 
 For sites outside this list, the default DOM walker handles most
 document-style pages adequately; component-based platforms typically
-need explicit rules. Use `/add-site-rules <URL>` (see
-`.claude/skills/add-site-rules/SKILL.md`) for the workflow.
+need explicit rules.
+
+### Exclude mode first
+
+Prefer exclude rules (`domain##selector`): translate the whole page and skip
+app chrome. Include rules (`domain#+#selector`) are a one-way ratchet — every
+surface nobody enumerated stays untranslated, and when one stray include
+matches, the "nothing matched" fallback never fires, so the gap is silent.
+A missed exclude is visible (a translated button label) and fixed in one line.
+Keep include rules only where the content is one narrow, id-stable slot in a
+sea of chrome (Discord messages, Telegram bubbles, YouTube).
 
 ## Status
 
@@ -22,26 +31,26 @@ need explicit rules. Use `/add-site-rules <URL>` (see
 
 Sites the maintainer uses regularly and verifies first. Other sites in the full list below also welcome PRs.
 
-- [x] Google Search
+- [x] Google Search — exclude mode, gated to `/search` (web, AI Overview, AI Mode, News)
 - [x] YouTube
-- [x] Twitter / X
-- [x] Reddit — flipped to include mode; covers post titles, text-body, comments via shreddit web component slots. Reddit Chat (`reddit.com/chat/*`) targets `.room-message-text` inside `rs-timeline-event` shadow roots — the walker pierces open shadow DOM
+- [x] Twitter / X — exclude mode; skips author rows, action bars, buttons, nav, rail headings, profile stats
+- [x] Reddit — exclude mode for both new Reddit (shreddit/faceplate tags and slots) and old.reddit.com (classic chrome classes). Reddit Chat bodies live in open shadow roots, which the walker pierces
 - [x] Wikipedia — default walker + skip section-heading [edit] links
-- [x] GitHub — default walker + skip repo-home file tree (filename collides with commit message)
-- [x] ChatGPT — include user / assistant message containers
+- [x] GitHub — exclude mode; skips global header, buttons, diffs/file tree, ListView row metadata, repo-home file table and sidebar, issue metadata
+- [x] ChatGPT — exclude mode; skips header, buttons, sr-only links, `data-markdown-copy="exclude"`
 - [x] Telegram Web — K client covered; A client (web.telegram.org/a) not verified
 
 ## Full list
 
 | # | Site | Domain | Status | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | Google Search | google.com | Done | Search only; mail / drive / docs are different products |
+| 1 | Google Search | google.com | Done | Exclude mode, gated to `/search`; mail / drive / docs are different products |
 | 2 | YouTube | youtube.com | Done | Include mode: lockup cards, watch metadata, comments |
 | 3 | Facebook | facebook.com | TODO | Platform; needs include rules for post / comment containers |
 | 4 | Instagram | instagram.com | TODO | Platform; mostly image-driven, but captions and comments are translatable |
-| 5 | ChatGPT | chatgpt.com | Done | Include rule on `[data-message-author-role]` covers user prompts + assistant responses |
-| 6 | X | x.com | Done | Include mode: tweets, profile bios, DMs, articles, follower cells, explore cards |
-| 7 | Reddit | reddit.com | Done | Include `[slot="title"]`, `[slot="text-body"]`, `[slot="comment"]` covers feed + post detail; `.room-message-text` covers Reddit Chat (`/chat/*`) via shadow DOM piercing |
+| 5 | ChatGPT | chatgpt.com | Done | Exclude mode: header, buttons, sr-only links, `data-markdown-copy="exclude"` |
+| 6 | X | x.com | Done | Exclude mode: author rows, action bars, buttons, nav, rail headings/filters, profile stats |
+| 7 | Reddit | reddit.com | Done | Exclude mode on new Reddit (web-component tags/slots) and old.reddit.com (classic classes); chat via shadow DOM piercing |
 | 8 | Microsoft Bing | bing.com | Default | Search results page; default walker likely sufficient |
 | 9 | WhatsApp | whatsapp.com | TODO | Web client at web.whatsapp.com; needs include rules for messages |
 | 10 | Wikipedia | wikipedia.org | Done | Default walker + skip `.mw-editsection` ([edit] links beside headings) |
@@ -80,7 +89,7 @@ Sites the maintainer uses regularly and verifies first. Other sites in the full 
 | 43 | The New York Times | nytimes.com | Default | News articles; verify |
 | 44 | DuckDuckGo | duckduckgo.com | Default | Search results; verify |
 | 46 | Stripchat | stripchat.com | Out of scope | Adult camming; not actively pursued |
-| 48 | GitHub | github.com | Done | Default walker handles `.markdown-body` (issues/PRs/READMEs); skip `.react-directory-row` to keep filenames intact in repo home |
+| 48 | GitHub | github.com | Done | Exclude mode: header, buttons, diffs, file tree, ListView row metadata, repo-home file table/sidebar, issue metadata |
 | 49 | XNXX | xnxx.com | Out of scope | Not actively pursued; PR welcome |
 | 50 | Claude | claude.ai | TODO | Chat platform; needs include rules for assistant messages |
 
