@@ -32,7 +32,7 @@ sea of chrome (Discord messages, Telegram bubbles, YouTube).
 Sites the maintainer uses regularly and verifies first. Other sites in the full list below also welcome PRs.
 
 - [x] Google Search — exclude mode, gated to `/search` (web, AI Overview, AI Mode, News)
-- [x] YouTube
+- [x] YouTube — include mode with badge excludes; home, search, watch verified
 - [x] Twitter / X — exclude mode; skips author rows, action bars, buttons, nav, rail headings, profile stats
 - [x] Reddit — exclude mode for both new Reddit (shreddit/faceplate tags and slots) and old.reddit.com (classic chrome classes). Reddit Chat bodies live in open shadow roots, which the walker pierces
 - [x] Wikipedia — default walker + skip section-heading [edit] links
@@ -45,53 +45,53 @@ Sites the maintainer uses regularly and verifies first. Other sites in the full 
 | # | Site | Domain | Status | Notes |
 | --- | --- | --- | --- | --- |
 | 1 | Google Search | google.com | Done | Exclude mode, gated to `/search`; mail / drive / docs are different products |
-| 2 | YouTube | youtube.com | Done | Include mode: lockup cards, watch metadata, comments |
+| 2 | YouTube | youtube.com | Done | Include mode (lockup cards, watch metadata, comments, transcript) + badge excludes; verified home, search, watch |
 | 3 | Facebook | facebook.com | TODO | Platform; needs include rules for post / comment containers |
-| 4 | Instagram | instagram.com | TODO | Platform; mostly image-driven, but captions and comments are translatable |
+| 4 | Instagram | instagram.com | Done | Exclude mode anchored on roles (atomic CSS): skip every button / role="button"; suggestions rail untouched |
 | 5 | ChatGPT | chatgpt.com | Done | Exclude mode: header, buttons, sr-only links, `data-markdown-copy="exclude"` |
 | 6 | X | x.com | Done | Exclude mode: author rows, action bars, buttons, nav, rail headings/filters, profile stats |
 | 7 | Reddit | reddit.com | Done | Exclude mode on new Reddit (web-component tags/slots) and old.reddit.com (classic classes); chat via shadow DOM piercing |
-| 8 | Microsoft Bing | bing.com | Default | Search results page; default walker likely sufficient |
-| 9 | WhatsApp | whatsapp.com | TODO | Web client at web.whatsapp.com; needs include rules for messages |
+| 8 | Microsoft Bing | bing.com | Done | Exclude mode on /search: skip links, buttons, URL breadcrumbs, obfuscated site names, citation domains |
+| 9 | WhatsApp | whatsapp.com | Partial | Exclude `#side` (chat list) and intro panel; message pane not verified (opening a chat marks it read) |
 | 10 | Wikipedia | wikipedia.org | Done | Default walker + skip `.mw-editsection` ([edit] links beside headings) |
 | 11 | TikTok | tiktok.com | TODO | Platform; video captions and comments need rules |
-| 12 | Yahoo Japan | yahoo.co.jp | Default | News portal; verify |
-| 13 | Yahoo! | yahoo.com | Default | News portal; verify |
-| 14 | Yandex | yandex.ru | Default | Search; verify |
-| 15 | Gemini | gemini.google.com | TODO | Chat platform; needs include rules for assistant messages |
+| 12 | Yahoo Japan | yahoo.co.jp | Done | Skip id/role-anchored chrome (eyebrow, masthead, login, notices, search, tablist) |
+| 13 | Yahoo! | yahoo.com | Done | Skip top nav bar and buttons; headlines translate |
+| 14 | Yandex | yandex.ru | Default | Search served a captcha to automation; not verified |
+| 15 | Gemini | gemini.google.com | Done | Exclude mode: side nav, logo, upsell, buttons, sr-only labels, disclaimer |
 | 16 | Amazon | amazon.com | TODO | Product titles / descriptions / reviews need scoping |
-| 17 | LinkedIn | linkedin.com | TODO | Platform; feed posts and articles need include rules |
-| 18 | Baidu | baidu.com | Default | Search; verify |
+| 17 | LinkedIn | linkedin.com | Done | Obfuscated classes; feed translates, skip both `<aside>` rails and buttons |
+| 18 | Baidu | baidu.com | Done | /s only: skip user bar, vertical tabs, buttons |
 | 19 | BET.br | bet.br | Out of scope | Online gambling |
-| 20 | Naver | naver.com | Default | News portal; verify |
+| 20 | Naver | naver.com | Done | Skip skip-links, Whale promos, role=navigation/tablist, buttons |
 | 21 | Netflix | netflix.com | Out of scope | Video subtitle translation is a Non-Goal |
 | 22 | Pinterest | pinterest.com | TODO | Platform; pin titles and descriptions need rules |
-| 23 | Outlook (Live) | live.com | TODO | Email client; sender / subject / body containers need rules |
+| 23 | Outlook (Live) | live.com | Done | Exclude mode on ARIA roles: branding, buttons, tablists, toolbars, folder tree, date group headers |
 | 24 | Pornhub | pornhub.com | Out of scope | Not actively pursued; PR welcome |
-| 25 | Dzen News | dzen.ru | Default | News portal; verify |
+| 25 | Dzen News | dzen.ru | Done | data-testid anchored: search, login, weather, tabs, sidebar links, category chips, buttons |
 | 26 | Bilibili | bilibili.com | TODO | Video platform; titles, descriptions, comments need rules |
 | 27 | Temu | temu.com | TODO | Marketplace; product titles and descriptions need rules |
 | 28 | xHamster | xhamster.com | Out of scope | Not actively pursued; PR welcome |
-| 29 | Microsoft | microsoft.com | Default | Marketing pages; verify |
+| 29 | Microsoft | microsoft.com | Done | Skip `uhf-actions` (search/cart/account) and buttons |
 | 30 | Microsoft 365 | office.com | Out of scope | Document translation is a Non-Goal |
 | 31 | XVideos | xvideos.com | Out of scope | Not actively pursued; PR welcome |
 | 32 | Microsoft (login) | login.live.com | Out of scope | Authentication only; nothing meaningful to translate |
 | 33 | Twitch | twitch.tv | TODO | Stream titles, chat, channel bios need rules |
 | 34 | Canva | canva.com | Out of scope | Design tool; in-canvas content not the target |
-| 35 | Weather | weather.com | Default | Forecast pages; verify |
+| 35 | Weather | weather.com | Done | Skip sub-navigation, buttons, JW player chrome |
 | 36 | VK | vk.com | TODO | Platform; needs include rules |
-| 37 | Globo | globo.com | Default | News portal; verify |
-| 38 | Samsung | samsung.com | Default | Marketing pages; verify |
-| 39 | Yahoo News Japan | news.yahoo.co.jp | Default | News articles; verify |
-| 40 | Mail.ru | mail.ru | Default | Portal; verify |
-| 41 | Fandom | fandom.com | Default | Wiki; document-style, default walker likely fits |
+| 37 | Globo | globo.com | Done | Skip menu toggle, account, search, products bar, buttons |
+| 38 | Samsung | samsung.com | Done | Skip country selector overlay and CTA rows |
+| 39 | Yahoo News Japan | news.yahoo.co.jp | Done | Verified; styled-components only, headlines translate without rules |
+| 40 | Mail.ru | mail.ru | Done | Skip portal auth links and mailbox box; ad blocks are obfuscated |
+| 41 | Fandom | fandom.com | Done | Article translates; skip wds/fandom chrome (notice, nav, actions, header, categories, cards) |
 | 42 | Telegram | t.me / web.telegram.org | Partial | Include `.bubble .message` (/k) and `.message-content` (/a), both verified with a chat open. Starting translation on the chat list trips the include fallback for the whole hash-routed app |
-| 43 | The New York Times | nytimes.com | Default | News articles; verify |
-| 44 | DuckDuckGo | duckduckgo.com | Default | Search results; verify |
+| 43 | The New York Times | nytimes.com | Done | Skip edition menu and masthead date bar |
+| 44 | DuckDuckGo | duckduckgo.com | Done | Skip site-name/URL row, header promo, buttons, slide-out menu, duckbar |
 | 46 | Stripchat | stripchat.com | Out of scope | Adult camming; not actively pursued |
 | 48 | GitHub | github.com | Done | Exclude mode: header, buttons, diffs, file tree, ListView row metadata, repo-home file table/sidebar, issue metadata |
 | 49 | XNXX | xnxx.com | Out of scope | Not actively pursued; PR welcome |
-| 50 | Claude | claude.ai | TODO | Chat platform; needs include rules for assistant messages |
+| 50 | Claude | claude.ai | Done | Exclude mode: sidebar, brand, conversation title, buttons, disclaimer |
 
 Ranks 45 and 47 are absent from the source table at the time this list was built (`rowspan` collapsing in Wikipedia's table); update if they reappear.
 
