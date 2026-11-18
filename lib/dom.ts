@@ -112,19 +112,56 @@ function isBr(node: Node): boolean {
   )
 }
 
+// An inline element that renders nothing but whitespace: no visible text and
+// no media. WhatsApp renders the blank line between paragraphs as its own
+// <span>\n</span>, so in pre-wrap contexts it acts as separator whitespace.
+const MEDIA_SELECTOR = 'img, svg, video, canvas, iframe, picture, input, object, embed'
+function isWhitespaceElement(node: Node): boolean {
+  if (node.nodeType !== Node.ELEMENT_NODE) return false
+  const el = node as Element
+  if ((el.textContent ?? '').trim()) return false
+  if (el.matches(MEDIA_SELECTOR) || el.querySelector(MEDIA_SELECTOR)) return false
+  return true
+}
+
+const LEADING_WS_RE = /^\s*/
+const TRAILING_WS_RE = /\s*$/
+
 // Split a run of inline-ish siblings on "paragraph" boundaries. A boundary is
 // a soft-node run (brs and whitespace text) containing either <br>{2,} — the
 // fake-paragraph pattern App Store / old webmail / Discord embed emails use —
 // or, when splitOnBlankLines is set (white-space:pre-wrap contexts, e.g. x.com
 // long posts), a blank line: two newlines in the whitespace text. A single
 // <br> or single \n is a soft line break and stays in the segment.
+//
+// In pre-wrap mode the blank line may also straddle element boundaries:
+// WhatsApp ends each paragraph <span> with "\n" and puts the second "\n" in a
+// separate whitespace-only <span> (or at the start of the next paragraph's
+// span). So the whitespace at the edges of the neighbouring content nodes
+// counts toward the separator, and whitespace-only elements are soft nodes.
 function segmentRunByBrBr(run: Node[], splitOnBlankLines = false): Node[][] {
   const segments: Node[][] = []
   let current: Node[] = []
   let i = 0
-  const isSoft = (n: Node) => isBr(n) || isWhitespaceText(n)
+  const isSoft = (n: Node) =>
+    isBr(n) || isWhitespaceText(n) || (splitOnBlankLines && isWhitespaceElement(n))
+  const trailingWs = (n: Node | undefined) =>
+    n ? (TRAILING_WS_RE.exec(n.textContent ?? '')?.[0] ?? '') : ''
+  const leadingWs = (n: Node | undefined) =>
+    n ? (LEADING_WS_RE.exec(n.textContent ?? '')?.[0] ?? '') : ''
   while (i < run.length) {
     if (!isSoft(run[i]) || (!isBr(run[i]) && !splitOnBlankLines)) {
+      // Two content nodes back to back whose edge whitespace forms a blank
+      // line ("…gym\n" + "\nAround…"): a boundary with no soft node between.
+      if (
+        splitOnBlankLines &&
+        current.length > 0 &&
+        !isSoft(current[current.length - 1]) &&
+        BLANK_LINE_RE.test(trailingWs(current[current.length - 1]) + leadingWs(run[i]))
+      ) {
+        segments.push(current)
+        current = []
+      }
       current.push(run[i])
       i++
       continue
@@ -137,7 +174,10 @@ function segmentRunByBrBr(run: Node[], splitOnBlankLines = false): Node[][] {
       else wsText += run[j].textContent ?? ''
       j++
     }
-    const boundary = brCount >= 2 || (splitOnBlankLines && BLANK_LINE_RE.test(wsText))
+    const edgeWs = splitOnBlankLines
+      ? trailingWs(current[current.length - 1]) + wsText + leadingWs(run[j])
+      : wsText
+    const boundary = brCount >= 2 || (splitOnBlankLines && BLANK_LINE_RE.test(edgeWs))
     if (boundary) {
       if (current.length > 0) {
         segments.push(current)

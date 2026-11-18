@@ -1051,6 +1051,54 @@ describe('extractBlocks', () => {
       expect(div.textContent).toContain('post.\n\nMiddle')
     })
 
+    // WhatsApp Web: each paragraph is its own <span> ending in "\n", and the
+    // blank line between paragraphs is a separate <span>\n</span>. No text
+    // node holds "\n\n", so the blank line only exists across elements.
+    it('splits when the blank line straddles sibling spans (WhatsApp)', () => {
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.innerHTML =
+        '<span>Hello everyone, we are doing an activity <img alt="🥰">\n</span>' +
+        '<span>\n</span>' +
+        '<span>Around 10 am we go together to the spa.\n</span>' +
+        '<span>\n</span>' +
+        '<span>The vibe is chill and relaxing.\n</span>' +
+        '<span>We need this after hours of training.\n</span>' +
+        '<span>\n</span>' +
+        '<span>Join us on Friday after morning class.</span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text.trim())).toEqual([
+        'Hello everyone, we are doing an activity',
+        'Around 10 am we go together to the spa.',
+        'The vibe is chill and relaxing.\nWe need this after hours of training.',
+        'Join us on Friday after morning class.',
+      ])
+    })
+
+    it('splits when the blank line is split across adjacent span edges', () => {
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.innerHTML =
+        '<span>First paragraph across spans.\n</span><span>\nSecond paragraph across spans.</span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks.map((b) => b.text.trim())).toEqual([
+        'First paragraph across spans.',
+        'Second paragraph across spans.',
+      ])
+    })
+
+    it('does not treat an image-only span as a paragraph separator', () => {
+      const div = document.createElement('div')
+      div.style.whiteSpace = 'pre-wrap'
+      div.innerHTML =
+        '<span>Line one of a message.\n</span><span><img alt="x"></span><span>\nLine two of a message.</span>'
+      document.body.appendChild(div)
+      const blocks = extractBlocks(document.body)
+      expect(blocks).toHaveLength(1)
+    })
+
     it('does not split inside excluded (translate="no") children', () => {
       const div = document.createElement('div')
       div.style.whiteSpace = 'pre-wrap'
