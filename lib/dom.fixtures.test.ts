@@ -350,9 +350,9 @@ describe('Grok response with display:block spans', () => {
 
 // Reddit notifications inbox. The 2026-10 redesign replaced the legacy
 // <notification-item> Web Component with the RPL row <rpl-inbox-row> (inside
-// <notification-announcement>). Because include rules are an isolate gate, the
-// legacy-only include matched nothing and suppressed the whole page —
-// silently, with no error anywhere.
+// <notification-announcement>). Under the old include rules the legacy-only
+// include matched nothing and suppressed the whole page silently; Reddit now
+// runs in exclude mode and only the templated title/timestamp are skipped.
 // Captured from https://www.reddit.com/notifications on 2026-10-24.
 describe('Reddit notifications inbox (rpl-inbox-row)', () => {
   const selectors = () =>
@@ -366,15 +366,8 @@ describe('Reddit notifications inbox (rpl-inbox-row)', () => {
     document.body.innerHTML = ''
   })
 
-  it('include rules match the RPL row', () => {
-    document.body.innerHTML = redditNotifications
-    expect(document.querySelector('rpl-inbox-row')).not.toBeNull()
-    const { includeSelectors } = selectors()
-    expect(
-      includeSelectors.some((s) =>
-        document.querySelector('rpl-inbox-row')!.matches(s),
-      ),
-    ).toBe(true)
+  it('runs in exclude mode (no include set to go stale)', () => {
+    expect(selectors().includeSelectors).toEqual([])
   })
 
   it('extracts the body text of each row', () => {

@@ -225,6 +225,17 @@ describe('builtin rules.txt — X runs in exclude mode', () => {
   })
 })
 
+describe('builtin rules.txt — new Reddit runs in exclude mode', () => {
+  const builtinRules = parseRules(builtinRulesRaw)
+
+  it.each(['/', '/r/programming/', '/r/x/comments/y/z/', '/search/', '/user/x/', '/notifications', '/chat/'])(
+    'www.reddit.com%s has no include selectors',
+    (path) => {
+      expect(matchRulesForUrl(builtinRules, 'www.reddit.com', path).includeSelectors).toEqual([])
+    },
+  )
+})
+
 describe('builtin rules.txt — GitHub runs in exclude mode', () => {
   // GitHub's include set was a one-way ratchet: every rebuilt surface (issues
   // list, dashboard, commit history) left its page untranslated until someone

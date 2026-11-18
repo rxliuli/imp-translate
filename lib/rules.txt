@@ -111,55 +111,73 @@ x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) div:has(> div > d
 x.com##:has(+ [data-testid^="web_result_item_"])
 x.com##:is(div[aria-label="Grok"], [data-testid="GrokDrawer"]) a[rel="noopener noreferrer nofollow"]
 
-! Reddit — component-based platform; include the post/comment text slots only. Author names, vote counts, action rows, and chrome (header, sidebar) sit outside the include set automatically.
-! https://www.reddit.com/r/programming/  (subreddit feed: titles + text-body for text posts)
-! https://www.reddit.com/r/programming/comments/<id>/  (post detail: title + body + comments)
-*.reddit.com#+#[slot="title"]
-*.reddit.com#+#[slot="text-body"]
-*.reddit.com#+#[slot="comment"]
-! old.reddit.com (logged-in) serves the classic SSR DOM — no slot / data-testid / shreddit / faceplate
-! markup, so none of the *.reddit.com SDUI include selectors match. Because include is an isolate gate
-! (uBO semantics), an include set that matches nothing suppresses translation of the whole page — which
-! is why old.reddit.com never translated under the *.reddit.com rules. Its text slots are the post title
-! anchor (a.title) and the markdown body container (.md), which covers self-post bodies, comments, and
-! the sidebar community description. The *.reddit.com SDUI selectors are inert on classic DOM (they match
-! nothing), so they stay safe to keep; old.reddit.com gets its own narrow include scope on top.
-! https://old.reddit.com/r/programming/  (classic feed: titles + self-post bodies + comments)
-old.reddit.com#+#a.title
-old.reddit.com#+#.md
-! https://www.reddit.com/search/?q=twitter+export+followers+list&type=all&t=week  (search: post titles, community descriptions)
-! https://www.reddit.com/search/?q=twitter+export+followers+list&type=comment&t=week  (search comments: comment text + parent post title)
-! https://www.reddit.com/search/?q=twitter+export+followers+list&type=media&t=week  (search media: post titles below thumbnails)
-! https://www.reddit.com/search/?q=pixiv+export&type=posts&t=month  (posts search SDUI: title via post-title-text, body excerpt is a line-clamp-2 anchor with no testid)
-*.reddit.com#+#[data-testid="post-title-text"]
-*.reddit.com#+#[data-testid="search-post-with-content-preview"] a.line-clamp-2
-*.reddit.com#+#[data-testid="search-subreddit-desc-text"]
-*.reddit.com#+#.i18n-search-comment-content
-*.reddit.com#+#[data-testid="search-sdui-comment-unit"] h2
-*.reddit.com#+#search-media-feed a.line-clamp-2
-! https://www.reddit.com/user/rxliuli/  (user profile: overview + comments tabs)
-*.reddit.com#+#shreddit-profile-comment .md
-! Notifications inbox — two row components exist: the legacy <notification-item> Web Component and
-! Reddit's newer RPL row <rpl-inbox-row> (wrapped in <notification-announcement> for announcements).
-! The 2026-10 redesign switched the inbox page to the RPL row, and because include is an isolate gate
-! (uBO semantics) the legacy-only include matched nothing and silently suppressed the whole page.
-! Both are kept: the legacy tag is still used by other inbox surfaces. Skips:
-!   - data-testid="title": Reddit's templated header ("X replied to your comment in Y", "Achievement unlocked!", "Your post just hit N views!") — structural chrome with variable user/subreddit/count slots, same role as YouTube comment #author-text. Reddit will localize this server-side.
-!   - data-testid="sent-at": "4h ago" timestamp
-!   - notification-context-menu / announcement-overflow-menu: kebab menu items (slotted into hover-actions)
-! The description is data-testid="body" on the RPL row; it sits inside the include set, so it needs no rule.
-! https://www.reddit.com/notifications
-*.reddit.com#+#notification-item,rpl-inbox-row
+! Reddit — exclude mode. The include set (title/text-body/comment slots plus a
+! growing list of search, profile, notification, sidebar and chat selectors)
+! was a one-way ratchet: every surface it hadn't enumerated went untranslated,
+! and the 2026-10 inbox redesign silently blanked /notifications. Translate the
+! page and skip chrome instead. Reddit's chrome is mostly stable web-component
+! tags and slots (faceplate-*, shreddit-*), so the excludes rarely need hashes.
+! Chat bodies sit in nested open shadow roots; the walker pierces them.
+!
+! Global: buttons, timestamps, counts, screen-reader alerts, author/subreddit
+! hovercards, tab bars, sort dropdowns, the "Create Post" entry, the
+! subreddit masthead name, and the legal footer under the right rail.
+! https://www.reddit.com/r/programming/  (verified 2026-11-18)
+*.reddit.com##button
+*.reddit.com##faceplate-timeago
+*.reddit.com##faceplate-number
+*.reddit.com##faceplate-screen-reader-content
+*.reddit.com##faceplate-hovercard
+*.reddit.com##faceplate-tabgroup
+*.reddit.com##[slot="trigger-content"]
+*.reddit.com##create-post-entry-point-wrapper
+*.reddit.com##.masthead h1
+*.reddit.com###right-sidebar-container > :not(#right-sidebar-contents)
+! Feed + post detail: credit bar, comment meta (author, "Edited"), action
+! rows, comment sort, and the "Suggested communities" carousel.
+! https://www.reddit.com/  (baseline-checked 2026-11-18; rate-limited before a final pass)
+! https://www.reddit.com/r/programming/comments/1xtmzs5/google_searchs_foundational_pagerank_patent_has/  (verified 2026-11-18)
+*.reddit.com##[slot="credit-bar"]
+*.reddit.com##[slot="commentMeta"]
+*.reddit.com##shreddit-comment-action-row
+*.reddit.com##shreddit-comments-sort-dropdown
+*.reddit.com##in-feed-community-recommendations
+*.reddit.com##recent-posts
+! Subreddit right rail: rules, info widgets and the description translate;
+! skip the "Created …"/"Public" badges, member counts, the moderator list
+! (u/ links + "Message Mods"/"View all moderators").
+*.reddit.com##shreddit-subreddit-header [slot="community-details"]
+*.reddit.com##shreddit-subreddit-header [slot^="weekly-"]
+*.reddit.com###subreddit-right-rail__partial a[href^="/user/"]
+*.reddit.com###subreddit-right-rail__partial a[href*="/about/moderators"]
+*.reddit.com###subreddit-right-rail__partial a[href^="/message/compose"]
+! Search: vote/comment counter rows, community names and visitor counts.
+! https://www.reddit.com/search/?q=twitter+export+followers+list&type=all&t=week  (verified 2026-11-18)
+*.reddit.com##[data-testid="search-counter-row"]
+*.reddit.com##[data-testid="search-community-title"]
+! Profile: names, "commented"/"replied to" poster lines, stats, trophies,
+! achievements and social links.
+! https://www.reddit.com/user/rxliuli/  (verified 2026-11-18)
+*.reddit.com##[data-testid="profile-display-name"]
+*.reddit.com##[data-testid="profile-prefixed-name"]
+*.reddit.com##[data-testid="profile-details-content-wrapper"]
+*.reddit.com##:matches-path(/^\/user\//) #right-sidebar-contents faceplate-tracker
+*.reddit.com##shreddit-profile-comment shreddit-stop-propagation
+*.reddit.com##shreddit-profile-trophy-list
+*.reddit.com##achievements-entrypoint
+*.reddit.com##faceplate-tracker[noun*="social_link"]
+! Notifications inbox: data-testid="title" is Reddit's templated header ("X
+! replied to your comment in Y"); the body (data-testid="body") translates.
+! https://www.reddit.com/notifications  (baseline-checked 2026-11-18; covered by the reddit-notifications fixture test)
 *.reddit.com##notification-item [data-testid="title"],rpl-inbox-row [data-testid="title"]
 *.reddit.com##notification-item [data-testid="sent-at"],rpl-inbox-row [data-testid="sent-at"]
 *.reddit.com##notification-context-menu,announcement-overflow-menu
-! https://www.reddit.com/r/amphibia/  (subreddit sidebar: community description, rules, custom widgets)
-*.reddit.com#+##description
-*.reddit.com#+#faceplate-expandable-section-helper h2.i18n-translatable-text,faceplate-expandable-section-helper .i18n-translatable-text p
-! Reddit Chat — message bodies + link-preview cards live inside nested Shadow DOM (rs-timeline-event > shadow > rs-external-link-preview > shadow). The walker pierces open shadow roots, and include matching crosses shadow boundaries via closestThroughShadow.
-! https://www.reddit.com/chat/  (any chat room — chat.reddit.com now redirects here; room URLs are private; verified 2026-11-18)
-*.reddit.com#+#.room-message-text
-*.reddit.com#+#rs-external-link-preview
+! old.reddit.com (logged-in) serves the classic SSR DOM — no slot / data-testid / shreddit / faceplate
+! markup. Its text slots are stable and few: the post title anchor (a.title) and the markdown body
+! container (.md), which covers self-post bodies, comments, and the sidebar community description.
+! https://old.reddit.com/r/programming/  (classic feed: titles + self-post bodies + comments)
+old.reddit.com#+#a.title
+old.reddit.com#+#.md
 
 ! Wikipedia — document-style site; default walker handles main content. Only one nuisance: section-heading [edit] links bleed into the heading translation.
 ! https://en.wikipedia.org/wiki/Public_Suffix_List
