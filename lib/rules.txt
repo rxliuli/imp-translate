@@ -19,24 +19,24 @@
 ! the page, confirm whether the rule is still needed, and safely remove
 ! obsolete rules — without URL annotations the list is a one-way ratchet.
 
-! Google Search — path-gated to /search. The www.google.* domain keeps regional
-! search hosts (google.com, google.co.uk, google.com.hk) while avoiding
-! mail/drive/docs subdomains; the :matches-path(/^\/search/) gate stops the
-! include set from leaking into same-host products — Google Maps, Flights,
-! Finance, Books, Travel all live on www.google.com/*, so domain scoping alone
-! can't separate them. Without the gate, an active include set that matches
-! nothing on those pages (their DOM has no #rcnt/#cnt — verified) suppresses
-! translation of the entire page (uBO isolate semantics: "only translate inside
-! the include scope").
-! Desktop wraps results in #cnt > #rcnt > #center_col; mobile drops #rcnt and goes #cnt > #center_col directly. Including #cnt only when #rcnt is absent picks up the mobile layout without expanding the desktop scope (which would pull in appbar/hdtb chrome above #rcnt).
-! https://www.google.com/search?q=test  (desktop)
-! https://www.google.com/search?q=test  (mobile — DevTools device toolbar, iPhone UA)
-www.google.*#+#:matches-path(/^\/search/) #rcnt
-www.google.*#+#:matches-path(/^\/search/) #cnt:not(:has(#rcnt))
-www.google.*#+#:matches-path(/^\/search/) [data-subtree="mfc"]
-! Google AI Mode (udm=50) renders its answer in data-subtree="aimc" instead of #rcnt.
-! https://www.google.com/search?q=test&udm=50
-www.google.*#+#:matches-path(/^\/search/) [data-subtree="aimc"]
+! Google Search — exclude mode, path-gated to /search. The www.google.* domain
+! keeps regional search hosts (google.com, google.co.uk, google.com.hk) while
+! avoiding mail/drive/docs subdomains; the :matches-path(/^\/search/) gate keeps
+! these excludes off same-host products (Maps, Flights, Finance, Books, Travel
+! all live on www.google.com/*).
+! The include set (#rcnt, mobile #cnt, AI Overview mfc, AI Mode aimc) had to
+! grow a selector for every new result surface — AI Mode answered in English
+! until data-subtree="aimc" was added. The results page has little chrome, so
+! translate it and skip the few chrome pieces instead. Search tabs and
+! pagination are role="navigation"; the query box is a <textarea>.
+! https://www.google.com/search?q=how+does+http+caching+work&hl=en  (web + AI Overview — verified 2026-11-18)
+! https://www.google.com/search?q=how+does+http+caching+work&hl=en&udm=50  (AI Mode — verified 2026-11-18)
+! https://www.google.com/search?q=rust+programming+language&hl=en&tbm=nws  (News — verified 2026-11-18)
+! Top-of-page a11y skip links ("Skip to main content", "Accessibility help")
+! share an obfuscated wrapper; anchor on the help link's stable href.
+www.google.*##:matches-path(/^\/search/) body > div:has(> div > a[href^="https://support.google.com/web"])
+! AI Mode "Upgrade" (Google One) promo link.
+www.google.*##:matches-path(/^\/search/) a[href^="https://one.google.com/"]
 www.google.*##:matches-path(/^\/search/) :has(>[hreftranslate])
 www.google.*##:matches-path(/^\/search/) [role="navigation"]
 ! AI Overview show more button

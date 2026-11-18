@@ -161,10 +161,8 @@ mail.google.*##.gmail-toolbar
 
 describe('builtin rules.txt — Google Search scoped to /search', () => {
   // The real regression guard, parsing the actual rules.txt (not an inline
-  // snippet): every www.google.* rule must stay path-gated. An ungated
-  // include set leaks into same-host products (Maps, Flights, ...) whose DOM
-  // has no #rcnt/#cnt, and the include gate then suppresses translation of
-  // the entire page.
+  // snippet): every www.google.* rule must stay path-gated, so the search
+  // excludes never leak into same-host products (Maps, Flights, ...).
   const builtinRules = parseRules(builtinRulesRaw)
 
   it('every www.google.* rule is path-gated to /search', () => {
@@ -175,11 +173,14 @@ describe('builtin rules.txt — Google Search scoped to /search', () => {
     }
   })
 
-  it('search results pages get the include set, same-host products do not', () => {
+  it('runs in exclude mode: search pages get excludes, same-host products get nothing', () => {
     const onSearch = matchRulesForUrl(builtinRules, 'www.google.com', '/search?q=test')
-    expect(onSearch.includeSelectors.length).toBeGreaterThan(0)
+    expect(onSearch.includeSelectors).toEqual([])
+    expect(onSearch.skipSelectors).toContain('[role="navigation"]')
     for (const path of ['/maps', '/maps/place/xyz', '/flights', '/']) {
-      expect(matchRulesForUrl(builtinRules, 'www.google.com', path).includeSelectors).toHaveLength(0)
+      const m = matchRulesForUrl(builtinRules, 'www.google.com', path)
+      expect(m.includeSelectors).toHaveLength(0)
+      expect(m.skipSelectors).toHaveLength(0)
     }
   })
 })
