@@ -326,6 +326,17 @@ gemini.google.com##button
 gemini.google.com##.cdk-visually-hidden
 gemini.google.com##hallucination-disclaimer
 
+! Claude — exclude mode. Message bodies translate by default; skip the
+! sidebar (data-testid="sidebar": pinned and recent chat titles, account
+! footer), the title-bar brand, the conversation title, buttons, and the
+! role="note" disclaimer under the composer.
+! https://claude.ai/chat/<id>  (any conversation — verified 2026-11-18)
+claude.ai##[data-testid="sidebar"]
+claude.ai##.df-titlebar-brand
+claude.ai##[data-testid="session-title-split"]
+claude.ai##button
+claude.ai##[role="note"]
+
 ! Telegram Web — separate K (/k/) and A (/a/) SPAs with incompatible DOMs.
 ! Each rule is path-gated so an active include selector on the wrong client
 ! (whose DOM has no matching elements) doesn't suppress the entire page.
