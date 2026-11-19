@@ -69,6 +69,9 @@ export default defineConfig({
       // @ts-expect-error
       manifest.author = 'rxliuli'
     }
+    if (env.browser === 'safari') {
+      manifest.name = 'Imp Translate'
+    }
     return manifest
   },
   // 不让 wxt 自己拉起浏览器：dev 循环要 attach 到已有的 Chrome（CDP 9222，
