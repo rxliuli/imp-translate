@@ -71,6 +71,8 @@ export default defineConfig({
     }
     if (env.browser === 'safari') {
       manifest.name = 'Imp Translate'
+      manifest.description =
+        'Bilingual & replace web page translation with zero idle overhead. Free engines or AI with your own key.'
     }
     return manifest
   },
