@@ -25,9 +25,9 @@ export default defineConfig({
   manifestVersion: 3,
   manifest: (env) => {
     const manifest: UserManifest = {
-      name: 'Imp Translate',
+      name: 'Imp Translate: Bilingual AI Page Translator',
       description:
-        'Bilingual page translation shown below the original. AI translation with no API key, or bring your own provider.',
+        'Bilingual & replace web page translation with zero idle overhead. Free Google/Microsoft, AI with Imp Credits or your own key.',
       permissions: ['storage', 'scripting', 'webNavigation', 'alarms'],
       host_permissions: ['<all_urls>'],
       author: {
@@ -62,9 +62,7 @@ export default defineConfig({
     if (env.browser === 'firefox') {
       manifest.browser_specific_settings = {
         gecko: {
-          id:
-            manifest.name!.toLowerCase().replaceAll(/[^a-z0-9]/g, '-') +
-            '@rxliuli.com',
+          id: 'imp-translate@rxliuli.com',
         },
       }
       // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/author
