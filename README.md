@@ -18,7 +18,7 @@ An open-source, cross-platform browser extension for full-page web translation. 
 - Video subtitle translation (YouTube, Netflix, etc.) — see [BilingualTube](https://chromewebstore.google.com/detail/bilingualtube/ombapcolopdeailifakdgaijhoncgpgn) for YouTube
 - Custom translation styling — will never be considered
 - Document translation of any format (Docs, PDF, etc.) — see [Imp Translate Web](https://imp.rxliuli.com/translate/) for text, Markdown, subtitle and EPUB files
-- Compatibility with every website via custom rules — only the world's top 50 most-visited sites are prioritized
+- Proactively maintaining custom rules for every website — the maintainer prioritizes the world's top 50 most-visited sites, while community PRs for any website are welcome
 - Support for every LLM API provider — only OpenAI-compatible APIs are supported (many tools exist to convert other providers)
 
 ## Features
@@ -65,11 +65,11 @@ entity.*            — match any TLD via Public Suffix List (e.g. google.* cove
 
 Users can add custom rules via Developer Mode in the options page. Developer Mode also outlines translation issues on the page: blocks whose translation matched the original, blocks that needed a structural rewrite, and blocks that fell back to bilingual.
 
-For per-site coverage status (which top-50 sites have explicit rules vs rely on the default DOM walker), see [`COMPATIBILITY.md`](./COMPATIBILITY.md).
+For per-site coverage status and rule guidelines, see [`COMPATIBILITY.md`](./COMPATIBILITY.md).
 
 ### Contributing rules for a new site
 
-Start in exclude mode: translate the page with Developer Mode on, note what
+PRs adding or improving rules for any website are welcome — not limited to the top 50. Start in exclude mode: translate the page with Developer Mode on, note what
 chrome got translated (buttons, author rows, counters, nav), and add a `##`
 rule for each, anchored on stable handles (`data-testid`, `role`, `href`, web
 component tags) rather than hashed class names. Precede each rule group with a

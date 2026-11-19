@@ -1,15 +1,15 @@
 # Compatibility
 
-This extension targets the world's most-visited websites listed at
-[Wikipedia: List of most-visited websites](https://en.wikipedia.org/wiki/List_of_most-visited_websites).
-Every entry below is treated as first-class scope — PRs that add or
-improve rules for any of them are welcomed and will be reviewed.
+This extension prioritizes the world's most-visited websites listed at
+[Wikipedia: List of most-visited websites](https://en.wikipedia.org/wiki/List_of_most-visited_websites),
+and welcomes PRs that add or improve rules for **any** website — not just
+those in the top 50 list below.
 
-For sites outside this list, the default DOM walker handles most
+For sites without explicit rules, the default DOM walker handles most
 document-style pages adequately; component-based platforms typically
 need explicit rules.
 
-### Exclude mode first
+## Exclude mode first
 
 Prefer exclude rules (`domain##selector`): translate the whole page and skip
 app chrome. Include rules (`domain#+#selector`) are a one-way ratchet — every
@@ -29,7 +29,7 @@ sea of chrome (Discord messages, Telegram bubbles, YouTube).
 
 ## Priority sites
 
-Sites the maintainer uses regularly and verifies first. Other sites in the full list below also welcome PRs.
+Sites the maintainer uses regularly and verifies first. PRs for other sites — whether in the top 50 list below or not — are also welcome.
 
 - [x] Google Search — exclude mode, gated to `/search` (web, AI Overview, AI Mode, News)
 - [x] YouTube — include mode with badge excludes; home, search, watch verified
