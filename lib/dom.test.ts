@@ -1773,4 +1773,64 @@ describe('extractBlocks with translateChrome', () => {
     })
     expect(blocks.map((b) => b.text)).toEqual(['Loose inline run', 'Para outside', 'Inside'])
   })
+
+  describe('Google Translate / HTML translate="no" compliance', () => {
+    it('skips dynamically added subtree inside a translate="no" ancestor', () => {
+      document.body.innerHTML = `
+        <div translate="no">
+          <div id="child"><span>AI Crypto, NFT &amp; Web3 (91%)</span></div>
+        </div>
+      `
+      const child = document.getElementById('child')!
+      expect(extractBlocks(child)).toEqual([])
+    })
+
+    it('skips dynamically added subtree inside a .notranslate ancestor', () => {
+      document.body.innerHTML = `
+        <div class="notranslate">
+          <p id="child">Injected extension banner text</p>
+        </div>
+      `
+      const child = document.getElementById('child')!
+      expect(extractBlocks(child)).toEqual([])
+    })
+
+    it('skips subtree inside a ShadowRoot whose host has translate="no"', () => {
+      const host = document.createElement('div')
+      host.setAttribute('translate', 'no')
+      const shadow = host.attachShadow({ mode: 'open' })
+      shadow.innerHTML = '<div id="inner"><p>Extension shadow UI text</p></div>'
+      document.body.appendChild(host)
+
+      const inner = shadow.getElementById('inner')!
+      expect(extractBlocks(inner)).toEqual([])
+    })
+
+    it('treats translate="no" attribute value as ASCII case-insensitive', () => {
+      document.body.innerHTML = `
+        <div translate="NO">
+          <p id="upper">Should not be translated</p>
+        </div>
+        <p>Hello world</p>
+      `
+      expect(extractBlocks(document.body).map((b) => b.text)).toEqual(['Hello world'])
+      expect(extractBlocks(document.getElementById('upper')!)).toEqual([])
+    })
+
+    it('skips entire body when html root has translate="no"', () => {
+      document.body.innerHTML = '<p>Hello world</p>'
+      document.documentElement.setAttribute('translate', 'no')
+      try {
+        expect(extractBlocks(document.body)).toEqual([])
+      } finally {
+        document.documentElement.removeAttribute('translate')
+      }
+    })
+
+    it('skips dynamically added child inside SKIP_TAGS ancestor like pre', () => {
+      document.body.innerHTML = '<pre><span id="code-line">const message = "hello world"</span></pre>'
+      const child = document.getElementById('code-line')!
+      expect(extractBlocks(child)).toEqual([])
+    })
+  })
 })

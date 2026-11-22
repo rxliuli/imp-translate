@@ -264,6 +264,35 @@ function closestThroughShadow(el: Element, selector: string): Element | null {
   return null
 }
 
+function parentThroughShadow(el: Element): Element | null {
+  if (el.parentElement) return el.parentElement
+  const root = el.getRootNode()
+  return root instanceof ShadowRoot ? root.host : null
+}
+
+export function isNoTranslate(el: Element): boolean {
+  if (el.classList.contains('notranslate')) return true
+  const attr = el.getAttribute('translate')
+  return attr !== null && attr.toLowerCase() === 'no'
+}
+
+export function hasNoTranslateAncestor(el: Element): boolean {
+  for (let cur: Element | null = el; cur; cur = parentThroughShadow(cur)) {
+    if (isNoTranslate(cur)) return true
+  }
+  return false
+}
+
+function hasSkippedAncestor(el: Element): boolean {
+  for (let cur: Element | null = el; cur; cur = parentThroughShadow(cur)) {
+    if (isNoTranslate(cur)) return true
+    if (SKIP_TAGS.has(cur.tagName.toLowerCase())) return true
+    if (cur.classList.contains(RESULT_CLASS)) return true
+    if (cur.hasAttribute(PROCESSED_ATTR)) return true
+  }
+  return false
+}
+
 function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
   const includes = activeIncludeSelectors(opts)
   if (includes) {
@@ -279,8 +308,7 @@ function shouldSkip(el: Element, opts?: ExtractOptions): boolean {
     }
   }
   if (SKIP_TAGS.has(el.tagName.toLowerCase())) return true
-  if (el.classList.contains('notranslate')) return true
-  if (el.getAttribute('translate') === 'no') return true
+  if (isNoTranslate(el)) return true
   if ((el as HTMLElement).isContentEditable) return true
   if (el.closest(EDITOR_SELECTOR)) return true
   if (el.classList.contains(RESULT_CLASS)) return true
@@ -306,8 +334,7 @@ function visibleTextOfChild(child: Node, skipSelectors?: string[], out?: Text[])
   const childEl = child as HTMLElement
   if (SKIP_TAGS.has(childEl.tagName.toLowerCase())) return ''
   if (childEl.classList.contains(RESULT_CLASS)) return ''
-  if (childEl.classList.contains('notranslate')) return ''
-  if (childEl.getAttribute('translate') === 'no') return ''
+  if (isNoTranslate(childEl)) return ''
   if (childEl.isContentEditable) return ''
   if (isHidden(childEl)) return ''
   if (skipSelectors && skipSelectors.some((s) => childEl.matches(s))) return ''
@@ -574,8 +601,7 @@ function segmentPreservedNewlines(parent: Element) {
         // whitespace between formatting contexts.
         if (!isInlineish(el)) return NodeFilter.FILTER_REJECT
         if (el.classList.contains(RESULT_CLASS)) return NodeFilter.FILTER_REJECT
-        if (el.classList.contains('notranslate')) return NodeFilter.FILTER_REJECT
-        if (el.getAttribute('translate') === 'no') return NodeFilter.FILTER_REJECT
+        if (isNoTranslate(el)) return NodeFilter.FILTER_REJECT
         if ((el as HTMLElement).isContentEditable) return NodeFilter.FILTER_REJECT
         return NodeFilter.FILTER_SKIP
       }
@@ -714,7 +740,8 @@ export function extractBlocks(root: Element = document.body, opts?: ExtractOptio
   // Skip ancestors of root must be checked here, not per-element in shouldSkip:
   // walker descends from root, so any skip ancestor inside the subtree gets
   // visited and matched cheaply via matches(). Ancestors above root are outside
-  // the walk and need a one-time closest() check at entry.
+  // the walk and need a one-time check at entry (crossing shadow boundaries).
+  if (hasSkippedAncestor(root)) return []
   if (opts?.skipSelectors) {
     for (const s of opts.skipSelectors) {
       if (closestThroughShadow(root, s)) return []

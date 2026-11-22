@@ -1,4 +1,4 @@
-import { RESULT_CLASS, PROCESSED_ATTR, type TranslatableBlock } from './dom'
+import { RESULT_CLASS, PROCESSED_ATTR, isNoTranslate, type TranslatableBlock } from './dom'
 import { LANGUAGES_SORTED } from './languages'
 
 function hasVisibleText(node: Node): boolean {
@@ -21,7 +21,7 @@ function findInjectionPoint(element: HTMLElement): HTMLElement {
       if (n.nodeType === Node.ELEMENT_NODE) {
         const el = n as Element
         if (el.classList.contains(RESULT_CLASS) || el.classList.contains(BR_CLASS)) return false
-        if (el.classList.contains('notranslate') || el.getAttribute('translate') === 'no') return false
+        if (isNoTranslate(el)) return false
         return hasVisibleText(el)
       }
       return false

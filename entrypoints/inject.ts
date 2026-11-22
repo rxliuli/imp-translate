@@ -11,6 +11,7 @@ import {
   PROCESSED_ATTR,
   RESULT_CLASS,
   needsBlankLineSplit,
+  hasNoTranslateAncestor,
 } from '@/lib/dom'
 import {
   injectLoading,
@@ -1107,7 +1108,7 @@ export default defineUnlistedScript(() => {
         const extracted = extractBlocks(addedEl, extractOpts)
         if (extracted.length > 0) {
           newBlocks.push(...extracted)
-        } else {
+        } else if (!hasNoTranslateAncestor(addedEl)) {
           const tag = addedEl.tagName.toLowerCase()
           if (!tag.includes('loader') && tag !== 'script' && tag !== 'style') {
             const text = addedEl.textContent?.trim()
