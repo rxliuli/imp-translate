@@ -152,8 +152,8 @@ describe('render', () => {
     ]
     injectLoading(blocks)
 
-    expect(div.style.webkitLineClamp).toBe('unset')
-    expect(div.style.overflow).toBe('visible')
+    expect(getComputedStyle(div).webkitLineClamp).toBe('none')
+    expect(getComputedStyle(div).overflow).toBe('visible')
   })
 
   it('should remove translation when result matches original text (case-insensitive)', () => {
@@ -451,7 +451,7 @@ describe('render', () => {
     ]
     injectLoading(blocks)
 
-    expect(div.style.overflow).toBe('visible')
+    expect(getComputedStyle(div).overflow).toBe('visible')
   })
 
   it('should override clipping ancestor when child has line-clamp', () => {
@@ -469,9 +469,111 @@ describe('render', () => {
     ]
     injectLoading(blocks)
 
-    expect(child.style.overflow).toBe('visible')
-    expect(parent.style.overflow).toBe('visible')
-    expect(parent.style.maxHeight).toBe('none')
+    expect(getComputedStyle(child).overflow).toBe('visible')
+    expect(getComputedStyle(parent).overflow).toBe('visible')
+    expect(getComputedStyle(parent).maxHeight).toBe('none')
+  })
+
+  // Regression: YouTube's yt-lockup-view-model hover/ambient effect sets
+  // `el.style.cssText = "color: rgba(...)"` and then `el.style.cssText = ""`
+  // on `.ytLockupMetadataViewModelTitle`, wiping out inline styles injected by
+  // injectLoading (`overflow: visible; max-height: none`). When the stylesheet
+  // rule (`max-height: 44px; overflow: hidden`) snaps back, the translation on
+  // lines 3–4 is clipped completely out of view.
+  it('keeps line-clamp, overflow, and max-height overrides after page overwrites style.cssText', () => {
+    const style = document.createElement('style')
+    style.textContent = `
+      .yt-title {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        max-height: 44px;
+        line-height: 22px;
+        font-size: 16px;
+        width: 240px;
+      }
+    `
+    document.head.appendChild(style)
+    document.body.innerHTML = `
+      <a class="yt-title" href="#">
+        <span class="inner">This is a two-line video title that fills the entire clamped title container</span>
+      </a>
+    `
+    try {
+      const a = document.querySelector<HTMLElement>('.yt-title')!
+      const text = a.textContent!.trim()
+      const blocks: TranslatableBlock[] = [{ element: a, text }]
+      injectLoading(blocks)
+      replaceWithTranslation(blocks, ['这是一个很长的中文视频标题译文，会占据两行并位于原始标题的下方'])
+
+      const font = a.querySelector<HTMLElement>('.imp-translate-result')!
+      expect(getComputedStyle(a).overflow).toBe('visible')
+      expect(getComputedStyle(a).maxHeight).toBe('none')
+      expect(a.clientHeight).toBeGreaterThanOrEqual(a.scrollHeight - 1)
+
+      // Simulate YouTube hover color write then unhover clear via style.cssText
+      a.style.cssText = 'color: rgba(221, 236, 253, 1)'
+      expect(getComputedStyle(a).overflow).toBe('visible')
+      expect(getComputedStyle(a).maxHeight).toBe('none')
+      expect(a.clientHeight).toBeGreaterThanOrEqual(a.scrollHeight - 1)
+      expect(font.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        a.getBoundingClientRect().bottom + 1,
+      )
+
+      a.style.cssText = ''
+      expect(getComputedStyle(a).overflow).toBe('visible')
+      expect(getComputedStyle(a).maxHeight).toBe('none')
+      expect(a.clientHeight).toBeGreaterThanOrEqual(a.scrollHeight - 1)
+      expect(font.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        a.getBoundingClientRect().bottom + 1,
+      )
+
+      // Restoring original page removes our overrides so native clamping returns
+      clearTranslations(document.body)
+      expect(getComputedStyle(a).overflow).toBe('hidden')
+      expect(getComputedStyle(a).maxHeight).toBe('44px')
+    } finally {
+      style.remove()
+    }
+  })
+
+  it('overrides max-height on the block element itself when element === target and survives style.cssText reset', () => {
+    const style = document.createElement('style')
+    style.textContent = `
+      .direct-clamped {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        max-height: 44px;
+        line-height: 22px;
+        font-size: 16px;
+        width: 240px;
+      }
+    `
+    document.head.appendChild(style)
+    document.body.innerHTML = `
+      <div class="direct-clamped">This is a two-line title directly inside the clamped element without an inner span</div>
+    `
+    try {
+      const div = document.querySelector<HTMLElement>('.direct-clamped')!
+      const text = div.textContent!.trim()
+      const blocks: TranslatableBlock[] = [{ element: div, text }]
+      injectLoading(blocks)
+      replaceWithTranslation(blocks, ['这是一个直接放在限高容器内的中文长标题译文，用来验证高度不会被裁切'])
+
+      expect(getComputedStyle(div).overflow).toBe('visible')
+      expect(getComputedStyle(div).maxHeight).toBe('none')
+      expect(div.clientHeight).toBeGreaterThanOrEqual(div.scrollHeight - 1)
+
+      div.style.cssText = ''
+      expect(getComputedStyle(div).overflow).toBe('visible')
+      expect(getComputedStyle(div).maxHeight).toBe('none')
+      expect(div.clientHeight).toBeGreaterThanOrEqual(div.scrollHeight - 1)
+    } finally {
+      style.remove()
+    }
   })
 
   it('should not inject duplicate loadings when same element appears twice in batch', () => {

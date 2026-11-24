@@ -83,6 +83,9 @@ const EDITOR_SELECTOR = [
 const RESULT_CLASS = 'imp-translate-result'
 const PROCESSED_ATTR = 'data-imp-translated'
 const WRAP_ATTR = 'data-imp-wrap'
+const UNCLAMP_ATTR = 'data-imp-unclamp'
+const UNCLIP_ATTR = 'data-imp-unclip'
+const UNMAXHEIGHT_ATTR = 'data-imp-unmaxheight'
 const OVERSIZED_BLOCK_THRESHOLD = 8000
 
 // `mode`: the ButtonMode of `node`'s parent.
@@ -1066,6 +1069,13 @@ export function clearTranslations(root: Element = document.body) {
     scope.querySelectorAll('[data-imp-fallback]').forEach((el) => {
       el.removeAttribute('data-imp-fallback')
     })
+    scope
+      .querySelectorAll(`[${UNCLAMP_ATTR}], [${UNCLIP_ATTR}], [${UNMAXHEIGHT_ATTR}]`)
+      .forEach((el) => {
+        el.removeAttribute(UNCLAMP_ATTR)
+        el.removeAttribute(UNCLIP_ATTR)
+        el.removeAttribute(UNMAXHEIGHT_ATTR)
+      })
     scope.querySelectorAll(`[${WRAP_ATTR}]`).forEach((wrapper) => {
       const parent = wrapper.parentNode
       if (!parent) return
@@ -1084,6 +1094,16 @@ export function clearTranslations(root: Element = document.body) {
   root.removeAttribute('data-imp-text')
   root.removeAttribute('data-imp-noop')
   root.removeAttribute('data-imp-fallback')
+  root.removeAttribute(UNCLAMP_ATTR)
+  root.removeAttribute(UNCLIP_ATTR)
+  root.removeAttribute(UNMAXHEIGHT_ATTR)
 }
 
-export { RESULT_CLASS, PROCESSED_ATTR, getVisibleText }
+export {
+  RESULT_CLASS,
+  PROCESSED_ATTR,
+  UNCLAMP_ATTR,
+  UNCLIP_ATTR,
+  UNMAXHEIGHT_ATTR,
+  getVisibleText,
+}

@@ -1,4 +1,12 @@
-import { RESULT_CLASS, PROCESSED_ATTR, isNoTranslate, type TranslatableBlock } from './dom'
+import {
+  RESULT_CLASS,
+  PROCESSED_ATTR,
+  UNCLAMP_ATTR,
+  UNCLIP_ATTR,
+  UNMAXHEIGHT_ATTR,
+  isNoTranslate,
+  type TranslatableBlock,
+} from './dom'
 import { LANGUAGES_SORTED } from './languages'
 
 function hasVisibleText(node: Node): boolean {
@@ -49,6 +57,16 @@ const STYLES_TEXT = `
     }
     *:has(.${RESULT_CLASS}) {
       -webkit-line-clamp: unset !important;
+    }
+    [${UNCLAMP_ATTR}] {
+      -webkit-line-clamp: unset !important;
+      overflow: visible !important;
+    }
+    [${UNCLIP_ATTR}] {
+      overflow: visible !important;
+    }
+    [${UNMAXHEIGHT_ATTR}] {
+      max-height: none !important;
     }
     .${LOADING_CLASS} {
       display: inline-block;
@@ -140,19 +158,24 @@ export function ensureStylesFor(el: Element) {
   if (root instanceof ShadowRoot) ensureShadowStyles(root)
 }
 
-function hasLineClamp(el: HTMLElement): boolean {
-  const style = getComputedStyle(el)
-  return !!(style.webkitLineClamp && style.webkitLineClamp !== 'none')
+interface ClipOverride {
+  clamp: boolean
+  clip: boolean
+  maxHeight: boolean
 }
 
-function applyLineClampOverride(el: HTMLElement) {
-  el.style.webkitLineClamp = 'unset'
-  el.style.overflow = 'visible'
-}
-
-function hasOverflowClip(el: HTMLElement): boolean {
+function readClipOverride(el: HTMLElement): ClipOverride {
   const s = getComputedStyle(el)
-  return s.overflow === 'hidden' || s.overflowY === 'hidden'
+  const clamp = !!(s.webkitLineClamp && s.webkitLineClamp !== 'none')
+  const clip = !clamp && (s.overflow === 'hidden' || s.overflowY === 'hidden')
+  const maxHeight = (clamp || clip) && s.maxHeight !== 'none'
+  return { clamp, clip, maxHeight }
+}
+
+function applyClipOverride(el: HTMLElement, override: ClipOverride) {
+  if (override.clamp) el.setAttribute(UNCLAMP_ATTR, '')
+  else if (override.clip) el.setAttribute(UNCLIP_ATTR, '')
+  if (override.maxHeight) el.setAttribute(UNMAXHEIGHT_ATTR, '')
 }
 
 // If the last visible child of the target already creates a visual line break
@@ -211,10 +234,8 @@ export function injectLoading(blocks: TranslatableBlock[]) {
     isShort: boolean
     ref: Node | null
     needsBr: boolean
-    clampElement: boolean
-    clampTarget: boolean
-    clipElement: boolean
-    clipTarget: boolean
+    elementOverride: ClipOverride
+    targetOverride: ClipOverride | null
     clippingAncestors: { el: HTMLElement; hasMaxHeight: boolean }[]
   }[] = []
 
@@ -228,40 +249,63 @@ export function injectLoading(blocks: TranslatableBlock[]) {
     const target = findInjectionPoint(element)
     const ref = findTrailingNonTextRef(target)
     const isShort = text.length <= SHORT_TEXT_THRESHOLD
-    const clampElement = hasLineClamp(element)
-    const clampTarget = target !== element && hasLineClamp(target)
-    const clipElement = !clampElement && hasOverflowClip(element)
-    const clipTarget = target !== element && !clampTarget && hasOverflowClip(target)
+    const elementOverride = readClipOverride(element)
+    const targetOverride = target !== element ? readClipOverride(target) : null
     const needsBr = !isShort && !lastVisibleChildIsBlockLike(target, ref)
 
     const clippingAncestors: { el: HTMLElement; hasMaxHeight: boolean }[] = []
-    if (clampElement || clampTarget || clipElement || clipTarget) {
+    if (
+      elementOverride.clamp ||
+      elementOverride.clip ||
+      targetOverride?.clamp ||
+      targetOverride?.clip
+    ) {
       let anc = target.parentElement
-      for (let i = 0; i < 3 && anc; i++) {
+      for (let i = 0; i < 3 && anc; i++, anc = anc.parentElement) {
+        if (anc === element) continue
         const s = getComputedStyle(anc)
         if (s.overflow === 'hidden' || s.overflowY === 'hidden') {
           clippingAncestors.push({ el: anc, hasMaxHeight: s.maxHeight !== 'none' })
         }
-        anc = anc.parentElement
       }
     }
 
-    plans.push({ target, element, isShort, ref, needsBr, clampElement, clampTarget, clipElement, clipTarget, clippingAncestors })
+    plans.push({
+      target,
+      element,
+      isShort,
+      ref,
+      needsBr,
+      elementOverride,
+      targetOverride,
+      clippingAncestors,
+    })
   }
 
-  for (const { target, element, isShort, ref, needsBr, clampElement, clampTarget, clipElement, clipTarget, clippingAncestors } of plans) {
+  for (const {
+    target,
+    element,
+    isShort,
+    ref,
+    needsBr,
+    elementOverride,
+    targetOverride,
+    clippingAncestors,
+  } of plans) {
     // Adopt our stylesheet into a shadow root only when a translation actually
     // lands inside it (see attachShadowObserver in inject.ts for why eager
     // injection into every shadow root is harmful).
     const root = target.getRootNode()
     if (root instanceof ShadowRoot) ensureShadowStyles(root)
-    if (clampElement) applyLineClampOverride(element)
-    if (clampTarget) applyLineClampOverride(target)
-    if (clipElement) element.style.overflow = 'visible'
-    if (clipTarget) target.style.overflow = 'visible'
+    // Use data-* attributes styled with `!important` in STYLES_TEXT rather than
+    // inline `el.style.*`: frameworks like YouTube's yt-lockup-view-model
+    // overwrite `el.style.cssText` on hover/leave, which would wipe inline
+    // overrides and re-clip the translation.
+    applyClipOverride(element, elementOverride)
+    if (targetOverride) applyClipOverride(target, targetOverride)
     for (const { el, hasMaxHeight } of clippingAncestors) {
-      el.style.overflow = 'visible'
-      if (hasMaxHeight) el.style.maxHeight = 'none'
+      el.setAttribute(UNCLIP_ATTR, '')
+      if (hasMaxHeight) el.setAttribute(UNMAXHEIGHT_ATTR, '')
     }
 
     const wrapper = document.createElement('font')

@@ -352,3 +352,71 @@ test('does not adopt stylesheets into shadow roots that receive no translation',
   // on each change — GitHub has ~200 such hosts.
   expect(styles).toEqual({ tip1: false, tip2: false, frag: false, card: true })
 })
+
+// Regression: YouTube homepage titles use `-webkit-line-clamp: 2; overflow: hidden; max-height: 4.4rem`
+// and overwrite `el.style.cssText` on card hover/leave. Inline style overrides
+// get wiped out, clipping the translation below `max-height: 44px`.
+test('translation stays unclipped when page overwrites style.cssText on hover', async ({
+  context,
+  baseURL,
+}) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/style-csstext-clamped`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  const title = page.locator('#video-title')
+  const result = title.locator('.imp-translate-result:not(.imp-translate-loading)')
+  await expect(result).toBeVisible({ timeout: 15000 })
+
+  const checkUnclipped = async () =>
+    await page.evaluate(() => {
+      const a = document.getElementById('video-title')!
+      const font = a.querySelector<HTMLElement>('.imp-translate-result')!
+      const cs = getComputedStyle(a)
+      const aRect = a.getBoundingClientRect()
+      const fRect = font.getBoundingClientRect()
+      return {
+        overflow: cs.overflow,
+        maxHeight: cs.maxHeight,
+        clipped: a.scrollHeight > a.clientHeight + 1,
+        fontInsideBox: fRect.bottom <= aRect.bottom + 1,
+      }
+    })
+
+  expect(await checkUnclipped()).toEqual({
+    overflow: 'visible',
+    maxHeight: 'none',
+    clipped: false,
+    fontInsideBox: true,
+  })
+
+  // Hover card → triggers `title.style.cssText = 'color: ...'`
+  await page.locator('#video-card').hover()
+  expect(await checkUnclipped()).toEqual({
+    overflow: 'visible',
+    maxHeight: 'none',
+    clipped: false,
+    fontInsideBox: true,
+  })
+
+  // Move pointer away → triggers `title.style.cssText = ''`
+  await page.mouse.move(0, 0)
+  expect(await checkUnclipped()).toEqual({
+    overflow: 'visible',
+    maxHeight: 'none',
+    clipped: false,
+    fontInsideBox: true,
+  })
+
+  // Restoring original page cleanly restores native clipping
+  await stopTranslation(page)
+  const restored = await page.evaluate(() => {
+    const a = document.getElementById('video-title')!
+    const cs = getComputedStyle(a)
+    return { overflow: cs.overflow, maxHeight: cs.maxHeight }
+  })
+  expect(restored).toEqual({ overflow: 'hidden', maxHeight: '44px' })
+})

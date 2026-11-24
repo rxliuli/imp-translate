@@ -244,6 +244,45 @@ ${appleRejectionBrFixture}
   </div>
 </body>
 </html>`,
+  '/style-csstext-clamped': `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Clamped Title Style Overwrite</title>
+  <style>
+    .card { width: 260px; padding: 12px; }
+    .card-title {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      max-height: 44px;
+      line-height: 22px;
+      font-size: 16px;
+      text-decoration: none;
+      color: #111;
+    }
+  </style>
+</head>
+<body>
+  <div class="card" id="video-card">
+    <a class="card-title" id="video-title" href="#watch">
+      <span>This is a long video title that wraps onto two lines in a clamped card container</span>
+    </a>
+  </div>
+  <script>
+    const card = document.getElementById('video-card');
+    const title = document.getElementById('video-title');
+    // Mirrors YouTube's bSE.style hover ambient color handler: writes
+    // style.cssText on enter and clears style.cssText on leave.
+    card.addEventListener('mouseenter', function() {
+      title.style.cssText = 'color: rgba(221, 236, 253, 1)';
+    });
+    card.addEventListener('mouseleave', function() {
+      title.style.cssText = '';
+    });
+  </script>
+</body>
+</html>`,
   '/grok-stream': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Streaming Answer</title></head>
