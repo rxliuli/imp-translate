@@ -355,12 +355,23 @@ export function injectRunLoading(
   return { inserted, wrapper }
 }
 
-export function repositionTranslation(element: HTMLElement, expectedText: string): void {
+function hasContentAfter(node: Node): boolean {
+  for (let n = node.nextSibling; n; n = n.nextSibling) {
+    if (n.nodeType === Node.ELEMENT_NODE) {
+      const el = n as Element
+      if (el.classList.contains(RESULT_CLASS) || el.classList.contains(BR_CLASS)) continue
+    }
+    if (n.textContent?.trim()) return true
+  }
+  return false
+}
+
+export function repositionTranslation(element: HTMLElement, expectedText: string): boolean {
   const wrapper = element.querySelector(`.${RESULT_CLASS}`) as HTMLElement | null
-  if (!wrapper) return
+  if (!wrapper) return false
 
   const correctTarget = findInjectionPoint(element)
-  if (wrapper.parentElement === correctTarget) return
+  if (wrapper.parentElement === correctTarget && !hasContentAfter(wrapper)) return false
 
   const prev = wrapper.previousSibling
   wrapper.remove()
@@ -380,6 +391,7 @@ export function repositionTranslation(element: HTMLElement, expectedText: string
     correctTarget.insertBefore(br, ref)
   }
   correctTarget.insertBefore(wrapper, ref)
+  return true
 }
 
 export function replaceWithTranslation(blocks: TranslatableBlock[], translations: string[]) {

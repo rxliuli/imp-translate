@@ -1002,6 +1002,7 @@ export default defineUnlistedScript(() => {
   function flushRecheck() {
     recheckTimer = null
     if (!isTranslating) return
+    let repositioned = false
     for (const el of pendingRecheck) {
       if (!el.hasAttribute(PROCESSED_ATTR)) continue
       const storedText = el.getAttribute('data-imp-text')
@@ -1013,9 +1014,18 @@ export default defineUnlistedScript(() => {
       // A structural rewrite the page changed (our clones, or the detached
       // originals) is redone even when the source text is the same.
       const rewrite = getRewrite(el)
-      if (storedText === currentText && (!rewrite || rewriteIntact(rewrite))) continue
+      if (storedText === currentText && (!rewrite || rewriteIntact(rewrite))) {
+        // Frameworks like YouTube's Polymer ShadyDOM can remove their tracked
+        // text node and append a fresh one with the same text after our
+        // native-DOM <br>/<font>, leaving the translation before the original.
+        if (repositionTranslation(el as HTMLElement, currentText)) {
+          repositioned = true
+        }
+        continue
+      }
       retranslateElement(el, currentText)
     }
+    if (repositioned) discardSelfMutations()
     pendingRecheck.clear()
     for (const state of pendingRunReset) {
       if (runStates.get(state.nodes[0]) !== state) continue

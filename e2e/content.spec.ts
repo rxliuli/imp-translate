@@ -420,3 +420,54 @@ test('translation stays unclipped when page overwrites style.cssText on hover', 
   })
   expect(restored).toEqual({ overflow: 'hidden', maxHeight: '44px' })
 })
+
+// Regression: YouTube's Polymer ShadyDOM <yt-formatted-string> tracks only its
+// own text nodes, not extension-injected <br>/<font>. On SPA navigation into a
+// video (or switching videos), ShadyDOM removes the old text node and appends a
+// new text node at the end, leaving <br><font> stranded before the original text.
+test('repositions translation after original text when ShadyDOM rewrites text node in same parent', async ({
+  context,
+  baseURL,
+}) => {
+  const page = await context.newPage()
+  await page.goto(`${baseURL}/shady-text-rewrite`)
+  await page.waitForLoadState('domcontentloaded')
+
+  await configureMockProvider(page, baseURL)
+  await startTranslation(page)
+
+  const title = page.locator('#video-title')
+  const result = title.locator('.imp-translate-result:not(.imp-translate-loading)')
+  await expect(result).toBeVisible({ timeout: 15000 })
+  await expect(result).toContainText('My Little Pony')
+
+  const getOrder = async () =>
+    await page.evaluate(() => {
+      const el = document.getElementById('video-title')!
+      const nodes = Array.from(el.childNodes)
+      const textIdx = nodes.findIndex((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
+      const brIdx = nodes.findIndex(
+        (n) => n.nodeType === Node.ELEMENT_NODE && (n as Element).classList.contains('imp-translate-br'),
+      )
+      const fontIdx = nodes.findIndex(
+        (n) => n.nodeType === Node.ELEMENT_NODE && (n as Element).classList.contains('imp-translate-result'),
+      )
+      return { textIdx, brIdx, fontIdx, brCount: el.querySelectorAll('br.imp-translate-br').length }
+    })
+
+  expect(await getOrder()).toEqual({ textIdx: 0, brIdx: 1, fontIdx: 2, brCount: 1 })
+
+  // Case 1: SPA navigation refreshes the same title via ShadyDOM textContent rewrite.
+  await page.click('#rewrite-same')
+  await expect
+    .poll(getOrder, { timeout: 5000 })
+    .toEqual({ textIdx: 0, brIdx: 1, fontIdx: 2, brCount: 1 })
+  await expect(result).toContainText('My Little Pony')
+
+  // Case 2: SPA navigation switches to a different video reusing <yt-formatted-string>.
+  await page.click('#rewrite-different')
+  await expect(result).toContainText('Building a Fast Browser Extension', { timeout: 15000 })
+  await expect
+    .poll(getOrder, { timeout: 5000 })
+    .toEqual({ textIdx: 0, brIdx: 1, fontIdx: 2, brCount: 1 })
+})

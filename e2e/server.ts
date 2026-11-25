@@ -142,6 +142,38 @@ const pages: Record<string, string> = {
   </script>
 </body>
 </html>`,
+  '/shady-text-rewrite': `<!DOCTYPE html>
+<html lang="en">
+<head><title>ShadyDOM Text Rewrite</title></head>
+<body>
+  <h1 style="display: flex;">
+    <yt-formatted-string id="video-title" style="display: block;">My Little Pony Crystal and Sidekick's Magical Adventure! Super Toons TV - Cartoons</yt-formatted-string>
+  </h1>
+  <button id="rewrite-same">Rewrite same text</button>
+  <button id="rewrite-different">Rewrite different text</button>
+  <script>
+    (function() {
+      var el = document.getElementById('video-title');
+      // Track only the page's own logical text node, just like YouTube's
+      // Polymer ShadyDOM root does (unaware of extension-injected <br>/<font>).
+      var tracked = el.firstChild;
+      function shadySetText(nextText) {
+        if (tracked && tracked.parentNode === el) {
+          el.removeChild(tracked);
+        }
+        tracked = document.createTextNode(nextText);
+        el.appendChild(tracked);
+      }
+      document.getElementById('rewrite-same').addEventListener('click', function() {
+        shadySetText("My Little Pony Crystal and Sidekick's Magical Adventure! Super Toons TV - Cartoons");
+      });
+      document.getElementById('rewrite-different').addEventListener('click', function() {
+        shadySetText("Building a Fast Browser Extension with TypeScript and Modern Web APIs");
+      });
+    })();
+  </script>
+</body>
+</html>`,
   '/apple-rejection-br': `<!DOCTYPE html>
 <html lang="en">
 <head><title>Apple Rejection (br-br)</title></head>

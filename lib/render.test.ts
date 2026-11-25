@@ -258,6 +258,75 @@ describe('render', () => {
     expect(p.querySelector('br.imp-translate-br')).toBe(brBefore)
   })
 
+  // Regression: YouTube's Polymer ShadyDOM <yt-formatted-string> tracks only its
+  // own logical children. On SPA navigation, setting `root.textContent` removes
+  // only the old original text node (leaving our native-DOM <br> and <font>
+  // untouched) and appends a new text node at the end, leaving the translation
+  // stranded *before* the original text inside the same parent element.
+  it('moves wrapper back after original text when replaced inside the same parent (long text)', () => {
+    document.body.innerHTML = `
+      <div id="title">My Little Pony Crystal and Sidekick's Magical Adventure! Super Toons TV</div>
+    `
+    const el = document.getElementById('title')! as HTMLElement
+    const original = el.textContent!.trim()
+
+    injectLoading([{ element: el, text: original }])
+    replaceWithTranslation([{ element: el, text: original }], ['我的小马驹魔法冒险'])
+
+    // Simulate ShadyDOM textContent rewrite: remove tracked original text node,
+    // leave our <br> and <font> behind, and append a fresh text node at the end.
+    const oldTextNode = el.firstChild!
+    expect(oldTextNode.nodeType).toBe(Node.TEXT_NODE)
+    el.removeChild(oldTextNode)
+    el.appendChild(document.createTextNode(original))
+
+    // Sanity check: translation is now stranded before the original text.
+    const nodesBefore = Array.from(el.childNodes)
+    const fontIdxBefore = nodesBefore.findIndex(
+      (n) => n.nodeType === Node.ELEMENT_NODE && (n as Element).classList.contains('imp-translate-result'),
+    )
+    const textIdxBefore = nodesBefore.findIndex((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
+    expect(fontIdxBefore).toBeLessThan(textIdxBefore)
+
+    repositionTranslation(el, original)
+
+    const nodesAfter = Array.from(el.childNodes)
+    const brIdx = nodesAfter.findIndex(
+      (n) => n.nodeType === Node.ELEMENT_NODE && (n as Element).classList.contains('imp-translate-br'),
+    )
+    const fontIdx = nodesAfter.findIndex(
+      (n) => n.nodeType === Node.ELEMENT_NODE && (n as Element).classList.contains('imp-translate-result'),
+    )
+    const textIdx = nodesAfter.findIndex((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
+    expect(textIdx).toBe(0)
+    expect(brIdx).toBe(1)
+    expect(fontIdx).toBe(2)
+    expect(el.querySelectorAll('br.imp-translate-br')).toHaveLength(1)
+  })
+
+  it('moves wrapper back after original text when replaced inside the same parent (short text)', () => {
+    document.body.innerHTML = `<div id="title">Short video title</div>`
+    const el = document.getElementById('title')! as HTMLElement
+    const original = 'Short video title'
+
+    injectLoading([{ element: el, text: original }])
+    replaceWithTranslation([{ element: el, text: original }], ['短视频标题'])
+
+    // Simulate ShadyDOM removing tracked text node and appending new text node
+    el.removeChild(el.firstChild!)
+    el.appendChild(document.createTextNode('Another short title'))
+
+    repositionTranslation(el, 'Another short title')
+
+    const nodes = Array.from(el.childNodes)
+    expect(nodes[0].nodeType).toBe(Node.TEXT_NODE)
+    expect(nodes[0].textContent).toBe('Another short title')
+    expect(nodes[1].nodeType).toBe(Node.TEXT_NODE)
+    expect(nodes[1].textContent).toBe(' ')
+    expect((nodes[2] as Element).classList.contains('imp-translate-result')).toBe(true)
+    expect(el.querySelectorAll('br.imp-translate-br')).toHaveLength(0)
+  })
+
   it('clicking any retry button retries all currently-errored blocks globally', () => {
     document.body.innerHTML = `
       <p id="a">Hello world this is long enough to trigger br separator.</p>
